@@ -1,1 +1,1 @@
-# pages/**init**.py – Modulos de telas do BOVIX
+# pages/__init__.py -- Modulos de telas do BOVIX
