@@ -2211,6 +2211,214 @@ def hdr(icone, titulo, sub=""):
     if sub: st.caption(sub)
     st.divider()
 
+# ── autenticacao ─────────────────────────────────────────────────────────────
+if "usuario" not in st.session_state:
+    st.session_state.usuario = None
+
+if st.session_state.usuario is None:
+    st.title("Gestao Pecuaria")
+    if not usuario_existe():
+        st.info("Primeiro acesso: crie sua conta de administrador.")
+        with st.form("form_first"):
+            nome  = st.text_input("Nome")
+            email = st.text_input("E-mail")
+            senha = st.text_input("Senha", type="password")
+            perf  = st.selectbox("Perfil", ["admin","veterinario","fazendeiro"])
+            if st.form_submit_button("Criar conta"):
+                if nome and email and senha:
+                    uid = criar_usuario(nome, email, senha, perf)
+                    ativar_trial(uid)
+                    email_boas_vindas(email, nome)
+                    st.success("Conta criada! Faca login.")
+                    st.rerun()
+                else:
+                    st.error("Preencha todos os campos.")
+    else:
+        with st.form("form_login"):
+            email = st.text_input("E-mail")
+            senha = st.text_input("Senha", type="password")
+            if st.form_submit_button("Entrar"):
+                u = autenticar_usuario(email, senha)
+                if u:
+                    # Garantir owner_id no session (None = admin ve tudo)
+                    if u.get("perfil") == "admin":
+                        u["owner_id"] = None
+                    elif not u.get("owner_id"):
+                        u["owner_id"] = u["id"]
+                    st.session_state.usuario = u
+                    st.rerun()
+                else:
+                    st.error("E-mail ou senha incorretos.")
+    st.stop()
+
+u = st.session_state.usuario
+
+# ── sidebar ──────────────────────────────────────────────────────────────────
+with st.sidebar:
+    perf_ico = {"admin":"gear","veterinario":"stethoscope","fazendeiro":"seedling"}.get(u["perfil"],"person")
+    st.markdown(f"**{u['nome']}**")
+    st.caption(u["perfil"].capitalize())
+    if st.button("Sair", use_container_width=True):
+        st.session_state.usuario = None
+        st.rerun()
+
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _plano_usuario(uid):
+        return obter_status_plano(uid)
+    sp = _plano_usuario(u["id"])
+    if sp["plano"] == "trial":
+        dr = sp["dias_restantes"]
+        if dr <= 3:
+            st.sidebar.error(f"Trial: {dr} dia(s) restante(s)!")
+        elif dr <= 7:
+            st.sidebar.warning(f"Trial: {dr} dias restantes")
+        else:
+            limites  = obter_limites_usuario(u["id"])
+            plano_nm = (limites["plano_nome"] if limites else "trial").upper()
+            st.sidebar.markdown(f"""
+<div style="background:rgba(200,134,10,0.15);border:0.5px solid rgba(200,134,10,0.4);
+            border-radius:6px;padding:7px 10px;margin:2px 0 4px">
+  <div style="font-size:8px;color:#C8860A;font-weight:700;letter-spacing:1px">TRIAL &middot; {dr} DIAS</div>
+  <div style="font-size:10px;color:rgba(255,255,255,0.45);margin-top:1px">{plano_nm}</div>
+</div>""", unsafe_allow_html=True)
+    elif sp["plano"] == "expirado":
+        st.sidebar.error("Trial expirado")
+    else:
+        limites  = obter_limites_usuario(u["id"])
+        plano_nm = (limites["plano_nome"] if limites else "ativo").upper()
+        st.sidebar.markdown(f"""
+<div style="background:rgba(200,134,10,0.15);border:0.5px solid rgba(200,134,10,0.4);
+            border-radius:6px;padding:7px 10px;margin:2px 0 4px">
+  <div style="font-size:8px;color:#C8860A;font-weight:700;letter-spacing:1px">PLANO {plano_nm}</div>
+  <div style="font-size:10px;color:rgba(255,255,255,0.45);margin-top:1px">Conta ativa</div>
+</div>""", unsafe_allow_html=True)
+
+    # Alertas sidebar filtrados pelo usuario logado
+    @st.cache_data(ttl=600, show_spinner=False)
+    def _alertas_sidebar(oid):
+        return dict(
+            trat_venc = listar_tratamentos_vencidos(owner_id=oid),
+            pend      = listar_vacinas_pendentes(owner_id=oid),
+            crit      = listar_medicamentos_criticos(owner_id=_owner_id()),
+            parto     = listar_partos_previstos(owner_id=oid),
+        )
+    _al = _alertas_sidebar(_owner_id())
+    _trat_venc = _al['trat_venc']
+    pend  = _al['pend']
+    crit  = _al['crit']
+    parto = _al['parto']
+    if _trat_venc:
+        st.sidebar.error(f"{len(_trat_venc)} trat. pendente(s)!")
+    alertas = []
+    if pend:  alertas.append(f"Vacinas: {len(pend)}")
+    if crit:  alertas.append(f"Meds: {len(crit)}")
+    if parto: alertas.append(f"Partos: {len(parto)}")
+    if alertas: st.warning(" | ".join(alertas))
+
+    # Logo BOVIX no sidebar
+    st.sidebar.markdown("""
+<div style="padding:2px 0 10px">
+  <div style="display:flex;align-items:center;gap:9px">
+    <svg width="28" height="28" viewBox="0 0 48 48" fill="none">
+      <polygon points="24,3 41,12.5 41,31.5 24,41 7,31.5 7,12.5" fill="#4ADE80"/>
+      <rect x="16" y="13" width="4" height="22" rx="1.5" fill="#1A3C2E"/>
+      <path d="M20 13 L27 13 C30.5 13 33 15.5 33 19 C33 22.5 30.5 25 27 25 L20 25"
+            stroke="#1A3C2E" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      <path d="M20 25 L28 25 C31.5 25 34 27.5 34 31 C34 34.5 31.5 37 28 37 L20 37"
+            stroke="#1A3C2E" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <div style="font-size:19px;font-weight:700;color:#fff;letter-spacing:-0.5px;line-height:1">
+        BOV<span style="color:#4ADE80">IX</span>
+      </div>
+      <div style="font-size:8px;color:rgba(255,255,255,0.35);letter-spacing:1.5px;
+                  text-transform:uppercase;margin-top:2px">Gestao Pecuaria</div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    st.divider()
+    st.caption("MENU")
+
+    GRUPOS = {
+        "Inicio": [
+            ("Inicio",          "Painel geral"),
+            ("Buscar Animal",   "Busca por brinco"),
+        ],
+        "Cadastros": [
+            ("Cadastrar Lote",       "Novo lote"),
+            ("Cadastrar Animal",     "Novo animal"),
+            ("Registrar Pesagem",    "Novo peso"),
+            ("Registrar Ocorrencia", "Nova ocorrencia"),
+            ("Registrar Morte",      "Baixa de animal"),
+            ("Importar CSV",         "Importacao em lote"),
+            ("Editar Lote",          "Alterar dados do lote"),
+            ("Editar Animal",        "Alterar dados do animal"),
+            ("Editar Pesagens",      "Corrigir ou excluir pesagens"),
+            ("Gerenciar Ocorrencias","Editar e resolver tratamentos"),
+            ("Transferir Animal",   "Mover entre lotes"),
+            ("Status do Lote",      "Alterar status do lote"),
+        ],
+        "Analise": [
+            ("Dashboard Sanitario",  "Incidencias e alertas"),
+            ("Analisar por Lote",    "GMD e financeiro"),
+            ("Analisar Animal",      "Individual"),
+            ("Score de Saude",       "Ranking 0-100"),
+            ("Risco Sanitario IA",   "Score de risco do lote"),
+            ("Previsao de Abate IA", "Predicao por animal"),
+            ("Anomalias de Peso",    "Alertas inteligentes"),
+            ("GMD Temporal",         "Evolucao no tempo"),
+            ("Comparativo Lotes",    "Side by side"),
+        ] + ([] if _is_vet() else [
+            ("Painel de Decisao",    "Lucro por lote"),
+        ]) + [
+            ("Dashboard Executivo",  "KPIs do lote"),
+            ("Pesquisar Ocorrencias","Filtros avancados"),
+        ],
+        "Gestao": [
+            ("Workspace do Lote",    "Visao completa do lote"),
+            ("Calendario Sanitario", "Vacinas e alertas"),
+            ("Estoque Medicamentos", "Controle de estoque"),
+            ("Controle Reprodutivo", "IATF e prenhez"),
+            ("Mapa Piquetes",        "Pastagens"),
+            ("Previsao Abate",       "Data estimada"),
+            ("Prontuario Animal",    "Historico completo"),
+            ("Cotacao Cepea",        "Preco boi gordo"),
+        ] + ([] if _is_vet() else [
+            ("Margem Real",          "Compra x Venda"),
+        ]) + [
+        ],
+        "Rastreabilidade": ([] if _is_vet() else [
+            ("Rastreabilidade GTA",  "GTA e SISBOV"),
+        ]),
+        "Relatorios": [
+            ("Exportar Relatorios",  "PDF e Excel"),
+            ("Backup",               "Download do banco"),
+        ],
+        "Sistema": [
+            ("Notificacoes",         "E-mail e alertas"),
+            ("Log Auditoria",        "Historico de acoes"),
+            ("Administracao",        "Usuarios e planos"),
+            ("Gestao Usuarios",      "Planos e acessos vet"),
+        ],
+    }
+
+    if "menu" not in st.session_state:
+        st.session_state.menu = "Inicio"
+
+    for grupo, itens in GRUPOS.items():
+        st.caption(grupo.upper())
+        for nome_item, desc in itens:
+            ativo = st.session_state.menu == nome_item
+            label = f"**{nome_item}**" if ativo else nome_item
+            if st.button(label, key=f"menu_{nome_item}", use_container_width=True, help=desc):
+                st.session_state.menu = nome_item
+                st.rerun()
+        st.write("")
+
+menu = st.session_state.menu
+
 # ── ROTEAMENTO ─────────────────────────────────────────────────────────────────
 _ROTAS = {
     "Inicio":               page_inicio,
