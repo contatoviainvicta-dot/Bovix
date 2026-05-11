@@ -2007,23 +2007,23 @@ from rules import (
     requer_admin, requer_nao_vet, owner_id_lote_novo,
     _listar_lotes_cache, _listar_animais_cache,
 )
-from pages.cadastros  import (page_cadastrar_lote, page_cadastrar_animal,
+from _pages.cadastros  import (page_cadastrar_lote, page_cadastrar_animal,
     page_registrar_pesagem, page_registrar_ocorrencia, page_registrar_morte,
     page_importar_csv, page_editar_lote, page_editar_animal,
     page_editar_pesagens, page_gerenciar_ocorrencias,
     page_transferir_animal, page_status_do_lote)
-from pages.analise    import (page_dashboard_sanitario, page_analisar_por_lote,
+from _pages.analise    import (page_dashboard_sanitario, page_analisar_por_lote,
     page_analisar_animal, page_score_de_saude, page_gmd_temporal,
     page_comparativo_lotes, page_pesquisar_ocorrencias,
     page_risco_sanitario_ia, page_previsao_de_abate_ia,
     page_anomalias_de_peso, page_previsao_abate)
-from pages.gestao     import (page_calendario_sanitario, page_estoque_medicamentos,
+from _pages.gestao     import (page_calendario_sanitario, page_estoque_medicamentos,
     page_controle_reprodutivo, page_mapa_piquetes,
     page_workspace_do_lote, page_prontuario_animal)
-from pages.financeiro import (page_painel_de_decisao, page_dashboard_executivo,
+from _pages.financeiro import (page_painel_de_decisao, page_dashboard_executivo,
     page_margem_real, page_cotacao_cepea, page_rastreabilidade_gta)
-from pages.relatorios import (page_exportar_relatorios, page_backup)
-from pages.sistema    import (page_inicio, page_buscar_animal, page_notificacoes,
+from _pages.relatorios import (page_exportar_relatorios, page_backup)
+from _pages.sistema    import (page_inicio, page_buscar_animal, page_notificacoes,
     page_log_auditoria, page_administracao, page_gestao_usuarios)
 import pandas as pd
 from datetime import date, datetime, timedelta
@@ -2299,10 +2299,10 @@ with st.sidebar:
         return dict(
             trat_venc = listar_tratamentos_vencidos(owner_id=oid),
             pend      = listar_vacinas_pendentes(owner_id=oid),
-            crit      = listar_medicamentos_criticos(owner_id=_owner_id()),
+            crit      = listar_medicamentos_criticos(owner_id=owner_id()),
             parto     = listar_partos_previstos(owner_id=oid),
         )
-    _al = _alertas_sidebar(_owner_id())
+    _al = _alertas_sidebar(owner_id())
     _trat_venc = _al['trat_venc']
     pend  = _al['pend']
     crit  = _al['crit']
@@ -2370,7 +2370,7 @@ with st.sidebar:
             ("Anomalias de Peso",    "Alertas inteligentes"),
             ("GMD Temporal",         "Evolucao no tempo"),
             ("Comparativo Lotes",    "Side by side"),
-        ] + ([] if _is_vet() else [
+        ] + ([] if is_vet() else [
             ("Painel de Decisao",    "Lucro por lote"),
         ]) + [
             ("Dashboard Executivo",  "KPIs do lote"),
@@ -2385,11 +2385,11 @@ with st.sidebar:
             ("Previsao Abate",       "Data estimada"),
             ("Prontuario Animal",    "Historico completo"),
             ("Cotacao Cepea",        "Preco boi gordo"),
-        ] + ([] if _is_vet() else [
+        ] + ([] if is_vet() else [
             ("Margem Real",          "Compra x Venda"),
         ]) + [
         ],
-        "Rastreabilidade": ([] if _is_vet() else [
+        "Rastreabilidade": ([] if is_vet() else [
             ("Rastreabilidade GTA",  "GTA e SISBOV"),
         ]),
         "Relatorios": [
