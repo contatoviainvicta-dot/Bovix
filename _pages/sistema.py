@@ -39,6 +39,10 @@ def page_inicio(u):
     else:
         _oid_dash = owner_id()  # fazendeiro ve seus proprios dados
     _dash = resumo_dashboard(owner_id=_oid_dash)
+    # Calcular alertas localmente (nao dependem do sidebar)
+    parto = listar_partos_previstos(owner_id=_oid_dash)
+    pend  = listar_vacinas_pendentes(owner_id=_oid_dash)
+    crit  = listar_medicamentos_criticos(owner_id=_oid_dash)
     # Para vet: sobrescrever com contagem dos lotes aprovados
     if is_vet():
         _dash = dict(
@@ -135,6 +139,7 @@ def page_inicio(u):
 
 
 def page_buscar_animal(u):
+    lotes = listar_lotes_usuario()
     hdr("Buscar Animal", "Busca Global", "Encontre qualquer animal pelo brinco ou identificacao")
     termo = st.text_input("Identificacao / brinco", placeholder="Ex: BOI-001")
     if termo:
@@ -176,6 +181,10 @@ def page_buscar_animal(u):
 
 
 def page_notificacoes(u):
+    lotes = listar_lotes_usuario()
+    parto = listar_partos_previstos(owner_id=owner_id())
+    pend  = listar_vacinas_pendentes(owner_id=owner_id())
+    crit  = listar_medicamentos_criticos(owner_id=owner_id())
     hdr("Notificacoes", "Central de Notificacoes", "Alertas automaticos e manuais por e-mail")
 
     if not email_configurado():
