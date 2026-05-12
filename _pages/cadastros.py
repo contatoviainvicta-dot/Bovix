@@ -23,6 +23,7 @@ def hdr(titulo, sub="", desc=""):
     st.divider()
 
 def page_cadastrar_lote(u):
+    lotes = listar_lotes_usuario()
     hdr("Cadastrar Lote", "Novo Lote", "Registre um novo lote de animais")
     c1,c2 = st.columns([2,1])
     with c1:
