@@ -2018,6 +2018,13 @@ from rules import (
     requer_admin, requer_nao_vet, owner_id_lote_novo,
     _listar_lotes_cache, _listar_animais_cache,
 )
+import pandas as pd
+from datetime import date, datetime, timedelta
+
+# database importado via from database import * abaixo
+from database import *
+
+# Importar pages APOS database estar disponivel
 from _pages.cadastros  import (page_cadastrar_lote, page_cadastrar_animal,
     page_registrar_pesagem, page_registrar_ocorrencia, page_registrar_morte,
     page_importar_csv, page_editar_lote, page_editar_animal,
@@ -2036,10 +2043,6 @@ from _pages.financeiro import (page_painel_de_decisao, page_dashboard_executivo,
 from _pages.relatorios import (page_exportar_relatorios, page_backup)
 from _pages.sistema    import (page_inicio, page_buscar_animal, page_notificacoes,
     page_log_auditoria, page_administracao, page_gestao_usuarios)
-import pandas as pd
-from datetime import date, datetime, timedelta
-
-# database importado via from database import * abaixo
 
 try:
     from exports import gerar_excel_lote, gerar_excel_sanitario, gerar_pdf_relatorio
