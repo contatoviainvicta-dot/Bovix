@@ -1999,9 +1999,16 @@ _DB_B64 = (
     'cm4gcmVzdWx0YWRvcwo='
 )
 _db_bytes = __import__('base64').b64decode(''.join(_DB_B64))
-with open('database.py', 'wb') as _f:
+import os as _os
+# Escrever no diretorio do proprio script para garantir que sobrescreve
+_db_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'database.py')
+with open(_db_path, 'wb') as _f:
     _f.write(_db_bytes)
-del _DB_B64, _db_bytes
+# Forcar reload do modulo se ja estava em cache
+import sys as _sys
+if 'database' in _sys.modules:
+    del _sys.modules['database']
+del _DB_B64, _db_bytes, _db_path
 
 import streamlit as st
 from rules import (
