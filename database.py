@@ -2321,7 +2321,7 @@ def detectar_anomalias_peso(lote_id):
     for aid, ps in pes_map.items():
         if len(ps) < 2:
             continue
-        df = pd.DataFrame(ps, columns=['id','aid','peso','data'])
+        df = pd.DataFrame(ps, columns=['id','aid','peso','data','ident'])
         df['data'] = pd.to_datetime(df['data'])
         df = df.sort_values('data')
         dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
