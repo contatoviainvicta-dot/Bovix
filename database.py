@@ -1858,7 +1858,7 @@ def gerar_insights_lote(lote_id):
     for a in animais:
         ps = listar_pesagens(a[0])
         if len(ps) >= 2:
-            df = pd.DataFrame(ps, columns=['id','aid','peso','data','ident'])
+            df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
             df['data'] = pd.to_datetime(df['data'])
             df = df.sort_values('data')
             dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
@@ -2069,7 +2069,7 @@ def calcular_scores_lote(lote_id):
         # GMD
         gmd = 0.0
         if len(ps) >= 2:
-            df = pd.DataFrame(ps, columns=['id','aid','peso','data','ident'])
+            df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
             df['data'] = pd.to_datetime(df['data'])
             df = df.sort_values('data')
             dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
@@ -2234,7 +2234,7 @@ def prever_abate(lote_id, peso_alvo_kg=450.0, preco_kg=10.0, custo_diario=12.0):
             ))
             continue
 
-        df = pd.DataFrame(ps, columns=['id','aid','peso','data','ident'])
+        df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
         df['data'] = pd.to_datetime(df['data'])
         df = df.sort_values('data')
         dias_total = (df['data'].iloc[-1] - df['data'].iloc[0]).days
@@ -2304,7 +2304,7 @@ def detectar_anomalias_peso(lote_id):
     gmds_todos = []
     for aid, ps in pes_map.items():
         if len(ps) >= 2:
-            df = pd.DataFrame(ps, columns=['id','aid','peso','data','ident'])
+            df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
             df['data'] = pd.to_datetime(df['data'])
             df = df.sort_values('data')
             dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
@@ -2321,7 +2321,7 @@ def detectar_anomalias_peso(lote_id):
     for aid, ps in pes_map.items():
         if len(ps) < 2:
             continue
-        df = pd.DataFrame(ps, columns=['id','aid','peso','data','ident'])
+        df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
         df['data'] = pd.to_datetime(df['data'])
         df = df.sort_values('data')
         dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
