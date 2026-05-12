@@ -2410,8 +2410,7 @@ with st.sidebar:
                 if st.button(label, key=f"menu_{nome_item}",
                              width='stretch', help=desc):
                     st.session_state.menu = nome_item
-                st.rerun()
-        st.write("")
+                    st.rerun()
 
 menu = st.session_state.menu
 
