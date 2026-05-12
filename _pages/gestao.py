@@ -2,6 +2,7 @@
 
 import streamlit as st
 import pandas as pd
+from datetime import datetime, date
 from database import *
 from ui import (
     card_kpi, card_kpi_row, alerta, badge,
