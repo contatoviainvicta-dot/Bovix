@@ -65,6 +65,7 @@ def page_painel_de_decisao(u):
 
 
 def page_dashboard_executivo(u):
+    lotes = listar_lotes_usuario()
     hdr("Dashboard Executivo", "Visao Executiva", "KPIs consolidados da fazenda com analise de IA")
 
     with st.spinner("Carregando dados da fazenda..."):
