@@ -3,6 +3,18 @@
 import streamlit as st
 import pandas as pd
 from database import *
+try:
+    from backup import gerar_backup_zip, gerar_backup_sqlite, nome_arquivo_backup
+except ImportError:
+    def gerar_backup_zip(p): return b""
+    def gerar_backup_sqlite(p): return b""
+    def nome_arquivo_backup(ext="zip"): return f"backup.{ext}"
+try:
+    from exports import gerar_excel_lote, gerar_pdf_relatorio
+except ImportError:
+    def gerar_excel_lote(*a, **k): return b""
+    def gerar_pdf_relatorio(*a, **k): return b""
+
 from ui import (
     card_kpi, card_kpi_row, alerta, badge,
     badge_status_animal, badge_status_lote, badge_gravidade,
