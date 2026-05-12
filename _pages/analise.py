@@ -42,9 +42,9 @@ def page_dashboard_sanitario(u):
         lote_id_san = dict_l.get(escolha)
         todas_oc = list(listar_ocorrencias_todos_animais(lote_id_san)) if lote_id_san else []
         # Ajustar indices para compatibilidade (sem coluna extra "identificacao")
-        todas_oc = [r[:9] for r in todas_oc]
+        todas_oc = [r[:10] for r in todas_oc]
 
-    df_oc = pd.DataFrame(todas_oc, columns=["id","animal_id","data","tipo","descricao","gravidade","custo","dias_rec","status"]) if todas_oc else pd.DataFrame(columns=["id","animal_id","data","tipo","descricao","gravidade","custo","dias_rec","status"])
+    df_oc = pd.DataFrame(todas_oc, columns=["id","animal_id","data","tipo","descricao","gravidade","custo","dias_rec","status","identificacao"]) if todas_oc else pd.DataFrame(columns=["id","animal_id","data","tipo","descricao","gravidade","custo","dias_rec","status"])
 
     total_a  = len(animais)
     c_oc     = df_oc["animal_id"].nunique() if len(df_oc)>0 else 0
