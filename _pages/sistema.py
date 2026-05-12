@@ -4,6 +4,18 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 from database import *
+
+try:
+    from cepea import cotacao_com_cache, historico_grafico
+except ImportError:
+    def cotacao_com_cache(_db): return dict(preco=0.0, data="", fonte="", sucesso=False, msg="")
+    def historico_grafico(c): return dict(datas=[], precos=[])
+
+try:
+    from exports import gerar_excel_lote, gerar_pdf_relatorio
+except ImportError:
+    def gerar_excel_lote(*a, **k): return b""
+    def gerar_pdf_relatorio(*a, **k): return b""
 from ui import (
     card_kpi, card_kpi_row, alerta, badge,
     badge_status_animal, badge_status_lote, badge_gravidade,
