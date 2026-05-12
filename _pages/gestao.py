@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from database import *
 try:
     from exports import gerar_excel_lote, gerar_pdf_relatorio
