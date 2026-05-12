@@ -51,7 +51,7 @@ def page_painel_de_decisao(u):
         dados.append((l[1], lucro, receita, custo_op, custo_s))
     df_d = pd.DataFrame(dados, columns=["Lote","Lucro","Receita","Custo Op","Custo San"]).sort_values("Lucro", ascending=False)
     st.metric("Lucro total", f"R$ {df_d['Lucro'].sum():,.2f}")
-    st.dataframe(df_d, use_container_width=True)
+    st.dataframe(df_d, width='stretch')
     st.bar_chart(df_d.set_index("Lote")["Lucro"])
     st.subheader("Alertas")
     for _, row in df_d.iterrows():
@@ -161,7 +161,7 @@ def page_dashboard_executivo(u):
                 ['lote_nome','risco_nivel','risco_score','animais_ativos','principal_risco']
             ]
             df_rank.columns = ['Lote','Nivel','Score','Animais','Principal Risco']
-            st.dataframe(df_rank, use_container_width=True, hide_index=True)
+            st.dataframe(df_rank, width='stretch', hide_index=True)
 
     st.divider()
 
@@ -236,7 +236,7 @@ def page_margem_real(u):
                 vendas = listar_vendas_lote(lote_id)
                 if vendas:
                     df_v = pd.DataFrame(vendas, columns=["ID","Lote","Data","R$/kg","Peso kg","Frigorifico","Obs"])
-                    st.dataframe(df_v, use_container_width=True)
+                    st.dataframe(df_v, width='stretch')
         with t2:
             with st.form("form_venda"):
                 v1,v2 = st.columns(2)
@@ -307,7 +307,7 @@ def page_rastreabilidade_gta(u):
         gtas = listar_gta()
         if gtas:
             df_g = pd.DataFrame(gtas, columns=["ID","Lote ID","Lote","Num GTA","Emissao","Origem","Destino","Qtd","Finalidade","Obs"])
-            st.dataframe(df_g, use_container_width=True)
+            st.dataframe(df_g, width='stretch')
         else: st.info("Nenhuma GTA.")
     with t2:
         lotes = listar_lotes_usuario()
