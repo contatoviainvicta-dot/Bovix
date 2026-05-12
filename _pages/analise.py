@@ -424,6 +424,20 @@ def page_pesquisar_ocorrencias(u):
 def page_risco_sanitario_ia(u):
     hdr("Risco Sanitario IA", "Score de Risco", "Analise inteligente de risco sanitario do lote")
 
+    # Visao geral da fazenda (independente de lote selecionado)
+    st.subheader("Visao geral da fazenda")
+    _oid_risco = owner_id()
+    resumo_todos = resumo_ia_fazenda(owner_id=_oid_risco)
+    if resumo_todos:
+        df_r = pd.DataFrame(resumo_todos)
+        df_r = df_r[['lote_nome','risco_nivel','risco_score','animais_ativos','principal_risco']]
+        df_r.columns = ['Lote','Nivel','Score','Animais','Principal Risco']
+        st.dataframe(df_r, width='stretch', hide_index=True)
+    else:
+        st.info("Nenhum lote com dados suficientes para calcular risco.")
+
+    st.divider()
+    st.subheader("Analise detalhada por lote")
     lote_id, _ = sel_lote("risco_lote")
     if lote_id:
         with st.spinner("Calculando risco sanitario..."):
@@ -476,14 +490,7 @@ def page_risco_sanitario_ia(u):
             col_g2.metric("GMD Maximo", f"{max(risco['gmds']):.3f} kg/d")
             col_g3.metric("GMD Minimo", f"{min(risco['gmds']):.3f} kg/d")
 
-        st.divider()
-        st.subheader("Visao geral da fazenda")
-        resumo_todos = resumo_ia_fazenda(owner_id=owner_id())
-        if resumo_todos:
-            df_r = pd.DataFrame(resumo_todos)
-            df_r = df_r[['lote_nome','risco_nivel','risco_score','animais_ativos','principal_risco']]
-            df_r.columns = ['Lote','Nivel','Score','Animais','Principal Risco']
-            st.dataframe(df_r, width='stretch', hide_index=True)
+
 
 
     # ============================================================
