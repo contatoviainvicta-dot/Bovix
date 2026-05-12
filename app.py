@@ -2347,10 +2347,10 @@ with st.sidebar:
 
     GRUPOS = {
         "Inicio": [
-            ("Inicio",          "Painel geral"),
-            ("Buscar Animal",   "Busca por brinco"),
+            ("Inicio",               "Painel geral"),
+            ("Buscar Animal",        "Busca por brinco"),
         ],
-        "Cadastros": [
+        "Operacao": [
             ("Cadastrar Lote",       "Novo lote"),
             ("Cadastrar Animal",     "Novo animal"),
             ("Registrar Pesagem",    "Novo peso"),
@@ -2359,48 +2359,44 @@ with st.sidebar:
             ("Importar CSV",         "Importacao em lote"),
             ("Editar Lote",          "Alterar dados do lote"),
             ("Editar Animal",        "Alterar dados do animal"),
-            ("Editar Pesagens",      "Corrigir ou excluir pesagens"),
-            ("Gerenciar Ocorrencias","Editar e resolver tratamentos"),
-            ("Transferir Animal",   "Mover entre lotes"),
-            ("Status do Lote",      "Alterar status do lote"),
+            ("Editar Pesagens",      "Corrigir pesagens"),
+            ("Gerenciar Ocorrencias","Tratamentos e ocorrencias"),
+            ("Transferir Animal",    "Mover entre lotes"),
+            ("Status do Lote",       "Alterar status"),
+            ("Workspace do Lote",    "Visao completa do lote"),
+            ("Prontuario Animal",    "Historico completo"),
         ],
         "Analise": [
+            ("Dashboard Executivo",  "KPIs consolidados"),
             ("Dashboard Sanitario",  "Incidencias e alertas"),
-            ("Analisar por Lote",    "GMD e financeiro"),
-            ("Analisar Animal",      "Individual"),
+            ("Analisar por Lote",    "GMD e desempenho"),
+            ("Analisar Animal",      "Analise individual"),
             ("Score de Saude",       "Ranking 0-100"),
+            ("GMD Temporal",         "Evolucao no tempo"),
+            ("Comparativo Lotes",    "Side by side"),
+            ("Pesquisar Ocorrencias","Busca avancada"),
+        ] + ([] if is_vet() else [
+            ("Painel de Decisao",    "Lucro por lote"),
+        ]),
+        "Analise & IA": [
             ("Risco Sanitario IA",   "Score de risco do lote"),
             ("Previsao de Abate IA", "Predicao por animal"),
             ("Anomalias de Peso",    "Alertas inteligentes"),
-            ("GMD Temporal",         "Evolucao no tempo"),
-            ("Comparativo Lotes",    "Side by side"),
-        ] + ([] if is_vet() else [
-            ("Painel de Decisao",    "Lucro por lote"),
-        ]) + [
-            ("Dashboard Executivo",  "KPIs do lote"),
-            ("Pesquisar Ocorrencias","Filtros avancados"),
         ],
-        "Gestao": [
-            ("Workspace do Lote",    "Visao completa do lote"),
+        "Financeiro & Saude": [
             ("Calendario Sanitario", "Vacinas e alertas"),
             ("Estoque Medicamentos", "Controle de estoque"),
             ("Controle Reprodutivo", "IATF e prenhez"),
             ("Mapa Piquetes",        "Pastagens"),
-            ("Previsao Abate",       "Data estimada"),
-            ("Prontuario Animal",    "Historico completo"),
+            ("Previsao Abate",       "Data estimada de abate"),
             ("Cotacao Cepea",        "Preco boi gordo"),
         ] + ([] if is_vet() else [
             ("Margem Real",          "Compra x Venda"),
-        ]) + [
-        ],
-        "Rastreabilidade": ([] if is_vet() else [
             ("Rastreabilidade GTA",  "GTA e SISBOV"),
         ]),
-        "Relatorios": [
+        "Sistema": [
             ("Exportar Relatorios",  "PDF e Excel"),
             ("Backup",               "Download do banco"),
-        ],
-        "Sistema": [
             ("Notificacoes",         "E-mail e alertas"),
             ("Log Auditoria",        "Historico de acoes"),
             ("Administracao",        "Usuarios e planos"),
@@ -2411,13 +2407,49 @@ with st.sidebar:
     if "menu" not in st.session_state:
         st.session_state.menu = "Inicio"
 
+    # Icones por grupo
+    _ICONES = {
+        "Inicio":            "🏠",
+        "Operacao":          "🐄",
+        "Analise":           "📊",
+        "Analise & IA":      "🤖",
+        "Financeiro & Saude":"💰",
+        "Sistema":           "⚙️",
+    }
+
     for grupo, itens in GRUPOS.items():
-        st.caption(grupo.upper())
-        for nome_item, desc in itens:
-            ativo = st.session_state.menu == nome_item
-            label = f"**{nome_item}**" if ativo else nome_item
-            if st.button(label, key=f"menu_{nome_item}", width='stretch', help=desc):
-                st.session_state.menu = nome_item
+        if not itens:
+            continue
+
+        # INICIO sem expander - itens diretos
+        if grupo == "Inicio":
+            st.markdown(
+                f"<div style='font-size:9px;color:rgba(255,255,255,0.3);"
+                f"letter-spacing:1.5px;text-transform:uppercase;"
+                f"padding:6px 8px 2px'>🏠 INICIO</div>",
+                unsafe_allow_html=True
+            )
+            for nome_item, desc in itens:
+                ativo = st.session_state.menu == nome_item
+                label = f"**{nome_item}**" if ativo else nome_item
+                if st.button(label, key=f"menu_{nome_item}",
+                             width='stretch', help=desc):
+                    st.session_state.menu = nome_item
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+            continue
+
+        # Verificar se algum item do grupo está ativo
+        grupo_ativo = any(st.session_state.menu == n for n, _ in itens)
+        icone = _ICONES.get(grupo, "-")
+        label_grupo = f"{icone} {grupo} ({len(itens)})"
+
+        with st.sidebar.expander(label_grupo, expanded=grupo_ativo):
+            for nome_item, desc in itens:
+                ativo = st.session_state.menu == nome_item
+                label = f"**✦ {nome_item}**" if ativo else nome_item
+                if st.button(label, key=f"menu_{nome_item}",
+                             width='stretch', help=desc):
+                    st.session_state.menu = nome_item
                 st.rerun()
         st.write("")
 
