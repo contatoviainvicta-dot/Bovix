@@ -141,6 +141,7 @@ def page_estoque_medicamentos(u):
 
 
 def page_controle_reprodutivo(u):
+    parto = listar_partos_previstos(owner_id=owner_id())
     hdr("Controle Reprodutivo", "Reproducao", "IATF, diagnostico, prenhez e partos")
     t1,t2,t3,t4 = st.tabs(["Indicadores","Registrar","Diagnostico","Partos"])
     with t1:
@@ -617,6 +618,7 @@ def page_workspace_do_lote(u):
 
 
 def page_prontuario_animal(u):
+    parto = listar_partos_previstos(owner_id=owner_id())
     hdr("Prontuario Animal", "Prontuario Completo", "Historico de peso, saude e reproducao")
 
     @st.cache_data(ttl=900, show_spinner="Carregando prontuario...")
