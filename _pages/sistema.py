@@ -140,10 +140,10 @@ def page_inicio(u):
 
     st.subheader("Acoes rapidas")
     qa1,qa2,qa3,qa4 = st.columns(4)
-    if qa1.button("Novo Lote",        use_container_width=True): st.session_state.menu="Cadastrar Lote";       st.rerun()
-    if qa2.button("Registrar Peso",   use_container_width=True): st.session_state.menu="Registrar Pesagem";    st.rerun()
-    if qa3.button("Nova Ocorrencia",  use_container_width=True): st.session_state.menu="Registrar Ocorrencia"; st.rerun()
-    if qa4.button("Exportar",         use_container_width=True): st.session_state.menu="Exportar Relatorios";  st.rerun()
+    if qa1.button("Novo Lote",        width='stretch'): st.session_state.menu="Cadastrar Lote";       st.rerun()
+    if qa2.button("Registrar Peso",   width='stretch'): st.session_state.menu="Registrar Pesagem";    st.rerun()
+    if qa3.button("Nova Ocorrencia",  width='stretch'): st.session_state.menu="Registrar Ocorrencia"; st.rerun()
+    if qa4.button("Exportar",         width='stretch'): st.session_state.menu="Exportar Relatorios";  st.rerun()
 
     # ============================================================
     # BUSCAR ANIMAL
@@ -336,7 +336,7 @@ def page_notificacoes(u):
         usuarios = listar_usuarios()
         if usuarios:
             df_u = pd.DataFrame(usuarios, columns=["ID","Nome","Email","Perfil","Fazenda"])
-            st.dataframe(df_u, use_container_width=True)
+            st.dataframe(df_u, width='stretch')
         with st.form("form_conv"):
             uid_c = st.number_input("ID usuario para converter para PAGO", 1, step=1)
             if st.form_submit_button("Converter para pago"):
@@ -361,7 +361,7 @@ def page_log_auditoria(u):
         logs = listar_auditoria(lim, dict_us[uf])
         if logs:
             df_log = pd.DataFrame(logs, columns=["ID","Usuario","Acao","Tabela","Reg ID","Detalhe","Data/Hora"])
-            st.dataframe(df_log, use_container_width=True)
+            st.dataframe(df_log, width='stretch')
             st.metric("Total registros", len(logs))
         else: st.info("Nenhum registro.")
 
@@ -380,7 +380,7 @@ def page_administracao(u):
             usuarios = listar_usuarios()
             if usuarios:
                 df_u = pd.DataFrame(usuarios, columns=["ID","Nome","Email","Perfil","Fazenda"])
-                st.dataframe(df_u, use_container_width=True)
+                st.dataframe(df_u, width='stretch')
             st.subheader("Criar usuario")
             with st.form("form_user"):
                 au1,au2 = st.columns(2)
@@ -529,7 +529,7 @@ def page_gestao_usuarios(u):
             ])
             st.dataframe(
                 df_ac[["Veterinario","Fazenda","Status","Data Solicitacao","Data Aprovacao"]],
-                use_container_width=True
+                width='stretch'
             )
             st.divider()
             st.subheader("Revogar acesso")
