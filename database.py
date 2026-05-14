@@ -2411,47 +2411,70 @@ def resumo_ia_fazenda(owner_id=None):
     return sorted(resultado, key=lambda x: x['risco_score'], reverse=True)
 
 
+def _garantir_coluna_onboarding():
+    """Garante que a coluna onboarding_completo existe na tabela usuarios."""
+    with _conexao() as conn:
+        cur = conn.cursor()
+        try:
+            if _usar_postgres():
+                cur.execute(
+                    "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS "
+                    "onboarding_completo INTEGER DEFAULT 0"
+                )
+            else:
+                # SQLite: verificar antes de adicionar
+                cur.execute("PRAGMA table_info(usuarios)")
+                cols = [r[1] for r in cur.fetchall()]
+                if 'onboarding_completo' not in cols:
+                    cur.execute(
+                        "ALTER TABLE usuarios ADD COLUMN "
+                        "onboarding_completo INTEGER DEFAULT 0"
+                    )
+            conn.commit()
+            return True
+        except Exception:
+            return False
+
+
 def marcar_onboarding_completo(uid):
     """Marca o onboarding como concluido para o usuario."""
+    _garantir_coluna_onboarding()
     with _conexao() as conn:
         cur = conn.cursor()
         p = _ph()
         try:
-            cur.execute(f"UPDATE usuarios SET onboarding_completo=1 WHERE id={p}", (uid,))
+            cur.execute(
+                f"UPDATE usuarios SET onboarding_completo=1 WHERE id={p}",
+                (uid,)
+            )
             conn.commit()
-        except Exception:
-            # Coluna pode nao existir ainda
+            # Verificar se UPDATE afetou alguma linha
+            if hasattr(cur, 'rowcount') and cur.rowcount == 0:
+                # Usuario nao encontrado - nao e erro critico
+                pass
+            return True
+        except Exception as e:
             try:
-                if _usar_postgres():
-                    cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS onboarding_completo INTEGER DEFAULT 0")
-                else:
-                    cur.execute("ALTER TABLE usuarios ADD COLUMN onboarding_completo INTEGER DEFAULT 0")
-                conn.commit()
-                cur.execute(f"UPDATE usuarios SET onboarding_completo=1 WHERE id={p}", (uid,))
-                conn.commit()
+                conn.rollback()
             except Exception:
                 pass
+            return False
 
 
 def onboarding_concluido(uid):
     """Verifica se o usuario ja completou o onboarding."""
+    _garantir_coluna_onboarding()
     with _conexao() as conn:
         cur = conn.cursor()
         p = _ph()
         try:
-            cur.execute(f"SELECT onboarding_completo FROM usuarios WHERE id={p}", (uid,))
+            cur.execute(
+                f"SELECT onboarding_completo FROM usuarios WHERE id={p}",
+                (uid,)
+            )
             r = cur.fetchone()
             return bool(r and r[0])
         except Exception:
-            # Coluna nao existe - criar e retornar False
-            try:
-                if _usar_postgres():
-                    cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS onboarding_completo INTEGER DEFAULT 0")
-                else:
-                    cur.execute("ALTER TABLE usuarios ADD COLUMN onboarding_completo INTEGER DEFAULT 0")
-                conn.commit()
-            except Exception:
-                pass
             return False
 
 
