@@ -94,58 +94,146 @@ def page_calendario_sanitario(u):
 
 def page_estoque_medicamentos(u):
     hdr("Estoque Medicamentos", "Controle de Medicamentos", "Estoque, validade e uso")
-    t1,t2,t3 = st.tabs(["Estoque","Cadastrar","Registrar Uso"])
+    # Isolamento: cada usuario ve somente seus proprios medicamentos
+    _oid = u.get("owner_id") or u["id"]
+
+    t1, t2, t3, t4 = st.tabs(["Estoque", "Cadastrar", "Registrar Uso", "Historico de Uso"])
+
+    # ── ABA 1: Estoque ────────────────────────────────────────────────────────
     with t1:
-        meds  = listar_medicamentos_usuario()
-        crits = listar_medicamentos_criticos()
+        meds  = listar_medicamentos(owner_id=_oid)
+        crits = listar_medicamentos_criticos(owner_id=_oid)
         if crits:
+            st.subheader("Alertas")
             for m in crits:
-                mot = "estoque baixo" if m[3]<=m[4] else f"vence {m[5]}"
-                st.error(f"{m[1]} - {m[3]:.1f} {m[2]} ({mot})")
+                mot = "estoque baixo" if m[3] <= m[4] else f"vence {m[5]}"
+                st.error(f"⚠ {m[1]} — {m[3]:.1f} {m[2]} ({mot})")
+            st.divider()
         if meds:
-            df_m = pd.DataFrame(meds, columns=["ID","Nome","Unidade","Estoque","Minimo","Validade","Custo Unit."])
-            st.dataframe(df_m, width='stretch')
-            m1,m2 = st.columns(2)
-            m1.metric("Valor total estoque", f"R$ {sum(m[3]*m[6] for m in meds):,.2f}")
-            m2.metric("Itens cadastrados",   len(meds))
-        else: st.info("Nenhum medicamento.")
+            _valor_total = sum((m[3] or 0) * (m[6] or 0) for m in meds)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Itens no estoque",  len(meds))
+            c2.metric("Valor total",       f"R$ {_valor_total:,.2f}".replace(',','X').replace('.',',').replace('X','.'))
+            c3.metric("Itens criticos",    len(crits))
+            st.divider()
+            for med in meds:
+                mid, mnome, munid, mestq, mmin, mval, mcusto = med[0],med[1],med[2],med[3],med[4],med[5],med[6]
+                _pct = min(100, int((mestq / max(mmin, 1)) * 100)) if mmin else 100
+                _cor = "#F87171" if mestq <= mmin else "#4ADE80"
+                with st.expander(f"{mnome} — {mestq:.1f} {munid}"):
+                    e1, e2, e3, e4 = st.columns(4)
+                    e1.metric("Estoque",  f"{mestq:.1f} {munid}")
+                    e2.metric("Minimo",   f"{mmin:.1f} {munid}")
+                    e3.metric("Validade", mval or "—")
+                    e4.metric("Custo/un", f"R$ {mcusto:.2f}" if mcusto else "—")
+        else:
+            st.info("Nenhum medicamento cadastrado. Use a aba Cadastrar.")
+
+    # ── ABA 2: Cadastrar ─────────────────────────────────────────────────────
     with t2:
+        st.subheader("Cadastrar medicamento")
         with st.form("form_med"):
-            mn1,mn2 = st.columns(2)
+            mn1, mn2 = st.columns(2)
             with mn1:
-                nome_md = st.text_input("Nome *")
-                unid_md = st.selectbox("Unidade", ["dose","mL","g","comprimido","frasco","kg"])
+                nome_md = st.text_input("Nome *", placeholder="Ex: Ivermectina 1%")
+                unid_md = st.selectbox("Unidade", ["dose","mL","g","comprimido","frasco","kg","L"])
                 estq_md = st.number_input("Estoque inicial", 0.0, step=1.0)
             with mn2:
                 emin_md = st.number_input("Estoque minimo (alerta)", 0.0, step=1.0)
                 val_md  = st.date_input("Validade")
-                cust_md = st.number_input("Custo unitario (R$)", 0.0)
-            if st.form_submit_button("Cadastrar", type="primary"):
+                cust_md = st.number_input("Custo unitario (R$)", 0.0, step=0.01)
+            obs_md = st.text_area("Observacao (opcional)")
+            if st.form_submit_button("Cadastrar medicamento", type="primary"):
                 if nome_md:
-                    adicionar_medicamento(nome_md, unid_md, estq_md, emin_md, str(val_md), cust_md, owner_id=u.get("owner_id", u["id"]))
-                    st.success("Medicamento cadastrado!"); st.rerun()
-                else: st.error("Informe o nome.")
+                    adicionar_medicamento(nome_md, unid_md, estq_md, emin_md,
+                                         str(val_md), cust_md, owner_id=_oid)
+                    registrar_auditoria(u["id"], "cad_medicamento", "medicamentos", 0, nome_md)
+                    st.success(f"Medicamento '{nome_md}' cadastrado!")
+                    st.rerun()
+                else:
+                    st.error("Informe o nome do medicamento.")
+
+    # ── ABA 3: Registrar Uso ─────────────────────────────────────────────────
     with t3:
-        meds  = listar_medicamentos_usuario()
-        lotes = listar_lotes_usuario()
-        if not meds or not lotes: st.warning("Cadastre medicamentos e lotes.")
+        st.subheader("Registrar uso de medicamento")
+        st.caption("O estoque sera automaticamente descontado apos o registro.")
+        meds_uso = listar_medicamentos(owner_id=_oid)
+        lotes    = listar_lotes_usuario()
+        if not meds_uso:
+            st.warning("Cadastre medicamentos primeiro (aba Cadastrar).")
+        elif not lotes:
+            st.warning("Cadastre lotes e animais primeiro.")
         else:
-            dict_md = {f"{m[1]} ({m[3]:.1f} {m[2]})": m[0] for m in meds}
-            dict_l  = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+            dict_md = {f"{m[1]} — {m[3]:.1f} {m[2]} disponiveis": m[0] for m in meds_uso}
+            dict_l  = {f"{l[1]}": l[0] for l in lotes}
+
+            col_l, col_a = st.columns(2)
+            with col_l:
+                lote_sel = st.selectbox("Lote", list(dict_l.keys()), key="uso_lote")
+            animais_u = listar_animais_por_lote(dict_l[lote_sel])
+            dict_au   = {f"{a[1]}": a[0] for a in animais_u}
+            with col_a:
+                anim_sel = st.selectbox("Animal", list(dict_au.keys()) if dict_au else ["--"], key="uso_anim")
+
             with st.form("form_uso_md"):
-                u1,u2 = st.columns(2)
+                u1, u2 = st.columns(2)
                 with u1:
-                    med_s  = st.selectbox("Medicamento", list(dict_md.keys()))
-                    lote_s = st.selectbox("Lote", list(dict_l.keys()))
+                    med_s = st.selectbox("Medicamento", list(dict_md.keys()))
+                    qtd_u = st.number_input("Quantidade aplicada", 0.01, step=0.5)
                 with u2:
-                    animais_u = listar_animais_por_lote(dict_l[lote_s])
-                    dict_au   = {f"{a[1]} (ID {a[0]})": a[0] for a in animais_u}
-                    anim_s    = st.selectbox("Animal", list(dict_au.keys()) if dict_au else ["--"])
-                    qtd_u     = st.number_input("Quantidade", 0.01, step=0.5)
-                    data_u    = st.date_input("Data")
-                if st.form_submit_button("Registrar", type="primary") and dict_au:
-                    registrar_uso_medicamento(dict_md[med_s], dict_au[anim_s], str(data_u), qtd_u)
-                    st.success("Uso registrado e estoque atualizado!"); st.rerun()
+                    data_u = st.date_input("Data de aplicacao")
+                    obs_u  = st.text_input("Observacao (lote, dose, via)", placeholder="Ex: dose unica, IM")
+
+                if st.form_submit_button("Registrar uso e dar baixa no estoque", type="primary"):
+                    if dict_au and anim_sel != "--":
+                        _mid_sel = dict_md[med_s]
+                        # Verificar estoque suficiente
+                        _med_info = next((m for m in meds_uso if m[0] == _mid_sel), None)
+                        if _med_info and _med_info[3] < qtd_u:
+                            st.error(f"Estoque insuficiente: {_med_info[3]:.1f} {_med_info[2]} disponivel, "
+                                     f"tentou usar {qtd_u:.1f}.")
+                        else:
+                            registrar_uso_medicamento(_mid_sel, dict_au[anim_sel], str(data_u), qtd_u)
+                            registrar_auditoria(u["id"], "uso_medicamento", "medicamentos",
+                                               _mid_sel, f"{qtd_u} unidades")
+                            st.success(f"Uso registrado! Estoque de '{med_s.split(' — ')[0]}' "
+                                      f"atualizado: -{qtd_u:.1f} unidades.")
+                            st.rerun()
+                    else:
+                        st.error("Selecione um animal valido.")
+
+    # ── ABA 4: Historico ─────────────────────────────────────────────────────
+    with t4:
+        st.subheader("Historico de uso")
+        meds_hist = listar_medicamentos(owner_id=_oid)
+        if not meds_hist:
+            st.info("Nenhum medicamento cadastrado.")
+        else:
+            _ids_meds = [m[0] for m in meds_hist]
+            # Buscar usos recentes via query direta
+            try:
+                p = _ph() if '_ph' in dir() else '%s'
+                from database import _conexao as _cn, _ph as _phf
+                with _cn() as conn:
+                    cur = conn.cursor()
+                    _placeholders = ','.join([_phf()]*len(_ids_meds))
+                    cur.execute(
+                        f"SELECT m.nome, a.identificacao, u.data_uso, u.quantidade, u.observacao "
+                        f"FROM uso_medicamentos u "
+                        f"JOIN medicamentos m ON m.id=u.medicamento_id "
+                        f"JOIN animais a ON a.id=u.animal_id "
+                        f"WHERE u.medicamento_id IN ({_placeholders}) "
+                        f"ORDER BY u.data_uso DESC LIMIT 100",
+                        tuple(_ids_meds)
+                    )
+                    usos = cur.fetchall()
+                if usos:
+                    df_usos = pd.DataFrame(usos, columns=["Medicamento","Animal","Data","Qtd","Obs"])
+                    st.dataframe(df_usos, width='stretch', hide_index=True)
+                else:
+                    st.info("Nenhum uso registrado ainda.")
+            except Exception as e:
+                st.warning(f"Erro ao carregar historico: {e}")
 
     # ============================================================
     # CONTROLE REPRODUTIVO
