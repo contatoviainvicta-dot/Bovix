@@ -2298,7 +2298,7 @@ if st.session_state.usuario is None:
                     # Ao logar sempre comecar no Inicio
                     st.session_state.menu = "Inicio"
                     # Resetar wizard
-                    st.session_state.wizard_passo = None
+                    st.session_state.wizard_passo = 1
                     st.session_state.wizard_pulado = False
                     # Garantir owner_id no session (None = admin ve tudo)
                     if u.get("perfil") == "admin":
@@ -2322,7 +2322,8 @@ if u and not is_admin():
 
     if not _onb_ok and not st.session_state.get("wizard_pulado", False):
         # Determinar passo atual
-        passo = st.session_state.get("wizard_passo", 1)
+        passo = st.session_state.get("wizard_passo") or 1
+        passo = int(passo)
 
         # ── Container do wizard ──────────────────────────────────────────
         st.markdown(f"""
@@ -2706,55 +2707,6 @@ with st.sidebar:
 menu = st.session_state.menu
 
 # ── ROTEAMENTO ─────────────────────────────────────────────────────────────────
-_ROTAS = {
-    "Inicio":               page_inicio,
-    "Buscar Animal":        page_buscar_animal,
-    "Cadastrar Lote":       page_cadastrar_lote,
-    "Cadastrar Animal":     page_cadastrar_animal,
-    "Registrar Pesagem":    page_registrar_pesagem,
-    "Registrar Ocorrencia": page_registrar_ocorrencia,
-    "Registrar Morte":      page_registrar_morte,
-    "Importar CSV":         page_importar_csv,
-    "Dashboard Sanitario":  page_dashboard_sanitario,
-    "Analisar por Lote":    page_analisar_por_lote,
-    "Analisar Animal":      page_analisar_animal,
-    "Score de Saude":       page_score_de_saude,
-    "GMD Temporal":         page_gmd_temporal,
-    "Comparativo Lotes":    page_comparativo_lotes,
-    "Painel de Decisao":    page_painel_de_decisao,
-    "Dashboard Executivo":  page_dashboard_executivo,
-    "Pesquisar Ocorrencias":page_pesquisar_ocorrencias,
-    "Calendario Sanitario": page_calendario_sanitario,
-    "Estoque Medicamentos": page_estoque_medicamentos,
-    "Controle Reprodutivo": page_controle_reprodutivo,
-    "Mapa Piquetes":        page_mapa_piquetes,
-    "Previsao Abate":       page_previsao_abate,
-    "Prontuario Animal":    page_prontuario_animal,
-    "Margem Real":          page_margem_real,
-    "Cotacao Cepea":        page_cotacao_cepea,
-    "Rastreabilidade GTA":  page_rastreabilidade_gta,
-    "Exportar Relatorios":  page_exportar_relatorios,
-    "Backup":               page_backup,
-    "Notificacoes":         page_notificacoes,
-    "Log Auditoria":        page_log_auditoria,
-    "Administracao":        page_administracao,
-    "Editar Lote":          page_editar_lote,
-    "Editar Animal":        page_editar_animal,
-    "Editar Pesagens":      page_editar_pesagens,
-    "Gerenciar Ocorrencias":page_gerenciar_ocorrencias,
-    "Transferir Animal":    page_transferir_animal,
-    "Status do Lote":       page_status_do_lote,
-    "Workspace do Lote":    page_workspace_do_lote,
-    "Gestao Usuarios":      page_gestao_usuarios,
-    "Risco Sanitario IA":   page_risco_sanitario_ia,
-    "Previsao de Abate IA": page_previsao_de_abate_ia,
-    "Anomalias de Peso":    page_anomalias_de_peso,
-    "Refazer Tutorial":     page_refazer_tutorial,
-    "Dados de Exemplo":     page_dados_exemplo,
-}
-
-
-
 # ── TELAS DE ONBOARDING ───────────────────────────────────────────────────────
 
 def page_refazer_tutorial(u):
@@ -2821,6 +2773,57 @@ def page_dados_exemplo(u):
                 st.success(r["msg"])
             limpar_cache()
             st.rerun()
+
+
+_ROTAS = {
+    "Inicio":               page_inicio,
+    "Buscar Animal":        page_buscar_animal,
+    "Cadastrar Lote":       page_cadastrar_lote,
+    "Cadastrar Animal":     page_cadastrar_animal,
+    "Registrar Pesagem":    page_registrar_pesagem,
+    "Registrar Ocorrencia": page_registrar_ocorrencia,
+    "Registrar Morte":      page_registrar_morte,
+    "Importar CSV":         page_importar_csv,
+    "Dashboard Sanitario":  page_dashboard_sanitario,
+    "Analisar por Lote":    page_analisar_por_lote,
+    "Analisar Animal":      page_analisar_animal,
+    "Score de Saude":       page_score_de_saude,
+    "GMD Temporal":         page_gmd_temporal,
+    "Comparativo Lotes":    page_comparativo_lotes,
+    "Painel de Decisao":    page_painel_de_decisao,
+    "Dashboard Executivo":  page_dashboard_executivo,
+    "Pesquisar Ocorrencias":page_pesquisar_ocorrencias,
+    "Calendario Sanitario": page_calendario_sanitario,
+    "Estoque Medicamentos": page_estoque_medicamentos,
+    "Controle Reprodutivo": page_controle_reprodutivo,
+    "Mapa Piquetes":        page_mapa_piquetes,
+    "Previsao Abate":       page_previsao_abate,
+    "Prontuario Animal":    page_prontuario_animal,
+    "Margem Real":          page_margem_real,
+    "Cotacao Cepea":        page_cotacao_cepea,
+    "Rastreabilidade GTA":  page_rastreabilidade_gta,
+    "Exportar Relatorios":  page_exportar_relatorios,
+    "Backup":               page_backup,
+    "Notificacoes":         page_notificacoes,
+    "Log Auditoria":        page_log_auditoria,
+    "Administracao":        page_administracao,
+    "Editar Lote":          page_editar_lote,
+    "Editar Animal":        page_editar_animal,
+    "Editar Pesagens":      page_editar_pesagens,
+    "Gerenciar Ocorrencias":page_gerenciar_ocorrencias,
+    "Transferir Animal":    page_transferir_animal,
+    "Status do Lote":       page_status_do_lote,
+    "Workspace do Lote":    page_workspace_do_lote,
+    "Gestao Usuarios":      page_gestao_usuarios,
+    "Risco Sanitario IA":   page_risco_sanitario_ia,
+    "Previsao de Abate IA": page_previsao_de_abate_ia,
+    "Anomalias de Peso":    page_anomalias_de_peso,
+    "Refazer Tutorial":     page_refazer_tutorial,
+    "Dados de Exemplo":     page_dados_exemplo,
+}
+
+
+
 
 
 page_fn = _ROTAS.get(menu)
