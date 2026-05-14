@@ -321,10 +321,21 @@ def page_importar_csv(u):
             linhas2 = list(csv.DictReader(_io.StringIO(txt2)))
             st.info(f"{len(linhas2)} linhas encontradas.")
             if st.button("Importar animais"):
-                res2 = importar_animais_csv(linhas2, lote_id)
-                registrar_auditoria(u["id"], "import_animais", "animais", lote_id, f"{res2['importados']} importados")
-                st.success(f"Importados: {res2['importados']} | Erros: {res2['erros']}")
-                for msg in res2["mensagens"]: st.warning(msg)
+                # Verificar limite do plano ANTES de importar
+                n_novos = len(linhas2)
+                lim = verificar_limite_animais(u["id"], n_novos)
+                if not lim["pode"]:
+                    st.error(
+                        f"Importacao bloqueada: voce tentou importar {n_novos} animais "
+                        f"mas seu plano permite apenas {lim['disponiveis']} adicionais "
+                        f"(limite: {lim['limite']}, atual: {lim['atual']}). "
+                        f"Faca upgrade do plano para continuar."
+                    )
+                else:
+                    res2 = importar_animais_csv(linhas2, lote_id)
+                    registrar_auditoria(u["id"], "import_animais", "animais", lote_id, f"{res2['importados']} importados")
+                    st.success(f"Importados: {res2['importados']} | Erros: {res2['erros']}")
+                    for msg in res2["mensagens"]: st.warning(msg)
 
     # ============================================================
     # DASHBOARD SANITARIO
