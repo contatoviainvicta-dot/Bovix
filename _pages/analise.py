@@ -422,6 +422,7 @@ def page_pesquisar_ocorrencias(u):
 
 
 def page_risco_sanitario_ia(u):
+    import pandas as pd
     hdr("Risco Sanitario IA", "Score de Risco", "Analise inteligente de risco sanitario do lote")
 
     # Visao geral da fazenda (independente de lote selecionado)
