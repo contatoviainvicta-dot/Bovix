@@ -243,21 +243,58 @@ def page_margem_real(u):
                     df_v = pd.DataFrame(vendas, columns=["ID","Lote","Data","R$/kg","Peso kg","Frigorifico","Obs"])
                     st.dataframe(df_v, width='stretch')
         with t2:
+            st.subheader("Registrar Venda")
+
+            # Calcular peso automatico dos animais
+            _animais_lote = listar_animais_por_lote(lote_id)
+            _pes_todos = listar_pesagens_todos_animais(lote_id)
+            # Peso mais recente por animal
+            _peso_map = {}
+            for p in _pes_todos:
+                aid = p[1]
+                if aid not in _peso_map or p[3] > _peso_map[aid][3]:
+                    _peso_map[aid] = p
+            _peso_total_lote = sum(float(p[2]) for p in _peso_map.values())
+            _n_animais = len(_animais_lote)
+
+            st.info(f"Lote com **{_n_animais} animais** | Peso total acumulado: **{_peso_total_lote:.0f} kg**")
+
+            tipo_venda = st.radio("Tipo de venda", ["Lote inteiro", "Animal individual"], horizontal=True, key="tv_radio")
+
+            if tipo_venda == "Animal individual":
+                _opts_anim = {f"{a[1]} (ID {a[0]})": a[0] for a in _animais_lote}
+                _sel_anim = st.selectbox("Selecionar animal", list(_opts_anim.keys()), key="mv_anim")
+                _aid_sel  = _opts_anim[_sel_anim]
+                _peso_anim = float(_peso_map[_aid_sel][2]) if _aid_sel in _peso_map else 0.0
+                st.caption(f"Ultimo peso registrado: {_peso_anim:.1f} kg")
+                _peso_sugerido = _peso_anim
+            else:
+                _peso_sugerido = _peso_total_lote
+
             with st.form("form_venda"):
-                v1,v2 = st.columns(2)
+                v1, v2 = st.columns(2)
                 with v1:
-                    data_v  = st.date_input("Data venda")
-                    pr_kg   = st.number_input("Preco de venda (R$/kg)", 0.0, 100.0, 22.0)
+                    data_v = st.date_input("Data venda")
+                    pr_kg  = st.number_input("Preco de venda (R$/kg)", 0.0, 100.0, 22.0)
                 with v2:
-                    peso_v  = st.number_input("Peso total vendido (kg)", 0.0)
-                    frig_v  = st.text_input("Frigorifico")
-                    obs_v   = st.text_area("Observacao")
+                    peso_v = st.number_input(
+                        "Peso total vendido (kg)",
+                        min_value=0.0,
+                        value=float(_peso_sugerido),
+                        help="Preenchido automaticamente com base nas pesagens. Ajuste se necessario."
+                    )
+                    frig_v = st.text_input("Frigorifico")
+                    obs_v  = st.text_area("Observacao")
+
                 if st.form_submit_button("Registrar Venda", type="primary"):
                     if peso_v > 0:
                         registrar_venda_lote(lote_id, str(data_v), pr_kg, peso_v, frig_v, obs_v)
-                        registrar_auditoria(u["id"], "venda_lote", "vendas", lote_id, f"R${pr_kg}/kg {peso_v}kg")
-                        st.success("Venda registrada!"); st.rerun()
-                    else: st.error("Informe o peso total.")
+                        registrar_auditoria(u["id"], "venda_lote", "vendas", lote_id,
+                                           f"R${pr_kg}/kg {peso_v}kg ({tipo_venda})")
+                        st.success(f"Venda registrada! {peso_v:.0f} kg x R${pr_kg:.2f}/kg = R${peso_v*pr_kg:,.2f}")
+                        st.rerun()
+                    else:
+                        st.error("Informe o peso total.")
 
     # ============================================================
     # COTACAO CEPEA
