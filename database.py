@@ -9,18 +9,38 @@ from datetime import date as _date, timedelta as _td
 
 # ── Planos do sistema ───────────────────────────────────────────────────────
 PLANOS_FAZENDEIRO = {
-    'trial':      dict(nome='Trial 30 dias',  limite_animais=50,   preco=0),
-    'pequeno':    dict(nome='Pequeno',         limite_animais=50,   preco=39),
-    'medio':      dict(nome='Medio',           limite_animais=200,  preco=79),
-    'grande':     dict(nome='Grande',          limite_animais=500,  preco=139),
-    'enterprise': dict(nome='Enterprise',      limite_animais=9999, preco=199),
+    'trial':        dict(nome='Trial 30 dias',  limite_animais=50,    preco=0,
+                        descricao='30 dias gratis, ate 50 animais'),
+    'starter':      dict(nome='Starter',         limite_animais=100,   preco=89,
+                        descricao='Ate 100 animais, suporte por email'),
+    'profissional': dict(nome='Profissional',    limite_animais=500,   preco=189,
+                        descricao='Ate 500 animais, relatorios avancados'),
+    'premium':      dict(nome='Premium',         limite_animais=2000,  preco=389,
+                        descricao='Ate 2000 animais, IA completa'),
+    'enterprise':   dict(nome='Enterprise',      limite_animais=99999, preco=789,
+                        descricao='Ilimitado, multi-fazenda, suporte prioritario'),
 }
 PLANOS_VETERINARIO = {
-    'trial':        dict(nome='Trial 30 dias', limite_fazendas=2,   preco=0),
-    'starter':      dict(nome='Starter',       limite_fazendas=5,   preco=49),
-    'profissional': dict(nome='Profissional',  limite_fazendas=10,  preco=89),
-    'expert':       dict(nome='Expert',        limite_fazendas=20,  preco=149),
-    'ilimitado':    dict(nome='Ilimitado',     limite_fazendas=999, preco=249),
+    'trial':        dict(nome='Trial 30 dias',   limite_fazendas=2,   preco=0,
+                        descricao='30 dias gratis, ate 2 fazendas'),
+    'vet_solo':     dict(nome='Vet Solo',         limite_fazendas=5,   preco=119,
+                        descricao='Ate 5 fazendas'),
+    'vet_pro':      dict(nome='Vet Pro',          limite_fazendas=999, preco=249,
+                        descricao='Fazendas ilimitadas + receituario digital'),
+}
+
+# Mensagens de upgrade por plano (fazendeiro)
+UPGRADE_MSG_FAZENDEIRO = {
+    'trial':        'Faca upgrade para o plano Starter (R$ 89/mes) e gerencie ate 100 animais.',
+    'starter':      'Faca upgrade para o plano Profissional (R$ 189/mes) e gerencie ate 500 animais.',
+    'profissional': 'Faca upgrade para o plano Premium (R$ 389/mes) e gerencie ate 2.000 animais.',
+    'premium':      'Faca upgrade para o plano Enterprise (R$ 789/mes) para animais ilimitados e multi-fazenda.',
+    'enterprise':   'Voce ja tem o plano maximo.',
+}
+UPGRADE_MSG_VETERINARIO = {
+    'trial':    'Faca upgrade para o Vet Solo (R$ 119/mes) e gerencie ate 5 fazendas.',
+    'vet_solo': 'Faca upgrade para o Vet Pro (R$ 249/mes) para fazendas ilimitadas + receituario digital.',
+    'vet_pro':  'Voce ja tem o plano maximo.',
 }
 
 # ── Detectar qual banco usar ────────────────────────────────────────────────
@@ -1008,10 +1028,15 @@ def obter_limites_usuario(usuario_id):
         )
         return _fetchone(cur)
 
-def verificar_limite_animais(owner_id):
+def verificar_limite_animais(owner_id, n_novos=0):
+    """Verifica limite de animais. n_novos: quantos serão adicionados."""
     limites = obter_limites_usuario(owner_id)
-    if not limites: return dict(ok=False, atual=0, limite=0, msg='Usuario nao encontrado')
-    if limites['perfil'] == 'admin': return dict(ok=True, atual=0, limite=9999, msg='Admin sem limite')
+    if not limites:
+        return dict(ok=False, pode=False, atual=0, limite=0, disponiveis=0,
+                    msg='Usuario nao encontrado', upgrade='')
+    if limites['perfil'] == 'admin':
+        return dict(ok=True, pode=True, atual=0, limite=99999, disponiveis=99999,
+                    msg='Admin sem limite', upgrade='')
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -1021,9 +1046,18 @@ def verificar_limite_animais(owner_id):
             (owner_id,),
         )
         atual = cur.fetchone()[0]
-    limite = limites['limite_animais']
-    return dict(ok=atual < limite, atual=atual, limite=limite,
-                msg=f'{atual}/{limite} animais' if atual < limite else f'Limite atingido ({limite} animais)')
+    limite    = limites['limite_animais']
+    disponiv  = max(0, limite - atual)
+    pode      = (atual + n_novos) <= limite
+    plano_k   = limites.get('plano_nome', 'trial')
+    upgrade   = UPGRADE_MSG_FAZENDEIRO.get(plano_k, '')
+    if pode:
+        msg = f'{atual}/{limite} animais ({disponiv} disponiveis)'
+    else:
+        msg = (f'Limite atingido: {atual}/{limite} animais. '
+               f'Voce tentou adicionar {n_novos} mas so ha {disponiv} vagas. {upgrade}')
+    return dict(ok=pode, pode=pode, atual=atual, limite=limite,
+                disponiveis=disponiv, msg=msg, upgrade=upgrade)
 
 def verificar_limite_fazendas(vet_id):
     limites = obter_limites_usuario(vet_id)
@@ -2422,14 +2456,31 @@ def onboarding_concluido(uid):
 
 
 def criar_dados_exemplo(uid):
-    """Cria uma fazenda demo com 1 lote e 5 animais ficticios."""
+    """Cria uma fazenda demo com 1 lote e 5 animais ficticios.
+    Bloqueia se ultrapassar o limite do plano."""
     import random
     from datetime import date as _d, timedelta as _td
 
     # Verificar se ja tem dados exemplo
     lotes_user = listar_lotes(owner_id=uid)
     if any('[DEMO]' in (l[1] or '') for l in lotes_user):
-        return dict(ja_existe=True, msg="Voce ja tem dados de exemplo cadastrados.")
+        return dict(ja_existe=True, bloqueado=False,
+                    msg="Voce ja tem dados de exemplo cadastrados.")
+
+    # Verificar limite do plano (5 animais sao criados)
+    try:
+        lim = verificar_limite_animais(uid, 5)
+        if not lim["pode"]:
+            return dict(
+                ja_existe=False,
+                bloqueado=True,
+                msg=(f"Limite do plano atingido. Voce tem {lim['atual']} de "
+                     f"{lim['limite']} animais e os dados de exemplo criariam "
+                     f"mais 5. Disponiveis: {lim['disponiveis']}. "
+                     f"Faca upgrade ou remova animais antes de criar dados de exemplo.")
+            )
+    except Exception:
+        pass
 
     hoje = _d.today()
     inicio = hoje - _td(days=90)
@@ -2474,7 +2525,8 @@ def criar_dados_exemplo(uid):
         "Resolvido"
     )
 
-    return dict(ja_existe=False, msg="Fazenda exemplo criada! Explore o sistema.",
+    return dict(ja_existe=False, bloqueado=False,
+                msg="Fazenda exemplo criada! Explore o sistema.",
                 lote_id=lote_id)
 
 
