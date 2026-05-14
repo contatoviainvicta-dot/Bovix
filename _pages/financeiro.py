@@ -69,7 +69,12 @@ def page_dashboard_executivo(u):
     hdr("Dashboard Executivo", "Visao Executiva", "KPIs consolidados da fazenda com analise de IA")
 
     with st.spinner("Carregando dados da fazenda..."):
-        kpis = kpis_executivos(owner_id=owner_id())
+        if is_vet():
+            _lotes_exec = listar_lotes_vet(u["id"])
+            _ids_exec   = [l[0] for l in _lotes_exec] if _lotes_exec else []
+            kpis = kpis_executivos(owner_id=None, lote_ids=_ids_exec) if _ids_exec else {}
+        else:
+            kpis = kpis_executivos(owner_id=owner_id())
 
     if not kpis:
         st.warning("Nenhum lote cadastrado. Cadastre lotes e animais para ver o dashboard.")
