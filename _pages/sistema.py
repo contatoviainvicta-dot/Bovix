@@ -373,10 +373,73 @@ def page_log_auditoria(u):
 
 def page_administracao(u):
     hdr("Administracao", "Administracao", "Usuarios, planos e configuracoes")
-    is_admin = u["perfil"] == "admin"
-    t1,t2 = st.tabs(["Usuarios","Alterar Senha"])
+    is_admin_local = u["perfil"] == "admin"
+    t1, t2, t_em = st.tabs(["Usuarios", "Alterar Senha", "Disparar Emails Trial"])
+
+    with t_em:
+        if not is_admin_local:
+            st.warning("Acesso restrito a administradores.")
+        else:
+            st.subheader("Emails automaticos de trial")
+            st.caption("Envia emails para usuarios com trial expirando ou expirado.")
+            try:
+                from notifications import (
+                    email_trial_expirando, email_trial_expirado, email_configurado
+                )
+                _has_email = True
+            except ImportError:
+                _has_email = False
+
+            if not _has_email or not email_configurado():
+                st.warning("E-mail nao configurado. Configure SMTP em .streamlit/secrets.toml.")
+            else:
+                try:
+                    usuarios_trial = listar_usuarios_trial_expirando(dias_limite=7)
+                except Exception:
+                    usuarios_trial = []
+
+                if not usuarios_trial:
+                    st.success("Nenhum usuario com trial expirando nos proximos 7 dias.")
+                else:
+                    st.info(f"**{len(usuarios_trial)} usuario(s) em situacao de trial:**")
+                    for usr in usuarios_trial:
+                        uid_t, nome_t, email_t = usr[0], usr[1], usr[2]
+                        dias_rest = usr[3] if len(usr) > 3 else 0
+                        status = "Expirado" if dias_rest <= 0 else f"{dias_rest} dia(s) restantes"
+                        with st.expander(f"{nome_t} - {email_t} - {status}"):
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if 0 < dias_rest <= 7:
+                                    if st.button("Enviar 'expirando'", key=f"em_e_{uid_t}"):
+                                        ok, msg = email_trial_expirando(email_t, nome_t, dias_rest)
+                                        st.success(msg) if ok else st.error(msg)
+                            with c2:
+                                if dias_rest <= 0:
+                                    if st.button("Enviar 'expirado'", key=f"em_x_{uid_t}"):
+                                        ok, msg = email_trial_expirado(email_t, nome_t)
+                                        st.success(msg) if ok else st.error(msg)
+
+                    st.divider()
+                    if st.button("Disparar TODOS os emails", type="primary", key="em_all"):
+                        ok_n, err_n = 0, 0
+                        for usr in usuarios_trial:
+                            uid_t, nome_t, email_t = usr[0], usr[1], usr[2]
+                            dias_rest = usr[3] if len(usr) > 3 else 0
+                            try:
+                                if 0 < dias_rest <= 7:
+                                    ok, _ = email_trial_expirando(email_t, nome_t, dias_rest)
+                                elif dias_rest <= 0:
+                                    ok, _ = email_trial_expirado(email_t, nome_t)
+                                else:
+                                    continue
+                                if ok: ok_n += 1
+                                else:  err_n += 1
+                            except Exception:
+                                err_n += 1
+                        st.success(f"Sucesso: {ok_n} | Erros: {err_n}")
+
     with t1:
-        if not is_admin: st.warning("Acesso restrito a administradores.")
+        if not is_admin_local: st.warning("Acesso restrito a administradores.")
         else:
             usuarios = listar_usuarios()
             if usuarios:
