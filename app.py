@@ -2226,6 +2226,8 @@ if st.session_state.usuario is None:
             if st.form_submit_button("Entrar"):
                 u = autenticar_usuario(email, senha)
                 if u:
+                    # Ao logar sempre comecar no Inicio
+                    st.session_state.menu = "Inicio"
                     # Garantir owner_id no session (None = admin ve tudo)
                     if u.get("perfil") == "admin":
                         u["owner_id"] = None
