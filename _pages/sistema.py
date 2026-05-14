@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 from database import *
+from database import _conexao, _ph
 
 try:
     from cepea import cotacao_com_cache, historico_grafico
@@ -423,10 +424,11 @@ def page_gestao_usuarios(u):
         st.error("Acesso restrito ao administrador.")
         st.stop()
 
-    tab_pend, tab_usuarios, tab_acessos = st.tabs([
+    tab_pend, tab_usuarios, tab_acessos, tab_faz = st.tabs([
         "Solicitacoes Pendentes",
         "Gerenciar Planos",
         "Acessos Veterinarios",
+        "Acesso Fazendeiros",
     ])
 
     # ── ABA 1: Solicitacoes pendentes ────────────────────────────────────────
@@ -515,6 +517,59 @@ def page_gestao_usuarios(u):
                             st.caption(f"Expira: {sp_u.get('plano_expira','N/A')}")
 
     # ── ABA 3: Acessos Veterinarios ─────────────────────────────────────────
+    with tab_faz:
+        st.subheader("Gerenciar acesso de fazendeiros")
+        st.caption("Suspenda ou reative o acesso de fazendeiros ao sistema.")
+        fazendeiros = [u2 for u2 in listar_usuarios()
+                       if u2[3] == "fazendeiro"]
+        if not fazendeiros:
+            st.info("Nenhum fazendeiro cadastrado.")
+        else:
+            for faz in fazendeiros:
+                fid, fnome, femail = faz[0], faz[1], faz[2]
+                lim_faz = obter_limites_usuario(fid)
+                status_faz = lim_faz["status_conta"] if lim_faz else "pendente"
+                plano_faz  = lim_faz["plano_nome"]   if lim_faz else "trial"
+                with st.expander(f"{fnome} | {femail} | {plano_faz} | Status: {status_faz}"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write(f"**Email:** {femail}")
+                        st.write(f"**Plano:** {plano_faz}")
+                        lim_a = verificar_limite_animais(fid)
+                        st.write(f"**Uso:** {lim_a['msg']}")
+                    with c2:
+                        if status_faz == "ativo":
+                            if st.button("Suspender acesso", key=f"susp_{fid}",
+                                         type="primary"):
+                                with _conexao() as conn:
+                                    cur = conn.cursor()
+                                    p = _ph()
+                                    cur.execute(
+                                        f"UPDATE usuarios SET status_conta={p} WHERE id={p}",
+                                        ("suspenso", fid)
+                                    )
+                                    conn.commit()
+                                registrar_auditoria(u["id"], "suspender_fazendeiro",
+                                                    "usuarios", fid, fnome)
+                                st.warning(f"Acesso de {fnome} suspenso.")
+                                st.rerun()
+                        elif status_faz in ("suspenso", "pendente"):
+                            if st.button("Reativar acesso", key=f"reativ_{fid}"):
+                                with _conexao() as conn:
+                                    cur = conn.cursor()
+                                    p = _ph()
+                                    cur.execute(
+                                        f"UPDATE usuarios SET status_conta={p} WHERE id={p}",
+                                        ("ativo", fid)
+                                    )
+                                    conn.commit()
+                                registrar_auditoria(u["id"], "reativar_fazendeiro",
+                                                    "usuarios", fid, fnome)
+                                st.success(f"Acesso de {fnome} reativado.")
+                                st.rerun()
+                        else:
+                            st.caption(f"Status: {status_faz}")
+
     with tab_acessos:
         st.subheader("Acessos veterinario-fazenda")
 
