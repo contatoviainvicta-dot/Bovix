@@ -36,7 +36,13 @@ def page_calendario_sanitario(u):
         if lotes:
             d = {"Todos": None, **{f"{l[1]} (ID {l[0]})": l[0] for l in lotes}}
             f  = st.selectbox("Lote", list(d.keys()), key="cal_f")
-            vs = listar_vacinas_agenda(d[f])
+            if d[f] is None:
+                # Todos: buscar vacinas de cada lote do usuario
+                vs = []
+                for lote in lotes:
+                    vs.extend(listar_vacinas_agenda(lote[0]))
+            else:
+                vs = listar_vacinas_agenda(d[f])
             if vs:
                 df_v = pd.DataFrame(vs, columns=["ID","Lote","Vacina","Previsto","Realizado","Status","Obs"])
                 st.dataframe(df_v, width='stretch')
