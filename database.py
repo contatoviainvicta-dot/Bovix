@@ -2377,6 +2377,120 @@ def resumo_ia_fazenda(owner_id=None):
     return sorted(resultado, key=lambda x: x['risco_score'], reverse=True)
 
 
+def marcar_onboarding_completo(uid):
+    """Marca o onboarding como concluido para o usuario."""
+    with _conexao() as conn:
+        cur = conn.cursor()
+        p = _ph()
+        try:
+            cur.execute(f"UPDATE usuarios SET onboarding_completo=1 WHERE id={p}", (uid,))
+            conn.commit()
+        except Exception:
+            # Coluna pode nao existir ainda
+            try:
+                if _usar_postgres():
+                    cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS onboarding_completo INTEGER DEFAULT 0")
+                else:
+                    cur.execute("ALTER TABLE usuarios ADD COLUMN onboarding_completo INTEGER DEFAULT 0")
+                conn.commit()
+                cur.execute(f"UPDATE usuarios SET onboarding_completo=1 WHERE id={p}", (uid,))
+                conn.commit()
+            except Exception:
+                pass
+
+
+def onboarding_concluido(uid):
+    """Verifica se o usuario ja completou o onboarding."""
+    with _conexao() as conn:
+        cur = conn.cursor()
+        p = _ph()
+        try:
+            cur.execute(f"SELECT onboarding_completo FROM usuarios WHERE id={p}", (uid,))
+            r = cur.fetchone()
+            return bool(r and r[0])
+        except Exception:
+            # Coluna nao existe - criar e retornar False
+            try:
+                if _usar_postgres():
+                    cur.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS onboarding_completo INTEGER DEFAULT 0")
+                else:
+                    cur.execute("ALTER TABLE usuarios ADD COLUMN onboarding_completo INTEGER DEFAULT 0")
+                conn.commit()
+            except Exception:
+                pass
+            return False
+
+
+def criar_dados_exemplo(uid):
+    """Cria uma fazenda demo com 1 lote e 5 animais ficticios."""
+    import random
+    from datetime import date as _d, timedelta as _td
+
+    # Verificar se ja tem dados exemplo
+    lotes_user = listar_lotes(owner_id=uid)
+    if any('[DEMO]' in (l[1] or '') for l in lotes_user):
+        return dict(ja_existe=True, msg="Voce ja tem dados de exemplo cadastrados.")
+
+    hoje = _d.today()
+    inicio = hoje - _td(days=90)
+
+    # Criar lote demo
+    lote_id = adicionar_lote(
+        nome="[DEMO] Pasto Vitrine",
+        descricao="Lote de exemplo - pode excluir quando quiser",
+        data_entrada=str(inicio),
+        qtd_comprada=5,
+        qtd_recebida=5,
+        transporte="Demo",
+        owner_id=uid
+    )
+
+    # Criar 5 animais com pesagens
+    nomes = ["DEMO-001", "DEMO-002", "DEMO-003", "DEMO-004", "DEMO-005"]
+    pesos_iniciais = [280, 295, 310, 270, 305]
+    ganhos = [0.85, 0.75, 0.90, 0.65, 0.80]  # kg/dia
+
+    for i, nome in enumerate(nomes):
+        aid = adicionar_animal(nome, 24, lote_id)
+        # Pesagem inicial
+        adicionar_pesagem(aid, pesos_iniciais[i], str(inicio))
+        # Pesagem ha 30 dias
+        peso_30 = pesos_iniciais[i] + ganhos[i] * 60
+        adicionar_pesagem(aid, round(peso_30, 1), str(inicio + _td(days=60)))
+        # Pesagem atual
+        peso_hoje = pesos_iniciais[i] + ganhos[i] * 90
+        adicionar_pesagem(aid, round(peso_hoje, 1), str(hoje))
+
+    # Adicionar uma ocorrencia exemplo
+    primeiro_animal = listar_animais_por_lote(lote_id)[0]
+    adicionar_ocorrencia(
+        primeiro_animal[0],
+        str(inicio + _td(days=30)),
+        "Vacina",
+        "Vacinacao contra Aftosa (exemplo)",
+        "Baixa",
+        15.0,
+        0,
+        "Resolvido"
+    )
+
+    return dict(ja_existe=False, msg="Fazenda exemplo criada! Explore o sistema.",
+                lote_id=lote_id)
+
+
+def remover_dados_exemplo(uid):
+    """Remove os dados de exemplo do usuario."""
+    lotes_demo = [l for l in listar_lotes(owner_id=uid) if '[DEMO]' in (l[1] or '')]
+    n_removidos = 0
+    for lote in lotes_demo:
+        try:
+            excluir_lote(lote[0])
+            n_removidos += 1
+        except Exception:
+            pass
+    return n_removidos
+
+
 def kpis_executivos(owner_id=None, lote_ids=None):
     """
     KPIs consolidados para o Dashboard Executivo.
