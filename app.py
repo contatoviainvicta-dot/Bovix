@@ -2717,9 +2717,8 @@ with st.sidebar:
             ("Editar Animal",        "Alterar dados do animal"),
             ("Prontuario Animal",    "Historico completo"),
         ]
-        # _op e a lista usada pelo render do menu
-        # usamos marcador especial para subgrupo
-        _op = [("__SUBGRUPO__:🐮 Lote", "")] + _op_lote +               [("__SUBGRUPO__:🐄 Animal", "")] + _op_animal
+        # _op nao e mais usado - lote e animal viram grupos proprios
+        _op = _op_lote  # compatibilidade (nao renderizado diretamente)
         _fs = [
             ("Calendario Sanitario", "Vacinas e alertas"),
             ("Estoque Medicamentos", "Controle de estoque"),
@@ -2735,7 +2734,8 @@ with st.sidebar:
         for k, v in GRUPOS.items():
             _grupos_final[k] = v
             if k == "Inicio":
-                _grupos_final["Operacao"] = _op
+                _grupos_final["🐮 Lote"]   = _op_lote
+                _grupos_final["🐄 Animal"] = _op_animal
             if k == "Analise & IA":
                 _grupos_final["Financeiro & Saude"] = _fs
         GRUPOS = _grupos_final
@@ -2746,7 +2746,8 @@ with st.sidebar:
     # Icones por grupo
     _ICONES = {
         "Inicio":              "🏠",
-        "Operacao":            "🐄",
+        "🐮 Lote":             "🐮",
+        "🐄 Animal":           "🐄",
         "Analise":             "📊",
         "Analise & IA":        "🤖",
         "Financeiro & Saude":  "💰",
@@ -2782,16 +2783,6 @@ with st.sidebar:
 
         with st.sidebar.expander(label_grupo, expanded=grupo_ativo):
             for nome_item, desc in itens:
-                # Marcador de subgrupo
-                if nome_item.startswith("__SUBGRUPO__:"):
-                    _sg_label = nome_item.replace("__SUBGRUPO__:", "")
-                    st.markdown(
-                        f"<div style='font-size:9px;color:rgba(255,255,255,0.4);"
-                        f"letter-spacing:1.2px;text-transform:uppercase;"
-                        f"padding:8px 4px 3px;margin-top:4px'>{_sg_label}</div>",
-                        unsafe_allow_html=True
-                    )
-                    continue
                 ativo = st.session_state.menu == nome_item
                 label = f"**✦ {nome_item}**" if ativo else nome_item
                 if st.button(label, key=f"menu_{nome_item}",
