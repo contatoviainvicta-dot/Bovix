@@ -11,9 +11,11 @@ except ImportError:
     def nome_arquivo_backup(ext="zip"): return f"backup.{ext}"
 try:
     from exports import gerar_excel_lote, gerar_pdf_relatorio
+    _EXP = True
 except ImportError:
     def gerar_excel_lote(*a, **k): return b""
     def gerar_pdf_relatorio(*a, **k): return b""
+    _EXP = False
 
 from ui import (
     card_kpi, card_kpi_row, alerta, badge,
