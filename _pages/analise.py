@@ -462,7 +462,7 @@ def page_risco_sanitario_ia(u):
                 unsafe_allow_html=True
             )
         with c2:
-            st.metric("Mortalidade", f"{risco['mortalidade']}%",
+            st.metric("Mortalidade", f"{risco.get('mortalidade', 0)}%",
                      delta="critico" if risco['mortalidade'] >= 3 else None,
                      delta_color="inverse")
             st.metric("Ocorr. Graves", risco['ocorrencias_graves'],
@@ -533,18 +533,39 @@ def page_previsao_de_abate_ia(u):
 
             st.write("")
 
-            # Tabela de previsoes
+            # Tabela de previsoes - formatacao brasileira
             import pandas as pd
-            df_prev = pd.DataFrame(previsoes)
-            df_prev = df_prev[[
-                'identificacao','peso_atual','gmd','dias_restantes',
-                'data_prevista','receita_prevista','custo_estimado',
-                'margem_estimada','status'
-            ]]
-            df_prev.columns = [
-                'Animal','Peso Atual','GMD','Dias p/ Abate',
-                'Data Prevista','Receita','Custo','Margem','Status'
-            ]
+
+            def _fmt_brl_pa(v):
+                try:
+                    i, d = f"{float(v):,.2f}".split(".")
+                    return f"R$ {i.replace(',','.')},{d}"
+                except: return "---"
+
+            def _fmt_dt_pa(ds):
+                if not ds: return "---"
+                try:
+                    from datetime import datetime as _dtm
+                    meses = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
+                             7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
+                    dt = _dtm.strptime(str(ds)[:10], "%Y-%m-%d").date()
+                    return f"{dt.day:02d} {meses[dt.month]} {dt.year}"
+                except: return str(ds)
+
+            rows_pa = []
+            for _p in previsoes:
+                rows_pa.append({
+                    "Animal":        _p.get("identificacao","---"),
+                    "Peso Atual":    (f"{float(_p['peso_atual']):.2f}".replace(".",",")+" kg") if _p.get("peso_atual") else "---",
+                    "GMD":           f"{float(_p['gmd']):.3f}".replace(".",",") if _p.get("gmd") else "---",
+                    "Dias":          int(_p["dias_restantes"]) if _p.get("dias_restantes") is not None else "---",
+                    "Data Prevista": _fmt_dt_pa(_p.get("data_prevista")),
+                    "Receita":       _fmt_brl_pa(_p.get("receita_prevista")),
+                    "Custo":         _fmt_brl_pa(_p.get("custo_estimado")),
+                    "Margem":        _fmt_brl_pa(_p.get("margem_estimada")),
+                    "Status":        _p.get("status","---"),
+                })
+            df_prev = pd.DataFrame(rows_pa)
 
             # Colorir por status
             def _cor_status(s):
