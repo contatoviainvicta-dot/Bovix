@@ -2377,15 +2377,20 @@ def resumo_ia_fazenda(owner_id=None):
     return sorted(resultado, key=lambda x: x['risco_score'], reverse=True)
 
 
-def kpis_executivos(owner_id=None):
+def kpis_executivos(owner_id=None, lote_ids=None):
     """
     KPIs consolidados para o Dashboard Executivo.
     Retorna metricas financeiras, sanitarias e produtivas da fazenda.
+    lote_ids: lista de IDs especifica (para vet com fazendas aprovadas)
     """
     import pandas as pd
     from datetime import date as _d, timedelta as _td
 
-    lotes = listar_lotes(owner_id=owner_id)
+    if lote_ids is not None:
+        # Buscar lotes pelo ID diretamente
+        lotes = [l for l in listar_lotes(owner_id=None) if l[0] in lote_ids]
+    else:
+        lotes = listar_lotes(owner_id=owner_id)
     if not lotes:
         return {}
 
