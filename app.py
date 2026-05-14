@@ -1912,95 +1912,164 @@ _DB_B64 = (
     'b1snZmF0b3JlcyddWzBdIGlmIHJpc2NvWydmYXRvcmVzJ10gZWxzZSAnJywKICAgICAgICAgICAg'
     'KSkKICAgICAgICBleGNlcHQgRXhjZXB0aW9uOgogICAgICAgICAgICBwYXNzCiAgICByZXR1cm4g'
     'c29ydGVkKHJlc3VsdGFkbywga2V5PWxhbWJkYSB4OiB4WydyaXNjb19zY29yZSddLCByZXZlcnNl'
-    'PVRydWUpCgoKZGVmIGtwaXNfZXhlY3V0aXZvcyhvd25lcl9pZD1Ob25lLCBsb3RlX2lkcz1Ob25l'
-    'KToKICAgICIiIgogICAgS1BJcyBjb25zb2xpZGFkb3MgcGFyYSBvIERhc2hib2FyZCBFeGVjdXRp'
-    'dm8uCiAgICBSZXRvcm5hIG1ldHJpY2FzIGZpbmFuY2VpcmFzLCBzYW5pdGFyaWFzIGUgcHJvZHV0'
-    'aXZhcyBkYSBmYXplbmRhLgogICAgbG90ZV9pZHM6IGxpc3RhIGRlIElEcyBlc3BlY2lmaWNhIChw'
-    'YXJhIHZldCBjb20gZmF6ZW5kYXMgYXByb3ZhZGFzKQogICAgIiIiCiAgICBpbXBvcnQgcGFuZGFz'
-    'IGFzIHBkCiAgICBmcm9tIGRhdGV0aW1lIGltcG9ydCBkYXRlIGFzIF9kLCB0aW1lZGVsdGEgYXMg'
-    'X3RkCgogICAgaWYgbG90ZV9pZHMgaXMgbm90IE5vbmU6CiAgICAgICAgIyBCdXNjYXIgbG90ZXMg'
-    'cGVsbyBJRCBkaXJldGFtZW50ZQogICAgICAgIGxvdGVzID0gW2wgZm9yIGwgaW4gbGlzdGFyX2xv'
-    'dGVzKG93bmVyX2lkPU5vbmUpIGlmIGxbMF0gaW4gbG90ZV9pZHNdCiAgICBlbHNlOgogICAgICAg'
-    'IGxvdGVzID0gbGlzdGFyX2xvdGVzKG93bmVyX2lkPW93bmVyX2lkKQogICAgaWYgbm90IGxvdGVz'
-    'OgogICAgICAgIHJldHVybiB7fQoKICAgIGlkc19sb3RlcyA9IFtsWzBdIGZvciBsIGluIGxvdGVz'
-    'XQoKICAgICMg4pSA4pSAIENvbnRhZ2VucyBiYXNpY2FzIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU'
+    'PVRydWUpCgoKZGVmIG1hcmNhcl9vbmJvYXJkaW5nX2NvbXBsZXRvKHVpZCk6CiAgICAiIiJNYXJj'
+    'YSBvIG9uYm9hcmRpbmcgY29tbyBjb25jbHVpZG8gcGFyYSBvIHVzdWFyaW8uIiIiCiAgICB3aXRo'
+    'IF9jb25leGFvKCkgYXMgY29ubjoKICAgICAgICBjdXIgPSBjb25uLmN1cnNvcigpCiAgICAgICAg'
+    'cCA9IF9waCgpCiAgICAgICAgdHJ5OgogICAgICAgICAgICBjdXIuZXhlY3V0ZShmIlVQREFURSB1'
+    'c3VhcmlvcyBTRVQgb25ib2FyZGluZ19jb21wbGV0bz0xIFdIRVJFIGlkPXtwfSIsICh1aWQsKSkK'
+    'ICAgICAgICAgICAgY29ubi5jb21taXQoKQogICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAg'
+    'ICAgICAgICMgQ29sdW5hIHBvZGUgbmFvIGV4aXN0aXIgYWluZGEKICAgICAgICAgICAgdHJ5Ogog'
+    'ICAgICAgICAgICAgICAgaWYgX3VzYXJfcG9zdGdyZXMoKToKICAgICAgICAgICAgICAgICAgICBj'
+    'dXIuZXhlY3V0ZSgiQUxURVIgVEFCTEUgdXN1YXJpb3MgQUREIENPTFVNTiBJRiBOT1QgRVhJU1RT'
+    'IG9uYm9hcmRpbmdfY29tcGxldG8gSU5URUdFUiBERUZBVUxUIDAiKQogICAgICAgICAgICAgICAg'
+    'ZWxzZToKICAgICAgICAgICAgICAgICAgICBjdXIuZXhlY3V0ZSgiQUxURVIgVEFCTEUgdXN1YXJp'
+    'b3MgQUREIENPTFVNTiBvbmJvYXJkaW5nX2NvbXBsZXRvIElOVEVHRVIgREVGQVVMVCAwIikKICAg'
+    'ICAgICAgICAgICAgIGNvbm4uY29tbWl0KCkKICAgICAgICAgICAgICAgIGN1ci5leGVjdXRlKGYi'
+    'VVBEQVRFIHVzdWFyaW9zIFNFVCBvbmJvYXJkaW5nX2NvbXBsZXRvPTEgV0hFUkUgaWQ9e3B9Iiwg'
+    'KHVpZCwpKQogICAgICAgICAgICAgICAgY29ubi5jb21taXQoKQogICAgICAgICAgICBleGNlcHQg'
+    'RXhjZXB0aW9uOgogICAgICAgICAgICAgICAgcGFzcwoKCmRlZiBvbmJvYXJkaW5nX2NvbmNsdWlk'
+    'byh1aWQpOgogICAgIiIiVmVyaWZpY2Egc2UgbyB1c3VhcmlvIGphIGNvbXBsZXRvdSBvIG9uYm9h'
+    'cmRpbmcuIiIiCiAgICB3aXRoIF9jb25leGFvKCkgYXMgY29ubjoKICAgICAgICBjdXIgPSBjb25u'
+    'LmN1cnNvcigpCiAgICAgICAgcCA9IF9waCgpCiAgICAgICAgdHJ5OgogICAgICAgICAgICBjdXIu'
+    'ZXhlY3V0ZShmIlNFTEVDVCBvbmJvYXJkaW5nX2NvbXBsZXRvIEZST00gdXN1YXJpb3MgV0hFUkUg'
+    'aWQ9e3B9IiwgKHVpZCwpKQogICAgICAgICAgICByID0gY3VyLmZldGNob25lKCkKICAgICAgICAg'
+    'ICAgcmV0dXJuIGJvb2wociBhbmQgclswXSkKICAgICAgICBleGNlcHQgRXhjZXB0aW9uOgogICAg'
+    'ICAgICAgICAjIENvbHVuYSBuYW8gZXhpc3RlIC0gY3JpYXIgZSByZXRvcm5hciBGYWxzZQogICAg'
+    'ICAgICAgICB0cnk6CiAgICAgICAgICAgICAgICBpZiBfdXNhcl9wb3N0Z3JlcygpOgogICAgICAg'
+    'ICAgICAgICAgICAgIGN1ci5leGVjdXRlKCJBTFRFUiBUQUJMRSB1c3VhcmlvcyBBREQgQ09MVU1O'
+    'IElGIE5PVCBFWElTVFMgb25ib2FyZGluZ19jb21wbGV0byBJTlRFR0VSIERFRkFVTFQgMCIpCiAg'
+    'ICAgICAgICAgICAgICBlbHNlOgogICAgICAgICAgICAgICAgICAgIGN1ci5leGVjdXRlKCJBTFRF'
+    'UiBUQUJMRSB1c3VhcmlvcyBBREQgQ09MVU1OIG9uYm9hcmRpbmdfY29tcGxldG8gSU5URUdFUiBE'
+    'RUZBVUxUIDAiKQogICAgICAgICAgICAgICAgY29ubi5jb21taXQoKQogICAgICAgICAgICBleGNl'
+    'cHQgRXhjZXB0aW9uOgogICAgICAgICAgICAgICAgcGFzcwogICAgICAgICAgICByZXR1cm4gRmFs'
+    'c2UKCgpkZWYgY3JpYXJfZGFkb3NfZXhlbXBsbyh1aWQpOgogICAgIiIiQ3JpYSB1bWEgZmF6ZW5k'
+    'YSBkZW1vIGNvbSAxIGxvdGUgZSA1IGFuaW1haXMgZmljdGljaW9zLiIiIgogICAgaW1wb3J0IHJh'
+    'bmRvbQogICAgZnJvbSBkYXRldGltZSBpbXBvcnQgZGF0ZSBhcyBfZCwgdGltZWRlbHRhIGFzIF90'
+    'ZAoKICAgICMgVmVyaWZpY2FyIHNlIGphIHRlbSBkYWRvcyBleGVtcGxvCiAgICBsb3Rlc191c2Vy'
+    'ID0gbGlzdGFyX2xvdGVzKG93bmVyX2lkPXVpZCkKICAgIGlmIGFueSgnW0RFTU9dJyBpbiAobFsx'
+    'XSBvciAnJykgZm9yIGwgaW4gbG90ZXNfdXNlcik6CiAgICAgICAgcmV0dXJuIGRpY3QoamFfZXhp'
+    'c3RlPVRydWUsIG1zZz0iVm9jZSBqYSB0ZW0gZGFkb3MgZGUgZXhlbXBsbyBjYWRhc3RyYWRvcy4i'
+    'KQoKICAgIGhvamUgPSBfZC50b2RheSgpCiAgICBpbmljaW8gPSBob2plIC0gX3RkKGRheXM9OTAp'
+    'CgogICAgIyBDcmlhciBsb3RlIGRlbW8KICAgIGxvdGVfaWQgPSBhZGljaW9uYXJfbG90ZSgKICAg'
+    'ICAgICBub21lPSJbREVNT10gUGFzdG8gVml0cmluZSIsCiAgICAgICAgZGVzY3JpY2FvPSJMb3Rl'
+    'IGRlIGV4ZW1wbG8gLSBwb2RlIGV4Y2x1aXIgcXVhbmRvIHF1aXNlciIsCiAgICAgICAgZGF0YV9l'
+    'bnRyYWRhPXN0cihpbmljaW8pLAogICAgICAgIHF0ZF9jb21wcmFkYT01LAogICAgICAgIHF0ZF9y'
+    'ZWNlYmlkYT01LAogICAgICAgIHRyYW5zcG9ydGU9IkRlbW8iLAogICAgICAgIG93bmVyX2lkPXVp'
+    'ZAogICAgKQoKICAgICMgQ3JpYXIgNSBhbmltYWlzIGNvbSBwZXNhZ2VucwogICAgbm9tZXMgPSBb'
+    'IkRFTU8tMDAxIiwgIkRFTU8tMDAyIiwgIkRFTU8tMDAzIiwgIkRFTU8tMDA0IiwgIkRFTU8tMDA1'
+    'Il0KICAgIHBlc29zX2luaWNpYWlzID0gWzI4MCwgMjk1LCAzMTAsIDI3MCwgMzA1XQogICAgZ2Fu'
+    'aG9zID0gWzAuODUsIDAuNzUsIDAuOTAsIDAuNjUsIDAuODBdICAjIGtnL2RpYQoKICAgIGZvciBp'
+    'LCBub21lIGluIGVudW1lcmF0ZShub21lcyk6CiAgICAgICAgYWlkID0gYWRpY2lvbmFyX2FuaW1h'
+    'bChub21lLCAyNCwgbG90ZV9pZCkKICAgICAgICAjIFBlc2FnZW0gaW5pY2lhbAogICAgICAgIGFk'
+    'aWNpb25hcl9wZXNhZ2VtKGFpZCwgcGVzb3NfaW5pY2lhaXNbaV0sIHN0cihpbmljaW8pKQogICAg'
+    'ICAgICMgUGVzYWdlbSBoYSAzMCBkaWFzCiAgICAgICAgcGVzb18zMCA9IHBlc29zX2luaWNpYWlz'
+    'W2ldICsgZ2FuaG9zW2ldICogNjAKICAgICAgICBhZGljaW9uYXJfcGVzYWdlbShhaWQsIHJvdW5k'
+    'KHBlc29fMzAsIDEpLCBzdHIoaW5pY2lvICsgX3RkKGRheXM9NjApKSkKICAgICAgICAjIFBlc2Fn'
+    'ZW0gYXR1YWwKICAgICAgICBwZXNvX2hvamUgPSBwZXNvc19pbmljaWFpc1tpXSArIGdhbmhvc1tp'
+    'XSAqIDkwCiAgICAgICAgYWRpY2lvbmFyX3Blc2FnZW0oYWlkLCByb3VuZChwZXNvX2hvamUsIDEp'
+    'LCBzdHIoaG9qZSkpCgogICAgIyBBZGljaW9uYXIgdW1hIG9jb3JyZW5jaWEgZXhlbXBsbwogICAg'
+    'cHJpbWVpcm9fYW5pbWFsID0gbGlzdGFyX2FuaW1haXNfcG9yX2xvdGUobG90ZV9pZClbMF0KICAg'
+    'IGFkaWNpb25hcl9vY29ycmVuY2lhKAogICAgICAgIHByaW1laXJvX2FuaW1hbFswXSwKICAgICAg'
+    'ICBzdHIoaW5pY2lvICsgX3RkKGRheXM9MzApKSwKICAgICAgICAiVmFjaW5hIiwKICAgICAgICAi'
+    'VmFjaW5hY2FvIGNvbnRyYSBBZnRvc2EgKGV4ZW1wbG8pIiwKICAgICAgICAiQmFpeGEiLAogICAg'
+    'ICAgIDE1LjAsCiAgICAgICAgMCwKICAgICAgICAiUmVzb2x2aWRvIgogICAgKQoKICAgIHJldHVy'
+    'biBkaWN0KGphX2V4aXN0ZT1GYWxzZSwgbXNnPSJGYXplbmRhIGV4ZW1wbG8gY3JpYWRhISBFeHBs'
+    'b3JlIG8gc2lzdGVtYS4iLAogICAgICAgICAgICAgICAgbG90ZV9pZD1sb3RlX2lkKQoKCmRlZiBy'
+    'ZW1vdmVyX2RhZG9zX2V4ZW1wbG8odWlkKToKICAgICIiIlJlbW92ZSBvcyBkYWRvcyBkZSBleGVt'
+    'cGxvIGRvIHVzdWFyaW8uIiIiCiAgICBsb3Rlc19kZW1vID0gW2wgZm9yIGwgaW4gbGlzdGFyX2xv'
+    'dGVzKG93bmVyX2lkPXVpZCkgaWYgJ1tERU1PXScgaW4gKGxbMV0gb3IgJycpXQogICAgbl9yZW1v'
+    'dmlkb3MgPSAwCiAgICBmb3IgbG90ZSBpbiBsb3Rlc19kZW1vOgogICAgICAgIHRyeToKICAgICAg'
+    'ICAgICAgZXhjbHVpcl9sb3RlKGxvdGVbMF0pCiAgICAgICAgICAgIG5fcmVtb3ZpZG9zICs9IDEK'
+    'ICAgICAgICBleGNlcHQgRXhjZXB0aW9uOgogICAgICAgICAgICBwYXNzCiAgICByZXR1cm4gbl9y'
+    'ZW1vdmlkb3MKCgpkZWYga3Bpc19leGVjdXRpdm9zKG93bmVyX2lkPU5vbmUsIGxvdGVfaWRzPU5v'
+    'bmUpOgogICAgIiIiCiAgICBLUElzIGNvbnNvbGlkYWRvcyBwYXJhIG8gRGFzaGJvYXJkIEV4ZWN1'
+    'dGl2by4KICAgIFJldG9ybmEgbWV0cmljYXMgZmluYW5jZWlyYXMsIHNhbml0YXJpYXMgZSBwcm9k'
+    'dXRpdmFzIGRhIGZhemVuZGEuCiAgICBsb3RlX2lkczogbGlzdGEgZGUgSURzIGVzcGVjaWZpY2Eg'
+    'KHBhcmEgdmV0IGNvbSBmYXplbmRhcyBhcHJvdmFkYXMpCiAgICAiIiIKICAgIGltcG9ydCBwYW5k'
+    'YXMgYXMgcGQKICAgIGZyb20gZGF0ZXRpbWUgaW1wb3J0IGRhdGUgYXMgX2QsIHRpbWVkZWx0YSBh'
+    'cyBfdGQKCiAgICBpZiBsb3RlX2lkcyBpcyBub3QgTm9uZToKICAgICAgICAjIEJ1c2NhciBsb3Rl'
+    'cyBwZWxvIElEIGRpcmV0YW1lbnRlCiAgICAgICAgbG90ZXMgPSBbbCBmb3IgbCBpbiBsaXN0YXJf'
+    'bG90ZXMob3duZXJfaWQ9Tm9uZSkgaWYgbFswXSBpbiBsb3RlX2lkc10KICAgIGVsc2U6CiAgICAg'
+    'ICAgbG90ZXMgPSBsaXN0YXJfbG90ZXMob3duZXJfaWQ9b3duZXJfaWQpCiAgICBpZiBub3QgbG90'
+    'ZXM6CiAgICAgICAgcmV0dXJuIHt9CgogICAgaWRzX2xvdGVzID0gW2xbMF0gZm9yIGwgaW4gbG90'
+    'ZXNdCgogICAgIyDilIDilIAgQ29udGFnZW5zIGJhc2ljYXMg4pSA4pSA4pSA4pSA4pSA4pSA4pSA'
+    '4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA'
+    '4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA'
+    '4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICBwID0gX3BoKCkKICAgIHdpdGggX2NvbmV4YW8o'
+    'KSBhcyBjb25uOgogICAgICAgIGN1ciA9IGNvbm4uY3Vyc29yKCkKICAgICAgICBwbGFjZWhvbGRl'
+    'cnMgPSAnLCcuam9pbihbc3RyKHApXSAqIGxlbihpZHNfbG90ZXMpKSBpZiBfdXNhcl9wb3N0Z3Jl'
+    'cygpIGVsc2UgJywnLmpvaW4oWyc/J10gKiBsZW4oaWRzX2xvdGVzKSkKCiAgICAgICAgY3VyLmV4'
+    'ZWN1dGUoZiJTRUxFQ1QgQ09VTlQoKikgRlJPTSBhbmltYWlzIGEgSk9JTiBsb3RlcyBsIE9OIGwu'
+    'aWQ9YS5sb3RlX2lkIFdIRVJFIGwuaWQgSU4gKHtwbGFjZWhvbGRlcnN9KSBBTkQgQ09BTEVTQ0Uo'
+    'YS5hdGl2bywxKT0xIiwgaWRzX2xvdGVzKQogICAgICAgIHRvdGFsX2FuaW1haXMgPSBjdXIuZmV0'
+    'Y2hvbmUoKVswXQoKICAgICAgICBjdXIuZXhlY3V0ZShmIlNFTEVDVCBDT1VOVCgqKSBGUk9NIG1v'
+    'cnRhbGlkYWRlIG0gSk9JTiBhbmltYWlzIGEgT04gYS5pZD1tLmFuaW1hbF9pZCBKT0lOIGxvdGVz'
+    'IGwgT04gbC5pZD1hLmxvdGVfaWQgV0hFUkUgbC5pZCBJTiAoe3BsYWNlaG9sZGVyc30pIiwgaWRz'
+    'X2xvdGVzKQogICAgICAgIHRvdGFsX21vcnRlcyA9IGN1ci5mZXRjaG9uZSgpWzBdCgogICAgICAg'
+    'IGN1ci5leGVjdXRlKGYiU0VMRUNUIENPQUxFU0NFKFNVTShvLmN1c3RvKSwwKSBGUk9NIG9jb3Jy'
+    'ZW5jaWFzIG8gSk9JTiBhbmltYWlzIGEgT04gYS5pZD1vLmFuaW1hbF9pZCBKT0lOIGxvdGVzIGwg'
+    'T04gbC5pZD1hLmxvdGVfaWQgV0hFUkUgbC5pZCBJTiAoe3BsYWNlaG9sZGVyc30pIiwgaWRzX2xv'
+    'dGVzKQogICAgICAgIGN1c3RvX3Nhbml0YXJpbyA9IGZsb2F0KGN1ci5mZXRjaG9uZSgpWzBdIG9y'
+    'IDApCgogICAgICAgIGN1ci5leGVjdXRlKGYiU0VMRUNUIENPVU5UKCopIEZST00gdmFjaW5hc19h'
+    'Z2VuZGEgdiBXSEVSRSB2LmxvdGVfaWQgSU4gKHtwbGFjZWhvbGRlcnN9KSBBTkQgdi5zdGF0dXM9'
+    'J3BlbmRlbnRlJyIsIGlkc19sb3RlcykKICAgICAgICB2YWNpbmFzX3BlbmQgPSBjdXIuZmV0Y2hv'
+    'bmUoKVswXQoKICAgICAgICBjdXIuZXhlY3V0ZShmIlNFTEVDVCBDT1VOVCgqKSBGUk9NIG9jb3Jy'
+    'ZW5jaWFzIG8gSk9JTiBhbmltYWlzIGEgT04gYS5pZD1vLmFuaW1hbF9pZCBKT0lOIGxvdGVzIGwg'
+    'T04gbC5pZD1hLmxvdGVfaWQgV0hFUkUgbC5pZCBJTiAoe3BsYWNlaG9sZGVyc30pIEFORCBvLnN0'
+    'YXR1cz0nRW0gdHJhdGFtZW50byciLCBpZHNfbG90ZXMpCiAgICAgICAgZW1fdHJhdGFtZW50byA9'
+    'IGN1ci5mZXRjaG9uZSgpWzBdCgogICAgIyDilIDilIAgR01EIG1lZGlvIGdlcmFsIOKUgOKUgOKU'
     'gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU'
     'gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU'
-    'gOKUgOKUgOKUgOKUgOKUgOKUgOKUgAogICAgcCA9IF9waCgpCiAgICB3aXRoIF9jb25leGFvKCkg'
-    'YXMgY29ubjoKICAgICAgICBjdXIgPSBjb25uLmN1cnNvcigpCiAgICAgICAgcGxhY2Vob2xkZXJz'
-    'ID0gJywnLmpvaW4oW3N0cihwKV0gKiBsZW4oaWRzX2xvdGVzKSkgaWYgX3VzYXJfcG9zdGdyZXMo'
-    'KSBlbHNlICcsJy5qb2luKFsnPyddICogbGVuKGlkc19sb3RlcykpCgogICAgICAgIGN1ci5leGVj'
-    'dXRlKGYiU0VMRUNUIENPVU5UKCopIEZST00gYW5pbWFpcyBhIEpPSU4gbG90ZXMgbCBPTiBsLmlk'
-    'PWEubG90ZV9pZCBXSEVSRSBsLmlkIElOICh7cGxhY2Vob2xkZXJzfSkgQU5EIENPQUxFU0NFKGEu'
-    'YXRpdm8sMSk9MSIsIGlkc19sb3RlcykKICAgICAgICB0b3RhbF9hbmltYWlzID0gY3VyLmZldGNo'
-    'b25lKClbMF0KCiAgICAgICAgY3VyLmV4ZWN1dGUoZiJTRUxFQ1QgQ09VTlQoKikgRlJPTSBtb3J0'
-    'YWxpZGFkZSBtIEpPSU4gYW5pbWFpcyBhIE9OIGEuaWQ9bS5hbmltYWxfaWQgSk9JTiBsb3RlcyBs'
-    'IE9OIGwuaWQ9YS5sb3RlX2lkIFdIRVJFIGwuaWQgSU4gKHtwbGFjZWhvbGRlcnN9KSIsIGlkc19s'
-    'b3RlcykKICAgICAgICB0b3RhbF9tb3J0ZXMgPSBjdXIuZmV0Y2hvbmUoKVswXQoKICAgICAgICBj'
-    'dXIuZXhlY3V0ZShmIlNFTEVDVCBDT0FMRVNDRShTVU0oby5jdXN0byksMCkgRlJPTSBvY29ycmVu'
-    'Y2lhcyBvIEpPSU4gYW5pbWFpcyBhIE9OIGEuaWQ9by5hbmltYWxfaWQgSk9JTiBsb3RlcyBsIE9O'
-    'IGwuaWQ9YS5sb3RlX2lkIFdIRVJFIGwuaWQgSU4gKHtwbGFjZWhvbGRlcnN9KSIsIGlkc19sb3Rl'
-    'cykKICAgICAgICBjdXN0b19zYW5pdGFyaW8gPSBmbG9hdChjdXIuZmV0Y2hvbmUoKVswXSBvciAw'
-    'KQoKICAgICAgICBjdXIuZXhlY3V0ZShmIlNFTEVDVCBDT1VOVCgqKSBGUk9NIHZhY2luYXNfYWdl'
-    'bmRhIHYgV0hFUkUgdi5sb3RlX2lkIElOICh7cGxhY2Vob2xkZXJzfSkgQU5EIHYuc3RhdHVzPSdw'
-    'ZW5kZW50ZSciLCBpZHNfbG90ZXMpCiAgICAgICAgdmFjaW5hc19wZW5kID0gY3VyLmZldGNob25l'
-    'KClbMF0KCiAgICAgICAgY3VyLmV4ZWN1dGUoZiJTRUxFQ1QgQ09VTlQoKikgRlJPTSBvY29ycmVu'
-    'Y2lhcyBvIEpPSU4gYW5pbWFpcyBhIE9OIGEuaWQ9by5hbmltYWxfaWQgSk9JTiBsb3RlcyBsIE9O'
-    'IGwuaWQ9YS5sb3RlX2lkIFdIRVJFIGwuaWQgSU4gKHtwbGFjZWhvbGRlcnN9KSBBTkQgby5zdGF0'
-    'dXM9J0VtIHRyYXRhbWVudG8nIiwgaWRzX2xvdGVzKQogICAgICAgIGVtX3RyYXRhbWVudG8gPSBj'
-    'dXIuZmV0Y2hvbmUoKVswXQoKICAgICMg4pSA4pSAIEdNRCBtZWRpbyBnZXJhbCDilIDilIDilIDi'
+    'gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAogICAgdG9kb3NfZ21k'
+    'cyA9IFtdCiAgICBmb3IgbGlkIGluIGlkc19sb3RlczoKICAgICAgICBnbWRzID0gY2FsY3VsYXJf'
+    'Z21kc19sb3RlKGxpZCkKICAgICAgICB0b2Rvc19nbWRzLmV4dGVuZChnIGZvciBnIGluIGdtZHMu'
+    'dmFsdWVzKCkgaWYgZyA+IDApCgogICAgZ21kX2dlcmFsID0gc3VtKHRvZG9zX2dtZHMpIC8gbGVu'
+    'KHRvZG9zX2dtZHMpIGlmIHRvZG9zX2dtZHMgZWxzZSAwCgogICAgIyDilIDilIAgVGF4YSBkZSBt'
+    'b3J0YWxpZGFkZSBnZXJhbCDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi'
     'lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi'
+    'lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKICAgIHRvdGFsX2NhYmVjYXMg'
+    'PSBzdW0obGlzdGFyX2xvdGVzKG93bmVyX2lkPW93bmVyX2lkKVtpXVs0XSBvciAwIGZvciBpIGlu'
+    'IHJhbmdlKGxlbihsb3RlcykpKQogICAgdGF4YV9tb3J0X2dlcmFsID0gcm91bmQodG90YWxfbW9y'
+    'dGVzIC8gbWF4KHRvdGFsX2NhYmVjYXMsIDEpICogMTAwLCAyKQoKICAgICMg4pSA4pSAIFJpc2Nv'
+    'IG1lZGlvIGRvcyBsb3RlcyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi'
     'lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi'
-    'lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKICAgIHRvZG9zX2dtZHMg'
-    'PSBbXQogICAgZm9yIGxpZCBpbiBpZHNfbG90ZXM6CiAgICAgICAgZ21kcyA9IGNhbGN1bGFyX2dt'
-    'ZHNfbG90ZShsaWQpCiAgICAgICAgdG9kb3NfZ21kcy5leHRlbmQoZyBmb3IgZyBpbiBnbWRzLnZh'
-    'bHVlcygpIGlmIGcgPiAwKQoKICAgIGdtZF9nZXJhbCA9IHN1bSh0b2Rvc19nbWRzKSAvIGxlbih0'
-    'b2Rvc19nbWRzKSBpZiB0b2Rvc19nbWRzIGVsc2UgMAoKICAgICMg4pSA4pSAIFRheGEgZGUgbW9y'
-    'dGFsaWRhZGUgZ2VyYWwg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA'
+    'lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKICAgIHJp'
+    'c2NvcyA9IFtdCiAgICBmb3IgbGlkIGluIGlkc19sb3RlczoKICAgICAgICB0cnk6CiAgICAgICAg'
+    'ICAgIHIgPSBjYWxjdWxhcl9yaXNjb19zYW5pdGFyaW8obGlkKQogICAgICAgICAgICByaXNjb3Mu'
+    'YXBwZW5kKHJbJ3Njb3JlJ10pCiAgICAgICAgZXhjZXB0IEV4Y2VwdGlvbjoKICAgICAgICAgICAg'
+    'cGFzcwogICAgcmlzY29fbWVkaW8gPSByb3VuZChzdW0ocmlzY29zKSAvIGxlbihyaXNjb3MpLCAx'
+    'KSBpZiByaXNjb3MgZWxzZSAwCgogICAgIyDilIDilIAgTG90ZSBtYWlzIGNyaXRpY28g4pSA4pSA'
     '4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA'
-    '4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICB0b3RhbF9jYWJlY2FzID0g'
-    'c3VtKGxpc3Rhcl9sb3Rlcyhvd25lcl9pZD1vd25lcl9pZClbaV1bNF0gb3IgMCBmb3IgaSBpbiBy'
-    'YW5nZShsZW4obG90ZXMpKSkKICAgIHRheGFfbW9ydF9nZXJhbCA9IHJvdW5kKHRvdGFsX21vcnRl'
-    'cyAvIG1heCh0b3RhbF9jYWJlY2FzLCAxKSAqIDEwMCwgMikKCiAgICAjIOKUgOKUgCBSaXNjbyBt'
-    'ZWRpbyBkb3MgbG90ZXMg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA'
     '4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA'
-    '4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICByaXNj'
-    'b3MgPSBbXQogICAgZm9yIGxpZCBpbiBpZHNfbG90ZXM6CiAgICAgICAgdHJ5OgogICAgICAgICAg'
-    'ICByID0gY2FsY3VsYXJfcmlzY29fc2FuaXRhcmlvKGxpZCkKICAgICAgICAgICAgcmlzY29zLmFw'
-    'cGVuZChyWydzY29yZSddKQogICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgICAgIHBh'
-    'c3MKICAgIHJpc2NvX21lZGlvID0gcm91bmQoc3VtKHJpc2NvcykgLyBsZW4ocmlzY29zKSwgMSkg'
-    'aWYgcmlzY29zIGVsc2UgMAoKICAgICMg4pSA4pSAIExvdGUgbWFpcyBjcml0aWNvIOKUgOKUgOKU'
-    'gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU'
-    'gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU'
-    'gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgAogICAgcmVzdW1vX3IgPSByZXN1'
-    'bW9faWFfZmF6ZW5kYShvd25lcl9pZD1vd25lcl9pZCkKICAgIGxvdGVfY3JpdGljbyA9IHJlc3Vt'
-    'b19yWzBdIGlmIHJlc3Vtb19yIGVsc2UgTm9uZQoKICAgICMg4pSA4pSAIEV2b2x1Y2FvIGRlIGFu'
-    'aW1haXMgKHVsdGltb3MgNiBtZXNlcykg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA'
-    '4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA'
-    '4pSA4pSACiAgICBldm9sdWNhbyA9IFtdCiAgICBob2plID0gX2QudG9kYXkoKQogICAgZm9yIG0g'
-    'aW4gcmFuZ2UoNSwgLTEsIC0xKToKICAgICAgICBtZXNfcmVmID0gaG9qZS5yZXBsYWNlKGRheT0x'
-    'KSAtIF90ZChkYXlzPW0qMzApCiAgICAgICAgbWVzX3N0ciA9IG1lc19yZWYuc3RyZnRpbWUoJyVi'
-    'LyV5JykKICAgICAgICB3aXRoIF9jb25leGFvKCkgYXMgY29ubjoKICAgICAgICAgICAgY3VyID0g'
-    'Y29ubi5jdXJzb3IoKQogICAgICAgICAgICBjdXIuZXhlY3V0ZSgKICAgICAgICAgICAgICAgIGYi'
-    'U0VMRUNUIENPVU5UKCopIEZST00gYW5pbWFpcyBhIEpPSU4gbG90ZXMgbCBPTiBsLmlkPWEubG90'
-    'ZV9pZCIKICAgICAgICAgICAgICAgIGYiIFdIRVJFIGwuaWQgSU4gKHtwbGFjZWhvbGRlcnN9KSIK'
-    'ICAgICAgICAgICAgICAgIGYiIEFORCBDT0FMRVNDRShhLmF0aXZvLDEpPTEiLAogICAgICAgICAg'
-    'ICAgICAgaWRzX2xvdGVzLAogICAgICAgICAgICApCiAgICAgICAgICAgIG4gPSBjdXIuZmV0Y2hv'
-    'bmUoKVswXQogICAgICAgIGV2b2x1Y2FvLmFwcGVuZCh7J21lcyc6IG1lc19zdHIsICdhbmltYWlz'
-    'Jzogbn0pCgogICAgcmV0dXJuIGRpY3QoCiAgICAgICAgdG90YWxfbG90ZXM9bGVuKGxvdGVzKSwK'
-    'ICAgICAgICB0b3RhbF9hbmltYWlzPXRvdGFsX2FuaW1haXMsCiAgICAgICAgdG90YWxfbW9ydGVz'
-    'PXRvdGFsX21vcnRlcywKICAgICAgICB0YXhhX21vcnRhbGlkYWRlPXRheGFfbW9ydF9nZXJhbCwK'
-    'ICAgICAgICBjdXN0b19zYW5pdGFyaW89Y3VzdG9fc2FuaXRhcmlvLAogICAgICAgIGN1c3RvX3Bv'
-    'cl9hbmltYWw9cm91bmQoY3VzdG9fc2FuaXRhcmlvIC8gbWF4KHRvdGFsX2FuaW1haXMsIDEpLCAy'
-    'KSwKICAgICAgICB2YWNpbmFzX3BlbmRlbnRlcz12YWNpbmFzX3BlbmQsCiAgICAgICAgZW1fdHJh'
-    'dGFtZW50bz1lbV90cmF0YW1lbnRvLAogICAgICAgIGdtZF9nZXJhbD1yb3VuZChnbWRfZ2VyYWws'
-    'IDMpLAogICAgICAgIHJpc2NvX21lZGlvPXJpc2NvX21lZGlvLAogICAgICAgIGxvdGVfY3JpdGlj'
-    'bz1sb3RlX2NyaXRpY28sCiAgICAgICAgZXZvbHVjYW9fYW5pbWFpcz1ldm9sdWNhbywKICAgICAg'
-    'ICBuX2xvdGVzX2FsdG9fcmlzY289c3VtKDEgZm9yIHIgaW4gcmlzY29zIGlmIHIgPj0gNDApLAog'
-    'ICAgKQoKCmRlZiBzaW5jcm9uaXphcl90b2Rvc19sb3RlcygpOgogICAgbG90ZXMgPSBsaXN0YXJf'
-    'bG90ZXMoKQogICAgcmVzdWx0YWRvcyA9IFtdCiAgICBmb3IgbCBpbiBsb3RlczoKICAgICAgICBu'
-    'ID0gYXR1YWxpemFyX3F0ZF9sb3RlKGxbMF0pCiAgICAgICAgcmVzdWx0YWRvcy5hcHBlbmQoKGxb'
-    'MF0sIGxbMV0sIG4pKQogICAgcmV0dXJuIHJlc3VsdGFkb3MK'
+    '4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSACiAgICByZXN1bW9fciA9IHJl'
+    'c3Vtb19pYV9mYXplbmRhKG93bmVyX2lkPW93bmVyX2lkKQogICAgbG90ZV9jcml0aWNvID0gcmVz'
+    'dW1vX3JbMF0gaWYgcmVzdW1vX3IgZWxzZSBOb25lCgogICAgIyDilIDilIAgRXZvbHVjYW8gZGUg'
+    'YW5pbWFpcyAodWx0aW1vcyA2IG1lc2VzKSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi'
+    'lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi'
+    'lIDilIDilIAKICAgIGV2b2x1Y2FvID0gW10KICAgIGhvamUgPSBfZC50b2RheSgpCiAgICBmb3Ig'
+    'bSBpbiByYW5nZSg1LCAtMSwgLTEpOgogICAgICAgIG1lc19yZWYgPSBob2plLnJlcGxhY2UoZGF5'
+    'PTEpIC0gX3RkKGRheXM9bSozMCkKICAgICAgICBtZXNfc3RyID0gbWVzX3JlZi5zdHJmdGltZSgn'
+    'JWIvJXknKQogICAgICAgIHdpdGggX2NvbmV4YW8oKSBhcyBjb25uOgogICAgICAgICAgICBjdXIg'
+    'PSBjb25uLmN1cnNvcigpCiAgICAgICAgICAgIGN1ci5leGVjdXRlKAogICAgICAgICAgICAgICAg'
+    'ZiJTRUxFQ1QgQ09VTlQoKikgRlJPTSBhbmltYWlzIGEgSk9JTiBsb3RlcyBsIE9OIGwuaWQ9YS5s'
+    'b3RlX2lkIgogICAgICAgICAgICAgICAgZiIgV0hFUkUgbC5pZCBJTiAoe3BsYWNlaG9sZGVyc30p'
+    'IgogICAgICAgICAgICAgICAgZiIgQU5EIENPQUxFU0NFKGEuYXRpdm8sMSk9MSIsCiAgICAgICAg'
+    'ICAgICAgICBpZHNfbG90ZXMsCiAgICAgICAgICAgICkKICAgICAgICAgICAgbiA9IGN1ci5mZXRj'
+    'aG9uZSgpWzBdCiAgICAgICAgZXZvbHVjYW8uYXBwZW5kKHsnbWVzJzogbWVzX3N0ciwgJ2FuaW1h'
+    'aXMnOiBufSkKCiAgICByZXR1cm4gZGljdCgKICAgICAgICB0b3RhbF9sb3Rlcz1sZW4obG90ZXMp'
+    'LAogICAgICAgIHRvdGFsX2FuaW1haXM9dG90YWxfYW5pbWFpcywKICAgICAgICB0b3RhbF9tb3J0'
+    'ZXM9dG90YWxfbW9ydGVzLAogICAgICAgIHRheGFfbW9ydGFsaWRhZGU9dGF4YV9tb3J0X2dlcmFs'
+    'LAogICAgICAgIGN1c3RvX3Nhbml0YXJpbz1jdXN0b19zYW5pdGFyaW8sCiAgICAgICAgY3VzdG9f'
+    'cG9yX2FuaW1hbD1yb3VuZChjdXN0b19zYW5pdGFyaW8gLyBtYXgodG90YWxfYW5pbWFpcywgMSks'
+    'IDIpLAogICAgICAgIHZhY2luYXNfcGVuZGVudGVzPXZhY2luYXNfcGVuZCwKICAgICAgICBlbV90'
+    'cmF0YW1lbnRvPWVtX3RyYXRhbWVudG8sCiAgICAgICAgZ21kX2dlcmFsPXJvdW5kKGdtZF9nZXJh'
+    'bCwgMyksCiAgICAgICAgcmlzY29fbWVkaW89cmlzY29fbWVkaW8sCiAgICAgICAgbG90ZV9jcml0'
+    'aWNvPWxvdGVfY3JpdGljbywKICAgICAgICBldm9sdWNhb19hbmltYWlzPWV2b2x1Y2FvLAogICAg'
+    'ICAgIG5fbG90ZXNfYWx0b19yaXNjbz1zdW0oMSBmb3IgciBpbiByaXNjb3MgaWYgciA+PSA0MCks'
+    'CiAgICApCgoKZGVmIHNpbmNyb25pemFyX3RvZG9zX2xvdGVzKCk6CiAgICBsb3RlcyA9IGxpc3Rh'
+    'cl9sb3RlcygpCiAgICByZXN1bHRhZG9zID0gW10KICAgIGZvciBsIGluIGxvdGVzOgogICAgICAg'
+    'IG4gPSBhdHVhbGl6YXJfcXRkX2xvdGUobFswXSkKICAgICAgICByZXN1bHRhZG9zLmFwcGVuZCgo'
+    'bFswXSwgbFsxXSwgbikpCiAgICByZXR1cm4gcmVzdWx0YWRvcwo='
 )
 _db_bytes = __import__('base64').b64decode(''.join(_DB_B64))
 import os as _os
@@ -2228,6 +2297,9 @@ if st.session_state.usuario is None:
                 if u:
                     # Ao logar sempre comecar no Inicio
                     st.session_state.menu = "Inicio"
+                    # Resetar wizard
+                    st.session_state.wizard_passo = None
+                    st.session_state.wizard_pulado = False
                     # Garantir owner_id no session (None = admin ve tudo)
                     if u.get("perfil") == "admin":
                         u["owner_id"] = None
@@ -2240,6 +2312,182 @@ if st.session_state.usuario is None:
     st.stop()
 
 u = st.session_state.usuario
+
+# ── WIZARD DE ONBOARDING ──────────────────────────────────────────────────────
+if u and not is_admin():
+    try:
+        _onb_ok = onboarding_concluido(u["id"])
+    except Exception:
+        _onb_ok = True
+
+    if not _onb_ok and not st.session_state.get("wizard_pulado", False):
+        # Determinar passo atual
+        passo = st.session_state.get("wizard_passo", 1)
+
+        # ── Container do wizard ──────────────────────────────────────────
+        st.markdown(f"""
+<div style="background:linear-gradient(135deg,#1A3C2E 0%,#2E5C46 100%);
+     border-radius:12px;padding:24px;margin-bottom:24px;color:#fff">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <svg width="36" height="36" viewBox="0 0 48 48" fill="none">
+        <polygon points="24,3 41,12.5 41,31.5 24,41 7,31.5 7,12.5" fill="#4ADE80"/>
+        <rect x="16" y="13" width="4" height="22" rx="1.5" fill="#1A3C2E"/>
+        <path d="M20 13 L27 13 C30.5 13 33 15.5 33 19 C33 22.5 30.5 25 27 25 L20 25"
+              stroke="#1A3C2E" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <path d="M20 25 L28 25 C31.5 25 34 27.5 34 31 C34 34.5 31.5 37 28 37 L20 37"
+              stroke="#1A3C2E" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div style="font-size:20px;font-weight:700">Bem-vindo ao BOVIX!</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.6);letter-spacing:1.5px">
+          Passo {passo} de 4
+        </div>
+      </div>
+    </div>
+    <div style="background:rgba(74,222,128,0.2);padding:4px 12px;border-radius:20px;
+         font-size:11px;font-weight:600;color:#4ADE80">
+      {int(passo/4*100)}% completo
+    </div>
+  </div>
+  <div style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden">
+    <div style="width:{int(passo/4*100)}%;height:100%;background:#4ADE80"></div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+        # ── PASSO 1: Boas vindas ───────────────────────────────────────────
+        if passo == 1:
+            st.markdown(f"### Ola, {u['nome']}!")
+            st.write("")
+            st.write("Vamos configurar o BOVIX em 4 passos rapidos.")
+            st.write("")
+            st.markdown("""
+**O que vamos fazer:**
+
+1. ✓ Conhecer o BOVIX (este passo)
+2. Cadastrar seu primeiro lote de animais
+3. Decidir se quer ver dados de exemplo
+4. Pronto para usar!
+""")
+            st.info("Voce pode pular este tutorial e configurar tudo depois. O wizard ficara disponivel em **Sistema → Refazer Tutorial**.")
+            c1, c2, c3 = st.columns([1, 1, 2])
+            with c1:
+                if st.button("Pular tutorial", key="wiz_skip"):
+                    st.session_state.wizard_pulado = True
+                    marcar_onboarding_completo(u["id"])
+                    st.rerun()
+            with c3:
+                if st.button("Comecar →", type="primary", key="wiz_p1_next", width="stretch"):
+                    st.session_state.wizard_passo = 2
+                    st.rerun()
+            st.stop()
+
+        # ── PASSO 2: Primeiro lote ────────────────────────────────────────
+        elif passo == 2:
+            st.markdown("### Cadastre seu primeiro lote")
+            st.write("Um lote e um grupo de animais que voce gerencia juntos (ex: 'Pasto 1', 'Confinamento A').")
+            st.write("")
+
+            from datetime import date as _d
+            with st.form("wiz_form_lote"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    w_nome = st.text_input("Nome do lote *", value="Pasto 1",
+                                          help="Ex: Pasto 1, Confinamento A, Lote Maio")
+                    w_data = st.date_input("Data de inicio", value=_d.today())
+                with col2:
+                    w_qtd  = st.number_input("Quantidade de animais", 1, 10000, 10)
+                    w_tipo = st.selectbox("Tipo", ["Engorda","Cria","Recria","Reproducao"])
+
+                w_desc = st.text_area("Descricao (opcional)", placeholder="Ex: Bois nelore para engorda")
+
+                col_b1, col_b2 = st.columns(2)
+                with col_b1:
+                    voltar = st.form_submit_button("← Voltar")
+                with col_b2:
+                    avancar = st.form_submit_button("Cadastrar e avancar →", type="primary")
+
+                if voltar:
+                    st.session_state.wizard_passo = 1
+                    st.rerun()
+                if avancar:
+                    if not w_nome:
+                        st.error("Informe o nome do lote.")
+                    else:
+                        try:
+                            _oid_lote = u.get("owner_id") or u["id"]
+                            lote_id = adicionar_lote(
+                                w_nome, w_desc or "", str(w_data),
+                                int(w_qtd), int(w_qtd), w_tipo,
+                                owner_id=_oid_lote
+                            )
+                            st.session_state.wizard_lote_id = lote_id
+                            st.session_state.wizard_passo = 3
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao criar lote: {e}")
+            st.stop()
+
+        # ── PASSO 3: Dados de exemplo (opcional) ─────────────────────────
+        elif passo == 3:
+            st.markdown("### Quer ver dados de exemplo?")
+            st.write("Podemos criar uma fazenda fictícia com 1 lote e 5 animais para voce explorar o sistema antes de cadastrar seus dados reais.")
+            st.write("")
+            st.info("**Vantagem:** voce ja ve graficos, IA, scores e relatorios funcionando. Pode excluir os dados de exemplo a qualquer momento.")
+            st.write("")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Nao, vou cadastrar meus dados →", key="wiz_no_demo"):
+                    st.session_state.wizard_passo = 4
+                    st.rerun()
+            with col2:
+                if st.button("Sim, criar dados de exemplo", type="primary",
+                            key="wiz_yes_demo", width="stretch"):
+                    with st.spinner("Criando fazenda de exemplo..."):
+                        try:
+                            r = criar_dados_exemplo(u["id"])
+                            if r["ja_existe"]:
+                                st.warning(r["msg"])
+                            else:
+                                st.success(r["msg"])
+                        except Exception as e:
+                            st.error(f"Erro: {e}")
+                    st.session_state.wizard_passo = 4
+                    st.rerun()
+
+            st.write("")
+            if st.button("← Voltar", key="wiz_p3_back"):
+                st.session_state.wizard_passo = 2
+                st.rerun()
+            st.stop()
+
+        # ── PASSO 4: Pronto ────────────────────────────────────────────────
+        elif passo == 4:
+            st.markdown("### Tudo certo!")
+            st.write("Seu BOVIX esta configurado e pronto para usar.")
+            st.write("")
+            st.success("**Proximos passos sugeridos:**")
+            st.markdown("""
+- **Cadastrar Animal** → registre os animais do seu lote
+- **Registrar Pesagem** → comece a acompanhar o ganho de peso
+- **Workspace do Lote** → veja a visao completa do seu lote
+- **Dashboard Executivo** → KPIs consolidados da sua fazenda
+- **Analise & IA** → previsao de abate e risco sanitario
+""")
+            st.write("")
+            st.info("Voce pode refazer este tutorial em **Sistema → Refazer Tutorial**.")
+            st.write("")
+
+            if st.button("Ir para o Dashboard →", type="primary",
+                        key="wiz_finish", width="stretch"):
+                marcar_onboarding_completo(u["id"])
+                st.session_state.wizard_pulado = True
+                st.session_state.menu = "Inicio"
+                st.rerun()
+            st.stop()
+
 
 # ── sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -2358,7 +2606,10 @@ with st.sidebar:
             ("Exportar Relatorios",  "PDF e Excel"),
             ("Backup",               "Download do banco"),
             ("Notificacoes",         "E-mail e alertas"),
-        ] + ([] if not is_admin() else [
+        ] + ([] if is_admin() else [
+            ("Refazer Tutorial",     "Wizard de primeiros passos"),
+            ("Dados de Exemplo",     "Criar ou remover fazenda demo"),
+        ]) + ([] if not is_admin() else [
             ("Log Auditoria",        "Historico de acoes"),
             ("Administracao",        "Usuarios e planos"),
             ("Gestao Usuarios",      "Planos e acessos vet"),
@@ -2498,7 +2749,79 @@ _ROTAS = {
     "Risco Sanitario IA":   page_risco_sanitario_ia,
     "Previsao de Abate IA": page_previsao_de_abate_ia,
     "Anomalias de Peso":    page_anomalias_de_peso,
+    "Refazer Tutorial":     page_refazer_tutorial,
+    "Dados de Exemplo":     page_dados_exemplo,
 }
+
+
+
+# ── TELAS DE ONBOARDING ───────────────────────────────────────────────────────
+
+def page_refazer_tutorial(u):
+    import streamlit as st
+    st.title("Refazer Tutorial")
+    st.caption("Reabrir o wizard de primeiros passos do BOVIX")
+    st.divider()
+    st.info("Ao clicar em 'Refazer tutorial', voce sera levado de volta ao wizard de onboarding na proxima atualizacao da pagina.")
+    st.write("")
+    if st.button("Refazer tutorial agora", type="primary", key="btn_refazer"):
+        # Resetar flag de onboarding
+        with _conexao() as conn:
+            cur = conn.cursor()
+            p = _ph()
+            try:
+                cur.execute(f"UPDATE usuarios SET onboarding_completo=0 WHERE id={p}", (u["id"],))
+                conn.commit()
+            except Exception:
+                pass
+        st.session_state.wizard_passo = 1
+        st.session_state.wizard_pulado = False
+        st.success("Tutorial reaberto! Atualizando...")
+        st.rerun()
+
+
+def page_dados_exemplo(u):
+    import streamlit as st
+    st.title("Dados de Exemplo")
+    st.caption("Criar ou remover fazenda fictícia para testar o sistema")
+    st.divider()
+
+    # Verificar se ja tem dados exemplo
+    lotes_user = listar_lotes(owner_id=u.get("owner_id") or u["id"])
+    tem_demo = any('[DEMO]' in (l[1] or '') for l in lotes_user)
+
+    if tem_demo:
+        st.success("Voce tem dados de exemplo cadastrados.")
+        st.write("Os dados de exemplo incluem 1 lote chamado **[DEMO] Pasto Vitrine** com 5 animais ficticios e pesagens historicas.")
+        st.write("")
+        st.warning("Ao remover, todos os animais, pesagens e ocorrencias dos lotes [DEMO] serao excluidos.")
+        if st.button("Remover dados de exemplo", type="primary", key="btn_rm_demo"):
+            n = remover_dados_exemplo(u["id"])
+            st.success(f"{n} lote(s) de exemplo removido(s).")
+            limpar_cache()
+            st.rerun()
+    else:
+        st.info("Voce ainda nao tem dados de exemplo.")
+        st.write("Podemos criar uma fazenda fictícia com:")
+        st.markdown("""
+- 1 lote chamado **[DEMO] Pasto Vitrine**
+- 5 animais ficticios (DEMO-001 a DEMO-005)
+- Pesagens historicas dos ultimos 90 dias
+- 1 ocorrencia sanitaria exemplo
+""")
+        st.write("")
+        st.caption("Util para explorar o sistema e ver graficos, IA e relatorios funcionando antes de cadastrar seus dados reais.")
+        st.write("")
+        if st.button("Criar dados de exemplo", type="primary", key="btn_cr_demo"):
+            with st.spinner("Criando fazenda exemplo..."):
+                r = criar_dados_exemplo(u["id"])
+            if r["ja_existe"]:
+                st.warning(r["msg"])
+            else:
+                st.success(r["msg"])
+            limpar_cache()
+            st.rerun()
+
 
 page_fn = _ROTAS.get(menu)
 if page_fn:
