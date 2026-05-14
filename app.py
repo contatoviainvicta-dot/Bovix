@@ -2395,10 +2395,14 @@ u = st.session_state.usuario
 
 # ── WIZARD DE ONBOARDING ──────────────────────────────────────────────────────
 if u and not is_admin():
-    try:
-        _onb_ok = onboarding_concluido(u["id"])
-    except Exception:
-        _onb_ok = True
+    # Cache: consultar banco apenas uma vez por sessao de login
+    if st.session_state.get("onboarding_ok") is None:
+        try:
+            st.session_state.onboarding_ok = onboarding_concluido(u["id"])
+        except Exception:
+            st.session_state.onboarding_ok = True  # erro = nao bloquear
+
+    _onb_ok = st.session_state.get("onboarding_ok", True)
 
     if not _onb_ok and not st.session_state.get("wizard_pulado", False):
         # Determinar passo atual
@@ -2576,7 +2580,10 @@ with st.sidebar:
     st.markdown(f"**{u['nome']}**")
     st.caption(u["perfil"].capitalize())
     if st.button("Sair", width='stretch'):
-        st.session_state.usuario = None
+        st.session_state.usuario       = None
+        st.session_state.onboarding_ok = None
+        st.session_state.wizard_pulado = False
+        st.session_state.wizard_passo  = 1
         st.rerun()
 
     @st.cache_data(ttl=300, show_spinner=False)
