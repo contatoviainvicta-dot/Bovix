@@ -2717,15 +2717,16 @@ def page_refazer_tutorial(u):
     st.info("Ao clicar em 'Refazer tutorial', voce sera levado de volta ao wizard de onboarding na proxima atualizacao da pagina.")
     st.write("")
     if st.button("Refazer tutorial agora", type="primary", key="btn_refazer"):
-        # Resetar flag de onboarding
-        with _conexao() as conn:
-            cur = conn.cursor()
-            p = _ph()
-            try:
+        # Resetar flag de onboarding via funcao do database
+        from database import _conexao, _ph
+        try:
+            with _conexao() as conn:
+                cur = conn.cursor()
+                p = _ph()
                 cur.execute(f"UPDATE usuarios SET onboarding_completo=0 WHERE id={p}", (u["id"],))
                 conn.commit()
-            except Exception:
-                pass
+        except Exception:
+            pass
         st.session_state.wizard_passo = 1
         st.session_state.wizard_pulado = False
         st.success("Tutorial reaberto! Atualizando...")
