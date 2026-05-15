@@ -3070,6 +3070,48 @@ def page_dados_exemplo(u):
             st.rerun()
 
 
+def _page_diagnostico_db(u):
+    if not is_admin():
+        st.error("Acesso restrito ao admin.")
+        st.stop()
+    st.title("Diagnostico do Banco")
+    st.caption("Tela temporaria para diagnostico do schema real do Supabase")
+    from database import _conexao, _usar_postgres
+    with _conexao() as conn:
+        cur = conn.cursor()
+        for tbl in ["animais","lotes","medicamentos","usuarios"]:
+            st.subheader(f"Tabela: `{tbl}`")
+            try:
+                if _usar_postgres():
+                    cur.execute(f"SELECT column_name,data_type FROM information_schema.columns WHERE table_name='{tbl}' ORDER BY ordinal_position")
+                    cols = cur.fetchall()
+                    st.write(" | ".join([f"`{c[0]}` ({c[1]})" for c in cols]))
+                else:
+                    cur.execute(f"PRAGMA table_info({tbl})")
+                    cols = cur.fetchall()
+                    st.write(" | ".join([f"`{c[1]}` ({c[2]})" for c in cols]))
+            except Exception as e:
+                st.error(f"Erro: {e}")
+        st.subheader("Amostra: animais")
+        try:
+            cur.execute("SELECT * FROM animais LIMIT 3")
+            rows = cur.fetchall()
+            descr = [d[0] for d in cur.description]
+            for r in rows:
+                st.json(dict(zip(descr, [str(x) for x in r])))
+        except Exception as e:
+            st.error(str(e))
+        st.subheader("Amostra: medicamentos")
+        try:
+            cur.execute("SELECT * FROM medicamentos LIMIT 3")
+            rows = cur.fetchall()
+            descr = [d[0] for d in cur.description]
+            for r in rows:
+                st.json(dict(zip(descr, [str(x) for x in r])))
+        except Exception as e:
+            st.error(str(e))
+
+
 _ROTAS = {
     "Inicio":               page_inicio,
     "Buscar Animal":        page_buscar_animal,
@@ -3115,6 +3157,7 @@ _ROTAS = {
     "Anomalias de Peso":    page_anomalias_de_peso,
     "Refazer Tutorial":     page_refazer_tutorial,
     "Dados de Exemplo":     page_dados_exemplo,
+    "Diagnostico DB":       _page_diagnostico_db,
 }
 
 
