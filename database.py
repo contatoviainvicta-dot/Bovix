@@ -1257,7 +1257,8 @@ def listar_vacinas_pendentes(owner_id=None):
         return [(r["id"],r["lote_id"],r["nome"],r["nome_vacina"],r["data_prevista"],r["status"],r["observacao"]) for r in rows]
 
 def adicionar_medicamento(nome, unidade, estoque_atual, estoque_minimo, validade, custo_unitario, owner_id=None):
-    _garantir_owner_id_medicamentos()
+    if owner_id is None:
+        return None
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -1277,7 +1278,6 @@ def adicionar_medicamento(nome, unidade, estoque_atual, estoque_minimo, validade
             return cur.lastrowid
 
 def listar_medicamentos(owner_id=None):
-    _garantir_owner_id_medicamentos()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -1314,7 +1314,6 @@ def registrar_uso_medicamento(medicamento_id, animal_id, data_uso, quantidade, o
             return cur.lastrowid
 
 def listar_medicamentos_criticos(owner_id=None):
-    _garantir_owner_id_medicamentos()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -1636,79 +1635,73 @@ def calcular_previsao_abate(animal_id):
 # ── VENDAS / MARGEM ───────────────────────────────────────────────────────────
 def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg,
                          frigorific="", observacao="", animais_vendidos=None):
-    """Registra venda e da baixa nos animais vendidos.
-    animais_vendidos: lista de IDs de animais (None = lote inteiro)"""
+    """Registra venda e da baixa nos animais. Schema: ativo(int) status(text)"""
     p = _ph()
+
+    # Passo 1: Registrar a venda
     with _conexao() as conn:
         cur = conn.cursor()
         if _usar_postgres():
-            cur.execute(f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,peso_total_kg,frigorific,observacao) VALUES({p},{p},{p},{p},{p},{p}) RETURNING id", (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao))
+            cur.execute(
+                f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,"
+                f"peso_total_kg,frigorific,observacao) "
+                f"VALUES({p},{p},{p},{p},{p},{p}) RETURNING id",
+                (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao)
+            )
             venda_id = cur.fetchone()[0]
         else:
-            cur.execute(f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,peso_total_kg,frigorific,observacao) VALUES({p},{p},{p},{p},{p},{p})", (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao))
+            cur.execute(
+                f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,"
+                f"peso_total_kg,frigorific,observacao) "
+                f"VALUES({p},{p},{p},{p},{p},{p})",
+                (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao)
+            )
             venda_id = cur.lastrowid
+        conn.commit()
 
-        # Dar baixa nos animais - robusto para qualquer schema
-        def _dar_baixa_animal(cur, aid):
-            """Tenta dar baixa no animal usando colunas disponiveis."""
-            # Tentar com ativo e status
-            for sql in [
-                f"UPDATE animais SET ativo=0, status='Vendido' WHERE id={p}",
-                f"UPDATE animais SET ativo=0 WHERE id={p}",
-                f"UPDATE animais SET status='Vendido' WHERE id={p}",
-            ]:
-                try:
-                    cur.execute(sql, (aid,))
-                    return True
-                except Exception:
-                    try: conn.rollback()
-                    except: pass
-            return False
-
+    # Passo 2: Buscar animais para dar baixa
+    with _conexao() as conn:
+        cur = conn.cursor()
         if animais_vendidos is None:
-            # Lote inteiro
-            try:
-                cur.execute(
-                    f"SELECT id FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1",
-                    (lote_id,)
-                )
-                ids_ativos = [r[0] for r in cur.fetchall()]
-            except Exception:
-                try:
-                    cur.execute(f"SELECT id FROM animais WHERE lote_id={p}", (lote_id,))
-                    ids_ativos = [r[0] for r in cur.fetchall()]
-                except Exception:
-                    ids_ativos = []
-            for aid in ids_ativos:
-                _dar_baixa_animal(cur, aid)
+            cur.execute(f"SELECT id FROM animais WHERE lote_id={p} AND ativo=1", (lote_id,))
+            ids_baixa = [r[0] for r in cur.fetchall()]
         else:
-            for aid in animais_vendidos:
-                _dar_baixa_animal(cur, aid)
+            ids_baixa = list(animais_vendidos)
 
-        # Contar animais restantes ativos
+    # Passo 3: Dar baixa em cada animal individualmente
+    for aid in ids_baixa:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE animais SET ativo=0, status='VENDIDO' WHERE id={p}",
+                (aid,)
+            )
+            conn.commit()
+
+    # Passo 4: Contar ativos restantes
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND ativo=1", (lote_id,))
+        qtd_ativos = cur.fetchone()[0]
+
+    # Passo 5: Atualizar o lote
+    with _conexao() as conn:
+        cur = conn.cursor()
         try:
             cur.execute(
-                f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1",
-                (lote_id,)
+                f"UPDATE lotes SET qtd_recebida={p}, status='VENDIDO' WHERE id={p}",
+                (qtd_ativos, lote_id)
             )
-            qtd_ativos = cur.fetchone()[0]
+            conn.commit()
         except Exception:
-            qtd_ativos = 0
-
-        # Atualizar qtd_atual do lote
-        for sql_upd in [
-            f"UPDATE lotes SET qtd_atual={p} WHERE id={p}",
-            f"UPDATE lotes SET qtd_recebida={p} WHERE id={p}",
-        ]:
+            conn.rollback()
             try:
-                cur.execute(sql_upd, (qtd_ativos, lote_id))
-                break
+                cur.execute(f"UPDATE lotes SET status='VENDIDO' WHERE id={p}", (lote_id,))
+                conn.commit()
             except Exception:
-                try: conn.rollback()
-                except: pass
+                pass
 
-        conn.commit()
-        return venda_id
+    return venda_id
 
 def calcular_margem_lote(lote_id):
     p = _ph()
