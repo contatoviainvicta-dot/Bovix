@@ -585,7 +585,7 @@ def page_previsao_de_abate_ia(u):
 
             # Grafico de dias restantes
             st.subheader("Dias ate o abate por animal")
-            df_bar = df_prev[df_prev['Dias p/ Abate'].notna()][['Animal','Dias p/ Abate']]
+            df_bar = df_prev[df_prev['Dias'].notna()][['Animal','Dias']]
             if not df_bar.empty:
                 st.bar_chart(df_bar.set_index('Animal'))
 
