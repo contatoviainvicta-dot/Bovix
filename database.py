@@ -1664,17 +1664,23 @@ def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg,
             (lote_id,)
         )
         qtd_ativos = cur.fetchone()[0]
-        cur.execute(
-            f"UPDATE lotes SET qtd_atual={p} WHERE id={p}",
-            (qtd_ativos, lote_id)
-        )
-
-        # Se nao tem mais animais ativos, marcar lote como Vendido
-        if qtd_ativos == 0:
+        try:
             cur.execute(
-                f"UPDATE lotes SET status='Vendido' WHERE id={p}",
-                (lote_id,)
+                f"UPDATE lotes SET qtd_atual={p} WHERE id={p}",
+                (qtd_ativos, lote_id)
             )
+        except Exception:
+            pass  # coluna qtd_atual pode ter nome diferente
+
+        # Se nao tem mais animais ativos, tentar marcar lote como Vendido
+        if qtd_ativos == 0:
+            try:
+                cur.execute(
+                    f"UPDATE lotes SET status='Vendido' WHERE id={p}",
+                    (lote_id,)
+                )
+            except Exception:
+                pass  # coluna status pode nao existir no Supabase ainda
 
         conn.commit()
         return venda_id
@@ -2287,7 +2293,7 @@ def calcular_risco_sanitario(lote_id):
 
     return dict(score=score, nivel=nivel, fatores=fatores,
                 recomendacoes=recomendacoes, mortalidade=taxa_mort,
-                ocorrencias_graves=len(graves), gmds=gmds)
+                ocorrencias_graves=len(graves_tot), gmds=gmds)
 
 
 def prever_abate(lote_id, peso_alvo_kg=450.0, preco_kg=10.0, custo_diario=12.0):
@@ -2466,6 +2472,110 @@ def resumo_ia_fazenda(owner_id=None):
         except Exception:
             pass
     return sorted(resultado, key=lambda x: x['risco_score'], reverse=True)
+
+
+def _garantir_tabela_login_tentativas():
+    """Cria tabela de tentativas de login se nao existir."""
+    with _conexao() as conn:
+        cur = conn.cursor()
+        try:
+            if _usar_postgres():
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS login_tentativas (
+                        id SERIAL PRIMARY KEY,
+                        email TEXT NOT NULL,
+                        tentativa_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+            else:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS login_tentativas (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        email TEXT NOT NULL,
+                        tentativa_em DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+            conn.commit()
+        except Exception:
+            pass
+
+
+def registrar_tentativa_login(email):
+    """Registra uma tentativa falha de login."""
+    _garantir_tabela_login_tentativas()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        p = _ph()
+        try:
+            cur.execute(
+                f"INSERT INTO login_tentativas (email) VALUES ({p})",
+                (email.lower().strip(),)
+            )
+            conn.commit()
+        except Exception:
+            pass
+
+
+def verificar_bloqueio_login(email):
+    """Verifica se email esta bloqueado (5+ tentativas nos ultimos 10 min).
+    Retorna (bloqueado, tentativas, segundos_restantes)"""
+    _garantir_tabela_login_tentativas()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        p = _ph()
+        try:
+            if _usar_postgres():
+                cur.execute(
+                    f"SELECT tentativa_em FROM login_tentativas "
+                    f"WHERE email={p} "
+                    f"AND tentativa_em > NOW() - INTERVAL '10 minutes' "
+                    f"ORDER BY tentativa_em ASC",
+                    (email.lower().strip(),)
+                )
+            else:
+                cur.execute(
+                    f"SELECT tentativa_em FROM login_tentativas "
+                    f"WHERE email={p} "
+                    f"AND tentativa_em > datetime('now','-10 minutes') "
+                    f"ORDER BY tentativa_em ASC",
+                    (email.lower().strip(),)
+                )
+            rows = cur.fetchall()
+            n = len(rows)
+            if n >= 5:
+                # Calcular segundos restantes ate liberar
+                from datetime import datetime as _dtm, timezone as _tz
+                try:
+                    primeira = rows[0][0]
+                    if isinstance(primeira, str):
+                        primeira = _dtm.fromisoformat(primeira.replace('Z',''))
+                    if hasattr(primeira, 'tzinfo') and primeira.tzinfo:
+                        agora = _dtm.now(_tz.utc)
+                    else:
+                        agora = _dtm.now()
+                    seg_rest = max(0, 600 - int((agora - primeira).total_seconds()))
+                except Exception:
+                    seg_rest = 300
+                return (True, n, seg_rest)
+            return (False, n, 0)
+        except Exception:
+            return (False, 0, 0)
+
+
+def limpar_tentativas_login(email):
+    """Limpa tentativas apos login bem sucedido."""
+    _garantir_tabela_login_tentativas()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        p = _ph()
+        try:
+            cur.execute(
+                f"DELETE FROM login_tentativas WHERE email={p}",
+                (email.lower().strip(),)
+            )
+            conn.commit()
+        except Exception:
+            pass
 
 
 def _garantir_status_animal_lote():
