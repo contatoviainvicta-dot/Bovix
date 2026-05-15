@@ -288,10 +288,25 @@ def page_margem_real(u):
 
                 if st.form_submit_button("Registrar Venda", type="primary"):
                     if peso_v > 0:
-                        registrar_venda_lote(lote_id, str(data_v), pr_kg, peso_v, frig_v, obs_v)
+                        # Determinar animais vendidos
+                        if tipo_venda == "Animal individual":
+                            _animais_vd = [_aid_sel]
+                        else:
+                            _animais_vd = None  # lote inteiro
+
+                        registrar_venda_lote(
+                            lote_id, str(data_v), pr_kg, peso_v,
+                            frig_v, obs_v,
+                            animais_vendidos=_animais_vd
+                        )
                         registrar_auditoria(u["id"], "venda_lote", "vendas", lote_id,
                                            f"R${pr_kg}/kg {peso_v}kg ({tipo_venda})")
-                        st.success(f"Venda registrada! {peso_v:.0f} kg x R${pr_kg:.2f}/kg = R${peso_v*pr_kg:,.2f}")
+                        limpar_cache()
+                        n_baixa = len(_animais_vd) if _animais_vd else len(_animais_lote)
+                        st.success(
+                            f"Venda registrada! {n_baixa} animal(is) marcado(s) como vendido(s). "
+                            f"{peso_v:.0f} kg x R${pr_kg:.2f}/kg = R${peso_v*pr_kg:,.2f}"
+                        )
                         st.rerun()
                     else:
                         st.error("Informe o peso total.")
