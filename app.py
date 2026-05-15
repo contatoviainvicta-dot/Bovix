@@ -2443,31 +2443,38 @@ if st.session_state.usuario is None:
                 else:
                     st.error("Preencha todos os campos.")
     else:
-        # Rate limiting: 5 tentativas em 10 minutos
-        from datetime import datetime as _dtm_login, timedelta as _td_login
+        # Rate limiting: 5 tentativas em 10 minutos POR EMAIL
+        from datetime import datetime as _dtm_login
         if "login_tentativas" not in st.session_state:
-            st.session_state.login_tentativas = []
+            st.session_state.login_tentativas = {}  # dict: email -> lista de timestamps
 
-        # Limpar tentativas antigas (>10 min)
         agora_login = _dtm_login.now()
-        st.session_state.login_tentativas = [
-            t for t in st.session_state.login_tentativas
-            if (agora_login - t).total_seconds() < 600
-        ]
-
-        bloqueado = len(st.session_state.login_tentativas) >= 5
-        if bloqueado:
-            tempo_restante = 600 - int((agora_login - st.session_state.login_tentativas[0]).total_seconds())
-            min_rest = tempo_restante // 60 + 1
-            st.error(f"Conta temporariamente bloqueada por seguranca. "
-                     f"Aguarde {min_rest} minuto(s) e tente novamente.")
 
         with st.form("form_login"):
             email = st.text_input("E-mail")
             senha = st.text_input("Senha", type="password")
-            if st.form_submit_button("Entrar", disabled=bloqueado):
+            submit = st.form_submit_button("Entrar")
+
+            if submit:
+                email_norm = (email or "").strip().lower()
+
+                # Limpar tentativas antigas deste email (>10 min)
+                tentativas_email = st.session_state.login_tentativas.get(email_norm, [])
+                tentativas_email = [
+                    t for t in tentativas_email
+                    if (agora_login - t).total_seconds() < 600
+                ]
+                st.session_state.login_tentativas[email_norm] = tentativas_email
+
+                # Verificar se este email esta bloqueado
+                bloqueado = len(tentativas_email) >= 5
                 if bloqueado:
-                    st.error("Aguarde antes de tentar novamente.")
+                    tempo_rest = 600 - int((agora_login - tentativas_email[0]).total_seconds())
+                    min_rest   = max(1, tempo_rest // 60 + 1)
+                    st.error(
+                        f"Muitas tentativas falhadas para {email_norm}. "
+                        f"Aguarde {min_rest} minuto(s)."
+                    )
                 else:
                     u = autenticar_usuario(email, senha)
                     if u:
@@ -2483,8 +2490,8 @@ if st.session_state.usuario is None:
                         elif _status_login == "pendente":
                             st.warning("Sua conta esta aguardando aprovacao do administrador.")
                         else:
-                            # Login bem sucedido - limpar tentativas
-                            st.session_state.login_tentativas = []
+                            # Login OK - limpar tentativas deste email
+                            st.session_state.login_tentativas[email_norm] = []
                             st.session_state.menu = "Inicio"
                             st.session_state.wizard_passo = 1
                             st.session_state.wizard_pulado = False
@@ -2495,15 +2502,20 @@ if st.session_state.usuario is None:
                             st.session_state.usuario = u
                             st.rerun()
                     else:
-                        # Registrar tentativa falha
-                        st.session_state.login_tentativas.append(agora_login)
-                        restantes = 5 - len(st.session_state.login_tentativas)
+                        # Falha: incrementar tentativas DESTE email apenas
+                        tentativas_email.append(agora_login)
+                        st.session_state.login_tentativas[email_norm] = tentativas_email
+                        restantes = 5 - len(tentativas_email)
                         if restantes > 0:
-                            st.error(f"E-mail ou senha incorretos. "
-                                    f"Tentativas restantes: {restantes}")
+                            st.error(
+                                f"E-mail ou senha incorretos. "
+                                f"Tentativas restantes para esta conta: {restantes}"
+                            )
                         else:
-                            st.error("Muitas tentativas falhadas. "
-                                    "Conta bloqueada por 10 minutos.")
+                            st.error(
+                                f"Conta {email_norm} bloqueada por 10 minutos "
+                                "apos 5 tentativas erradas."
+                            )
     st.stop()
 
 u = st.session_state.usuario
