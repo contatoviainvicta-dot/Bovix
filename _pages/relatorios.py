@@ -5,10 +5,12 @@ import pandas as pd
 from database import *
 try:
     from backup import gerar_backup_zip, gerar_backup_sqlite, nome_arquivo_backup
+    _BACKUP = True
 except ImportError:
     def gerar_backup_zip(p): return b""
     def gerar_backup_sqlite(p): return b""
     def nome_arquivo_backup(ext="zip"): return f"backup.{ext}"
+    _BACKUP = False
 try:
     from exports import gerar_excel_lote, gerar_pdf_relatorio
     _EXP = True
