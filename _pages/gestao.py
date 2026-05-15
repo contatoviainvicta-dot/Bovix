@@ -628,7 +628,8 @@ def page_workspace_do_lote(u):
                     st.caption(f"{vp[2]} - Prevista: {vp[3]}")
 
             st.subheader("Medicamentos criticos")
-            meds_ws = listar_medicamentos_criticos()
+            _oid_ws = u.get("owner_id") or u["id"]
+            meds_ws = listar_medicamentos_criticos(owner_id=_oid_ws)
             if meds_ws:
                 for m in meds_ws[:3]:
                     st.warning(f"{m[1]}: {m[3]} {m[2]} (min: {m[4]})")
