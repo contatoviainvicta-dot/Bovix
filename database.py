@@ -1257,6 +1257,7 @@ def listar_vacinas_pendentes(owner_id=None):
         return [(r["id"],r["lote_id"],r["nome"],r["nome_vacina"],r["data_prevista"],r["status"],r["observacao"]) for r in rows]
 
 def adicionar_medicamento(nome, unidade, estoque_atual, estoque_minimo, validade, custo_unitario, owner_id=None):
+    _garantir_owner_id_medicamentos()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -1276,6 +1277,7 @@ def adicionar_medicamento(nome, unidade, estoque_atual, estoque_minimo, validade
             return cur.lastrowid
 
 def listar_medicamentos(owner_id=None):
+    _garantir_owner_id_medicamentos()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -1626,16 +1628,56 @@ def calcular_previsao_abate(animal_id):
 
 
 # ── VENDAS / MARGEM ───────────────────────────────────────────────────────────
-def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific="", observacao=""):
+def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg,
+                         frigorific="", observacao="", animais_vendidos=None):
+    """Registra venda e da baixa nos animais vendidos.
+    animais_vendidos: lista de IDs de animais (None = lote inteiro)"""
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
         if _usar_postgres():
             cur.execute(f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,peso_total_kg,frigorific,observacao) VALUES({p},{p},{p},{p},{p},{p}) RETURNING id", (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao))
-            return cur.fetchone()[0]
+            venda_id = cur.fetchone()[0]
         else:
             cur.execute(f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,peso_total_kg,frigorific,observacao) VALUES({p},{p},{p},{p},{p},{p})", (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao))
-            return cur.lastrowid
+            venda_id = cur.lastrowid
+
+        # Determinar quais animais dar baixa
+        if animais_vendidos is None:
+            # Lote inteiro: marcar todos os animais ativos do lote como inativos
+            cur.execute(
+                f"UPDATE animais SET ativo=0, status='Vendido' "
+                f"WHERE lote_id={p} AND COALESCE(ativo,1)=1",
+                (lote_id,)
+            )
+        else:
+            # Animais especificos
+            for aid in animais_vendidos:
+                cur.execute(
+                    f"UPDATE animais SET ativo=0, status='Vendido' WHERE id={p}",
+                    (aid,)
+                )
+
+        # Atualizar qtd_atual do lote
+        cur.execute(
+            f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1",
+            (lote_id,)
+        )
+        qtd_ativos = cur.fetchone()[0]
+        cur.execute(
+            f"UPDATE lotes SET qtd_atual={p} WHERE id={p}",
+            (qtd_ativos, lote_id)
+        )
+
+        # Se nao tem mais animais ativos, marcar lote como Vendido
+        if qtd_ativos == 0:
+            cur.execute(
+                f"UPDATE lotes SET status='Vendido' WHERE id={p}",
+                (lote_id,)
+            )
+
+        conn.commit()
+        return venda_id
 
 def calcular_margem_lote(lote_id):
     p = _ph()
@@ -2158,23 +2200,38 @@ def calcular_risco_sanitario(lote_id):
         score += 10
         fatores.append(f"Mortalidade acima do normal: {taxa_mort}%")
 
-    # ── Fator 2: Ocorrencias graves ───────────────────────────────────────────
+    # ── Fator 2: Ocorrencias dos ultimos 60 dias ─────────────────────────────
     ocs = listar_ocorrencias_todos_animais(lote_id)
-    graves = [o for o in ocs if o[5] == 'Alta' and o[8] == 'Em tratamento']
-    medias = [o for o in ocs if o[5] == 'Media' and o[8] == 'Em tratamento']
+    from datetime import date as _dt, timedelta as _td2
+    limite_60 = str(_dt.today() - _td2(days=60))
+    # o[2] = data_ocorrencia
+    ocs_recentes = [o for o in ocs if o[2] and str(o[2]) >= limite_60]
+    graves_at  = [o for o in ocs_recentes if o[5] == 'Alta' and o[8] == 'Em tratamento']
+    graves_tot = [o for o in ocs_recentes if o[5] == 'Alta']
+    medias_at  = [o for o in ocs_recentes if o[5] == 'Media' and o[8] == 'Em tratamento']
+    medias_tot = [o for o in ocs_recentes if o[5] == 'Media']
 
-    if len(graves) >= 3:
-        score += 25
-        fatores.append(f"{len(graves)} ocorrencias graves em tratamento")
+    if len(graves_at) >= 3:
+        score += 30
+        fatores.append(f"{len(graves_at)} ocorrencias graves em tratamento")
         recomendacoes.append("Revisar protocolo sanitario urgente")
-    elif len(graves) > 0:
-        score += 15
-        fatores.append(f"{len(graves)} ocorrencia(s) grave(s)")
+    elif len(graves_at) > 0:
+        score += 20
+        fatores.append(f"{len(graves_at)} ocorrencia(s) grave(s) ativa(s)")
         recomendacoes.append("Monitorar animais com ocorrencias graves")
-
-    if len(medias) >= 5:
+    elif len(graves_tot) >= 2:
         score += 10
-        fatores.append(f"{len(medias)} ocorrencias medias em tratamento")
+        fatores.append(f"{len(graves_tot)} ocorrencias graves nos ultimos 60 dias")
+
+    if len(medias_at) >= 5:
+        score += 12
+        fatores.append(f"{len(medias_at)} ocorrencias medias em tratamento")
+    elif len(medias_at) > 0:
+        score += 6
+        fatores.append(f"{len(medias_at)} ocorrencia(s) media(s) ativa(s)")
+    elif len(medias_tot) >= 3:
+        score += 4
+        fatores.append(f"{len(medias_tot)} ocorrencias medias nos ultimos 60 dias")
 
     # ── Fator 3: GMD negativo ou muito baixo ─────────────────────────────────
     gmds = list(calcular_gmds_lote(lote_id).values())
@@ -2409,6 +2466,45 @@ def resumo_ia_fazenda(owner_id=None):
         except Exception:
             pass
     return sorted(resultado, key=lambda x: x['risco_score'], reverse=True)
+
+
+def _garantir_status_animal_lote():
+    """Garante coluna status em animais e lotes."""
+    with _conexao() as conn:
+        cur = conn.cursor()
+        try:
+            if _usar_postgres():
+                cur.execute("ALTER TABLE animais ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Ativo'")
+                cur.execute("ALTER TABLE lotes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Ativo'")
+            else:
+                for tbl, col in [('animais','status'),('lotes','status')]:
+                    cur.execute(f"PRAGMA table_info({tbl})")
+                    cols = [r[1] for r in cur.fetchall()]
+                    if col not in cols:
+                        cur.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT DEFAULT 'Ativo'")
+            conn.commit()
+        except Exception:
+            pass
+
+
+def _garantir_owner_id_medicamentos():
+    """Garante que a tabela medicamentos tem coluna owner_id."""
+    with _conexao() as conn:
+        cur = conn.cursor()
+        try:
+            if _usar_postgres():
+                cur.execute(
+                    "ALTER TABLE medicamentos ADD COLUMN IF NOT EXISTS owner_id INTEGER"
+                )
+            else:
+                cur.execute("PRAGMA table_info(medicamentos)")
+                cols = [r[1] for r in cur.fetchall()]
+                if 'owner_id' not in cols:
+                    cur.execute("ALTER TABLE medicamentos ADD COLUMN owner_id INTEGER")
+            conn.commit()
+            return True
+        except Exception:
+            return False
 
 
 def _garantir_coluna_onboarding():
