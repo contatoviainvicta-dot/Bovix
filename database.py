@@ -1314,19 +1314,25 @@ def registrar_uso_medicamento(medicamento_id, animal_id, data_uso, quantidade, o
             return cur.lastrowid
 
 def listar_medicamentos_criticos(owner_id=None):
+    _garantir_owner_id_medicamentos()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
         filtro = f" AND owner_id={p}" if owner_id is not None else ""
         params = (owner_id,) if owner_id is not None else ()
-        cur.execute(
-            f"SELECT id,nome,unidade,estoque_atual,estoque_minimo,validade,custo_unitario FROM medicamentos"
-            f" WHERE estoque_atual<=estoque_minimo OR (validade IS NOT NULL AND {_cast_date('validade')}<={_date_add(30)})"
-            f"{filtro}",
-            params,
-        )
-        rows = _fetch(cur)
-        return [(r["id"],r["nome"],r["unidade"],r["estoque_atual"],r["estoque_minimo"],r["validade"],r["custo_unitario"]) for r in rows]
+        try:
+            cur.execute(
+                f"SELECT id,nome,unidade,estoque_atual,estoque_minimo,validade,custo_unitario FROM medicamentos"
+                f" WHERE estoque_atual<=estoque_minimo OR (validade IS NOT NULL AND {_cast_date('validade')}<={_date_add(30)})"
+                f"{filtro}",
+                params,
+            )
+            rows = _fetch(cur)
+            return [(r["id"],r["nome"],r["unidade"],r["estoque_atual"],r["estoque_minimo"],r["validade"],r["custo_unitario"]) for r in rows]
+        except Exception:
+            try: conn.rollback()
+            except: pass
+            return []
 
 def verificar_carencia(animal_id):
     p = _ph()
@@ -1642,45 +1648,64 @@ def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg,
             cur.execute(f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,peso_total_kg,frigorific,observacao) VALUES({p},{p},{p},{p},{p},{p})", (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao))
             venda_id = cur.lastrowid
 
-        # Determinar quais animais dar baixa
+        # Dar baixa nos animais - robusto para qualquer schema
+        def _dar_baixa_animal(cur, aid):
+            """Tenta dar baixa no animal usando colunas disponiveis."""
+            # Tentar com ativo e status
+            for sql in [
+                f"UPDATE animais SET ativo=0, status='Vendido' WHERE id={p}",
+                f"UPDATE animais SET ativo=0 WHERE id={p}",
+                f"UPDATE animais SET status='Vendido' WHERE id={p}",
+            ]:
+                try:
+                    cur.execute(sql, (aid,))
+                    return True
+                except Exception:
+                    try: conn.rollback()
+                    except: pass
+            return False
+
         if animais_vendidos is None:
-            # Lote inteiro: marcar todos os animais ativos do lote como inativos
-            cur.execute(
-                f"UPDATE animais SET ativo=0, status='Vendido' "
-                f"WHERE lote_id={p} AND COALESCE(ativo,1)=1",
-                (lote_id,)
-            )
-        else:
-            # Animais especificos
-            for aid in animais_vendidos:
-                cur.execute(
-                    f"UPDATE animais SET ativo=0, status='Vendido' WHERE id={p}",
-                    (aid,)
-                )
-
-        # Atualizar qtd_atual do lote
-        cur.execute(
-            f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1",
-            (lote_id,)
-        )
-        qtd_ativos = cur.fetchone()[0]
-        try:
-            cur.execute(
-                f"UPDATE lotes SET qtd_atual={p} WHERE id={p}",
-                (qtd_ativos, lote_id)
-            )
-        except Exception:
-            pass  # coluna qtd_atual pode ter nome diferente
-
-        # Se nao tem mais animais ativos, tentar marcar lote como Vendido
-        if qtd_ativos == 0:
+            # Lote inteiro
             try:
                 cur.execute(
-                    f"UPDATE lotes SET status='Vendido' WHERE id={p}",
+                    f"SELECT id FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1",
                     (lote_id,)
                 )
+                ids_ativos = [r[0] for r in cur.fetchall()]
             except Exception:
-                pass  # coluna status pode nao existir no Supabase ainda
+                try:
+                    cur.execute(f"SELECT id FROM animais WHERE lote_id={p}", (lote_id,))
+                    ids_ativos = [r[0] for r in cur.fetchall()]
+                except Exception:
+                    ids_ativos = []
+            for aid in ids_ativos:
+                _dar_baixa_animal(cur, aid)
+        else:
+            for aid in animais_vendidos:
+                _dar_baixa_animal(cur, aid)
+
+        # Contar animais restantes ativos
+        try:
+            cur.execute(
+                f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1",
+                (lote_id,)
+            )
+            qtd_ativos = cur.fetchone()[0]
+        except Exception:
+            qtd_ativos = 0
+
+        # Atualizar qtd_atual do lote
+        for sql_upd in [
+            f"UPDATE lotes SET qtd_atual={p} WHERE id={p}",
+            f"UPDATE lotes SET qtd_recebida={p} WHERE id={p}",
+        ]:
+            try:
+                cur.execute(sql_upd, (qtd_ativos, lote_id))
+                break
+            except Exception:
+                try: conn.rollback()
+                except: pass
 
         conn.commit()
         return venda_id
