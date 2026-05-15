@@ -2806,19 +2806,24 @@ with st.sidebar:
 </div>""", unsafe_allow_html=True)
 
     # Alertas sidebar filtrados pelo usuario logado
-    @st.cache_data(ttl=600, show_spinner=False)
-    def _alertas_sidebar(oid):
-        return dict(
-            trat_venc = listar_tratamentos_vencidos(owner_id=oid),
-            pend      = listar_vacinas_pendentes(owner_id=oid),
-            crit      = listar_medicamentos_criticos(owner_id=owner_id()),
-            parto     = listar_partos_previstos(owner_id=oid),
-        )
-    _al = _alertas_sidebar(owner_id())
-    _trat_venc = _al['trat_venc']
-    pend  = _al['pend']
-    crit  = _al['crit']
-    parto = _al['parto']
+    # Alertas sem cache - cada usuario ve apenas os seus proprios
+    _oid_alerta = owner_id()
+    try:
+        _trat_venc = listar_tratamentos_vencidos(owner_id=_oid_alerta)
+    except Exception:
+        _trat_venc = []
+    try:
+        pend = listar_vacinas_pendentes(owner_id=_oid_alerta)
+    except Exception:
+        pend = []
+    try:
+        crit = listar_medicamentos_criticos(owner_id=_oid_alerta)
+    except Exception:
+        crit = []
+    try:
+        parto = listar_partos_previstos(owner_id=_oid_alerta)
+    except Exception:
+        parto = []
     if _trat_venc:
         st.sidebar.error(f"{len(_trat_venc)} trat. pendente(s)!")
     alertas = []
