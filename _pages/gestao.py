@@ -95,7 +95,11 @@ def page_calendario_sanitario(u):
 def page_estoque_medicamentos(u):
     hdr("Estoque Medicamentos", "Controle de Medicamentos", "Estoque, validade e uso")
     # Isolamento: cada usuario ve somente seus proprios medicamentos
+    # Para vet: usa o id do proprio vet (medicamentos dele)
+    # Para fazendeiro: usa owner_id (que e igual ao id)
     _oid = u.get("owner_id") or u["id"]
+    if not _oid:
+        _oid = u["id"]
 
     t1, t2, t3, t4 = st.tabs(["Estoque", "Cadastrar", "Registrar Uso", "Historico de Uso"])
 
@@ -103,29 +107,49 @@ def page_estoque_medicamentos(u):
     with t1:
         meds  = listar_medicamentos(owner_id=_oid)
         crits = listar_medicamentos_criticos(owner_id=_oid)
-        if crits:
-            st.subheader("Alertas")
-            for m in crits:
-                mot = "estoque baixo" if m[3] <= m[4] else f"vence {m[5]}"
-                st.error(f"⚠ {m[1]} — {m[3]:.1f} {m[2]} ({mot})")
-            st.divider()
+
+        def _fmt_data_med(d):
+            if not d: return "—"
+            try:
+                from datetime import datetime as _dtm
+                meses = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
+                         7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
+                if isinstance(d, str): d = _dtm.strptime(str(d)[:10], "%Y-%m-%d").date()
+                return f"{d.day:02d} {meses[d.month]} {d.year}"
+            except: return str(d)
+
+        def _fmt_brl_med(v):
+            if not v: return "—"
+            try:
+                i, dec = f"{float(v):,.2f}".split(".")
+                return f"R$ {i.replace(',','.')},{dec}"
+            except: return "—"
+
         if meds:
             _valor_total = sum((m[3] or 0) * (m[6] or 0) for m in meds)
             c1, c2, c3 = st.columns(3)
-            c1.metric("Itens no estoque",  len(meds))
-            c2.metric("Valor total",       f"R$ {_valor_total:,.2f}".replace(',','X').replace('.',',').replace('X','.'))
-            c3.metric("Itens criticos",    len(crits))
+            c1.metric("Itens no estoque", len(meds))
+            c2.metric("Valor total",      _fmt_brl_med(_valor_total))
+            c3.metric("Itens criticos",   len(crits))
+
+            if crits:
+                st.divider()
+                st.markdown("**Alertas de estoque:**")
+                for m in crits:
+                    mot = "estoque baixo" if (m[3] or 0) <= (m[4] or 0) else f"vence em {_fmt_data_med(m[5])}"
+                    st.error(f"⚠ **{m[1]}** — {m[3]:.1f} {m[2]} ({mot})")
+
             st.divider()
             for med in meds:
-                mid, mnome, munid, mestq, mmin, mval, mcusto = med[0],med[1],med[2],med[3],med[4],med[5],med[6]
-                _pct = min(100, int((mestq / max(mmin, 1)) * 100)) if mmin else 100
-                _cor = "#F87171" if mestq <= mmin else "#4ADE80"
-                with st.expander(f"{mnome} — {mestq:.1f} {munid}"):
+                mid, mnome, munid = med[0], med[1], med[2]
+                mestq, mmin, mval, mcusto = med[3], med[4], med[5], med[6]
+                _status_icon = "🔴" if (mestq or 0) <= (mmin or 0) else "🟢"
+                with st.expander(f"{_status_icon} {mnome} — {mestq:.1f} {munid}"):
                     e1, e2, e3, e4 = st.columns(4)
-                    e1.metric("Estoque",  f"{mestq:.1f} {munid}")
-                    e2.metric("Minimo",   f"{mmin:.1f} {munid}")
-                    e3.metric("Validade", mval or "—")
-                    e4.metric("Custo/un", f"R$ {mcusto:.2f}" if mcusto else "—")
+                    e1.metric("Estoque atual",  f"{mestq:.1f} {munid}".replace(".",","))
+                    e2.metric("Estoque minimo", f"{(mmin or 0):.1f} {munid}".replace(".",","))
+                    e3.metric("Validade",       _fmt_data_med(mval))
+                    e4.metric("Custo/unidade",  _fmt_brl_med(mcusto))
         else:
             st.info("Nenhum medicamento cadastrado. Use a aba Cadastrar.")
 
@@ -212,24 +236,30 @@ def page_estoque_medicamentos(u):
             _ids_meds = [m[0] for m in meds_hist]
             # Buscar usos recentes via query direta
             try:
-                p = _ph() if '_ph' in dir() else '%s'
                 from database import _conexao as _cn, _ph as _phf
                 with _cn() as conn:
                     cur = conn.cursor()
                     _placeholders = ','.join([_phf()]*len(_ids_meds))
                     cur.execute(
-                        f"SELECT m.nome, a.identificacao, u.data_uso, u.quantidade, u.observacao "
-                        f"FROM uso_medicamentos u "
-                        f"JOIN medicamentos m ON m.id=u.medicamento_id "
-                        f"JOIN animais a ON a.id=u.animal_id "
-                        f"WHERE u.medicamento_id IN ({_placeholders}) "
-                        f"ORDER BY u.data_uso DESC LIMIT 100",
+                        f"SELECT m.nome, a.identificacao, mu.data_uso, mu.quantidade "
+                        f"FROM medicamentos_uso mu "
+                        f"JOIN medicamentos m ON m.id=mu.medicamento_id "
+                        f"JOIN animais a ON a.id=mu.animal_id "
+                        f"WHERE mu.medicamento_id IN ({_placeholders}) "
+                        f"ORDER BY mu.data_uso DESC LIMIT 100",
                         tuple(_ids_meds)
                     )
                     usos = cur.fetchall()
                 if usos:
-                    df_usos = pd.DataFrame(usos, columns=["Medicamento","Animal","Data","Qtd","Obs"])
-                    st.dataframe(df_usos, width='stretch', hide_index=True)
+                    _rows_hist = []
+                    for _uh in usos:
+                        _rows_hist.append({
+                            "Medicamento": _uh[0],
+                            "Animal":      _uh[1],
+                            "Data":        _fmt_data_med(_uh[2]),
+                            "Quantidade":  f"{float(_uh[3]):.1f}".replace('.',','),
+                        })
+                    st.dataframe(pd.DataFrame(_rows_hist), width='stretch', hide_index=True)
                 else:
                     st.info("Nenhum uso registrado ainda.")
             except Exception as e:
