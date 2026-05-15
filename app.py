@@ -2901,6 +2901,7 @@ with st.sidebar:
             ("Log Auditoria",        "Historico de acoes"),
             ("Administracao",        "Usuarios e planos"),
             ("Gestao Usuarios",      "Planos e acessos vet"),
+            ("Diagnostico DB",       "Schema do banco"),
         ]),
     }
 
