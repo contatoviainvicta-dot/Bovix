@@ -98,26 +98,53 @@ def page_exportar_relatorios(u):
 def page_backup(u):
     hdr("Backup", "Backup do Sistema", "Download dos seus dados")
     import database as _dbm
-    db_path = _dbm.DB_PATH
-    st.info(f"Banco: `{db_path}`")
-    c1,c2 = st.columns(2)
+    # Determinar caminho do banco com fallback
+    db_path = getattr(_dbm, 'DB_PATH', None) or "pecuaria.db"
+    # Em producao com Postgres, exportar via CSVs
+    _is_pg = False
+    try:
+        _is_pg = _dbm._usar_postgres()
+    except Exception:
+        pass
+
+    if _is_pg:
+        st.info("Sistema usando PostgreSQL (Supabase). Download em formato CSV.")
+    else:
+        st.info(f"Banco SQLite: `{db_path}`")
+
+    c1, c2 = st.columns(2)
     with c1:
         st.subheader("Download ZIP (CSVs)")
         if _BACKUP:
-            with st.spinner("Preparando..."):
-                dados_zip = gerar_backup_zip(db_path)
-            nome_zip = nome_arquivo_backup("zip")
-            st.download_button("Baixar ZIP", dados_zip, nome_zip, "application/zip", key="dl_bkp_zip")
-            registrar_auditoria(u["id"], "backup_zip", "sistema", None, nome_zip)
-        else: st.warning("backup.py nao encontrado.")
+            try:
+                with st.spinner("Preparando backup..."):
+                    dados_zip = gerar_backup_zip(db_path)
+                nome_zip = nome_arquivo_backup("zip")
+                st.download_button("Baixar ZIP", dados_zip, nome_zip,
+                                  "application/zip", key="dl_bkp_zip")
+                registrar_auditoria(u["id"], "backup_zip", "sistema", None, nome_zip)
+            except Exception as e:
+                st.error(f"Erro ao gerar backup: {e}")
+        else:
+            st.warning("backup.py nao encontrado.")
     with c2:
-        st.subheader("Download SQLite")
-        if _BACKUP:
-            with st.spinner("Preparando..."):
-                dados_db = gerar_backup_sqlite(db_path)
-            nome_db = nome_arquivo_backup("db")
-            st.download_button("Baixar SQLite", dados_db, nome_db, "application/octet-stream", key="dl_bkp_db")
-        else: st.warning("backup.py nao encontrado.")
+        if not _is_pg:
+            st.subheader("Download SQLite")
+            if _BACKUP:
+                try:
+                    with st.spinner("Preparando..."):
+                        dados_db = gerar_backup_sqlite(db_path)
+                    nome_db = nome_arquivo_backup("db")
+                    st.download_button("Baixar SQLite", dados_db, nome_db,
+                                      "application/octet-stream", key="dl_bkp_db")
+                except Exception as e:
+                    st.error(f"Erro: {e}")
+            else:
+                st.warning("backup.py nao encontrado.")
+        else:
+            st.subheader("Backup PostgreSQL")
+            st.caption("Para backup completo do PostgreSQL, use o painel do Supabase.")
+            st.markdown("- Acesse o painel Supabase\n- Va em Database > Backups\n- Faca download do backup mais recente")
 
     # ============================================================
     # NOTIFICACOES
