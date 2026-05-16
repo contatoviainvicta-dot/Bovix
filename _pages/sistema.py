@@ -7,6 +7,19 @@ from database import *
 from database import _conexao, _ph
 
 try:
+    from notifications import (
+        email_boas_vindas, email_trial_expirando, email_trial_expirado,
+        email_vacina_pendente, email_medicamento_critico, email_configurado
+    )
+except ImportError:
+    def email_configurado(): return False
+    def email_boas_vindas(*a, **k): return False, "Email nao configurado"
+    def email_trial_expirando(*a, **k): return False, "Email nao configurado"
+    def email_trial_expirado(*a, **k): return False, "Email nao configurado"
+    def email_vacina_pendente(*a, **k): return False, "Email nao configurado"
+    def email_medicamento_critico(*a, **k): return False, "Email nao configurado"
+
+try:
     from cepea import cotacao_com_cache, historico_grafico
 except ImportError:
     def cotacao_com_cache(_db): return dict(preco=0.0, data="", fonte="", sucesso=False, msg="")
@@ -38,113 +51,139 @@ def hdr(titulo, sub="", desc=""):
 def page_inicio(u):
     hora = datetime.now().hour
     sau  = "Bom dia" if hora < 12 else "Boa tarde" if hora < 18 else "Boa noite"
+
+    # ── Header ────────────────────────────────────────────────────────────────
     st.markdown(f"## {sau}, **{u['nome']}**")
-    st.caption(datetime.now().strftime("%d/%m/%Y %H:%M"))
+    st.caption(datetime.now().strftime("%d/%m/%Y - %H:%M"))
     st.divider()
 
     lotes = listar_lotes_usuario()
-    # Calcular owner_id correto para o dashboard
-    if is_admin():
-        _oid_dash = None  # admin ve tudo
-    elif is_vet():
-        _oid_dash = None  # vet: dashboard zerado por ora (lotes sao do fazendeiro)
-        # Contar manualmente a partir dos lotes que o vet tem acesso
-    else:
-        _oid_dash = owner_id()  # fazendeiro ve seus proprios dados
-    _dash = resumo_dashboard(owner_id=_oid_dash)
-    # Calcular alertas localmente (nao dependem do sidebar)
-    parto = listar_partos_previstos(owner_id=_oid_dash)
-    pend  = listar_vacinas_pendentes(owner_id=_oid_dash)
-    crit  = listar_medicamentos_criticos(owner_id=_oid_dash)
-    # Para vet: sobrescrever com contagem dos lotes aprovados
-    if is_vet():
-        _dash = dict(
-            lotes=len(lotes),
-            animais=sum(1 for l in lotes for _ in [listar_animais_por_lote(l[0])]),
-            mortes=0, vacinas_pendentes=0, meds_criticos=0
-        )
-        _n_anim = 0
-        for _l in lotes:
-            _n_anim += len(listar_animais_por_lote(_l[0]))
-        _dash['animais'] = _n_anim
 
-    k1,k2,k3,k4,k5 = st.columns(5)
-    k1.metric("Lotes",          _dash['lotes'])
-    k2.metric("Animais ativos", _dash['animais'])
-    k3.metric("Vacinas pend.",  _dash['vacinas_pendentes'],
-              delta="atencao" if _dash['vacinas_pendentes'] else None,
-              delta_color="inverse" if _dash['vacinas_pendentes'] else "normal")
-    k4.metric("Meds. criticos", _dash['meds_criticos'],
-              delta="atencao" if _dash['meds_criticos'] else None,
-              delta_color="inverse" if _dash['meds_criticos'] else "normal")
-    k5.metric("Partos 30d",     len(parto))
+    # ── owner_id correto por perfil ───────────────────────────────────────────
+    if is_admin():
+        _oid_dash = None
+    elif is_vet():
+        _oid_dash = owner_id()  # medicamentos e vacinas do proprio vet
+    else:
+        _oid_dash = owner_id()  # fazendeiro
+
+    # ── Alertas do proprio usuario ────────────────────────────────────────────
+    pendo = listar_vacinas_pendentes(owner_id=_oid_dash)
+    crit  = listar_medicamentos_criticos(owner_id=_oid_dash)
+    parto = listar_partos_previstos(owner_id=_oid_dash)
+
+    # ── Contagem de animais ───────────────────────────────────────────────────
+    _n_animais = sum(len(listar_animais_por_lote(l[0])) for l in lotes)
+
+    # ── Cards de KPIs ─────────────────────────────────────────────────────────
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Lotes ativos",    len(lotes))
+    k2.metric("Animais ativos",  _n_animais)
+    k3.metric("Vacinas pend.",   len(pendo),
+              delta="atencao" if pendo else None,
+              delta_color="inverse" if pendo else "normal")
+    k4.metric("Meds. criticos",  len(crit),
+              delta="atencao" if crit else None,
+              delta_color="inverse" if crit else "normal")
 
     st.divider()
-    ca, cb = st.columns([1,2])
 
-    with ca:
-        st.subheader("Cotacao do dia")
-        import database as _dbc
-        cot = cotacao_com_cache(_dbc)
-        if cot["sucesso"]:
-            st.success(f"R$ {cot['preco']:.2f} /@")
-            st.caption(f"{cot['data']} - {cot['fonte']}")
-        else:
-            st.warning("Cotacao indisponivel")
-            with st.form("cot_home"):
-                pr = st.number_input("R$/@", 0.0, 1000.0, 195.0, label_visibility="collapsed")
-                if st.form_submit_button("Salvar"):
-                    salvar_cotacao(str(date.today()), pr, "manual")
-                    st.rerun()
+    # ── Alertas e Cotacao ─────────────────────────────────────────────────────
+    if is_vet():
+        # Vet: sem cotacao, foco em sanitario
+        col_al = st.container()
+    else:
+        col_cot, col_al = st.columns([1, 2])
+        with col_cot:
+            st.subheader("Cotacao do dia")
+            import database as _dbc
+            try:
+                cot = cotacao_com_cache(_dbc)
+                if cot["sucesso"]:
+                    st.success(f"**R$ {cot['preco']:.2f}** /@")
+                    st.caption(f"{cot['data']} - {cot['fonte']}")
+                else:
+                    st.warning("Cotacao indisponivel")
+                    with st.form("cot_home"):
+                        pr = st.number_input("R$/@", 0.0, 1000.0, 195.0,
+                                            label_visibility="collapsed")
+                        if st.form_submit_button("Salvar"):
+                            salvar_cotacao(str(date.today()), pr, "manual")
+                            st.rerun()
+            except Exception:
+                st.info("Cotacao indisponivel")
 
-    with cb:
+    with col_al if not is_vet() else st.container():
         st.subheader("Alertas")
-        if not pend and not crit and not parto:
+        if not pendo and not crit and not parto:
             st.success("Tudo em ordem! Nenhum alerta critico.")
-        if pend:
-            with st.expander(f"Vacinas pendentes ({len(pend)})", expanded=True):
-                for v in pend[:5]: st.caption(f"- {v[3]} | Lote: {v[2]} | {v[4]}")
+        if pendo:
+            with st.expander(f"Vacinas pendentes ({len(pendo)})", expanded=True):
+                for v in pendo[:5]:
+                    st.caption(f"- {v[3]} | Lote: {v[2]} | {v[4]}")
         if crit:
             with st.expander(f"Medicamentos em alerta ({len(crit)})", expanded=True):
                 for m in crit[:5]:
-                    mot = "estoque baixo" if m[3]<=m[4] else f"vence {m[5]}"
+                    mot = "estoque baixo" if (m[3] or 0) <= (m[4] or 0) else f"vence {m[5]}"
                     st.caption(f"- {m[1]} | {m[3]:.0f} {m[2]} ({mot})")
         if parto:
             with st.expander(f"Partos previstos ({len(parto)})"):
-                for p in parto[:5]: st.caption(f"- {p[1]} | Lote: {p[2]} | {p[3]}")
+                for p in parto[:5]:
+                    st.caption(f"- {p[1]} | Lote: {p[2]} | {p[3]}")
 
     st.divider()
-    st.subheader("Seus lotes")
+
+    # ── Lotes em cards ────────────────────────────────────────────────────────
+    st.subheader("Seus lotes" if not is_vet() else "Fazendas aprovadas")
     if not lotes:
-        st.info("Nenhum lote. Va em Cadastros > Cadastrar Lote.")
+        st.info("Nenhum lote. Va em Lote > Cadastrar Lote.")
     else:
         ncols = min(3, len(lotes))
         cols  = st.columns(ncols)
-        @st.cache_data(ttl=300, show_spinner=False)
-        def _rs_lotes(ids):
-            return {lid: resumo_lote(lid) for lid in ids}
-        _rs_map = _rs_lotes(tuple(l[0] for l in lotes[:6]))
-
         for i, l in enumerate(lotes[:6]):
-            rs   = _rs_map.get(l[0], {})
-            ico  = "verde" if rs["ativos"] > 0 else "cinza"
-            tags = []
-            if rs["mortos"]:           tags.append(f"Mortes: {rs['mortos']}")
-            if rs["vacinas_pendentes"]:tags.append(f"Vac pend: {rs['vacinas_pendentes']}")
-            if rs["ocorrencias"]:      tags.append(f"Ocorr: {rs['ocorrencias']}")
-            tag_str = " | ".join(tags) if tags else "Sem alertas"
+            try:
+                rs = resumo_lote(l[0])
+            except Exception:
+                rs = dict(ativos=0, mortos=0, vacinas_pendentes=0, ocorrencias=0)
+            alertas_lote = []
+            if rs.get("mortos"):            alertas_lote.append(f"Mortes: {rs['mortos']}")
+            if rs.get("vacinas_pendentes"): alertas_lote.append(f"Vac.: {rs['vacinas_pendentes']}")
+            if rs.get("ocorrencias"):       alertas_lote.append(f"Ocorr.: {rs['ocorrencias']}")
+            _icone = "🔴" if alertas_lote else "🟢"
             with cols[i % ncols]:
-                st.markdown(f"**{l[1]}**")
-                st.caption(f"Ativos: {rs['ativos']} | Entrada: {l[3]}")
-                st.caption(tag_str)
-                st.divider()
+                st.markdown(f"**{_icone} {l[1]}**")
+                st.caption(f"Animais: {rs.get('ativos',0)} | Entrada: {l[3] or '—'}")
+                if alertas_lote:
+                    st.warning(" | ".join(alertas_lote))
+                else:
+                    st.caption("Sem alertas")
+                if st.button("Ver lote", key=f"btn_lote_{l[0]}", use_container_width=True):
+                    st.session_state.menu = "Workspace do Lote"
+                    st.session_state["ws_lote_id"] = l[0]
+                    st.rerun()
 
+    st.divider()
+
+    # ── Acoes rapidas por perfil ──────────────────────────────────────────────
     st.subheader("Acoes rapidas")
-    qa1,qa2,qa3,qa4 = st.columns(4)
-    if qa1.button("Novo Lote",        width='stretch'): st.session_state.menu="Cadastrar Lote";       st.rerun()
-    if qa2.button("Registrar Peso",   width='stretch'): st.session_state.menu="Registrar Pesagem";    st.rerun()
-    if qa3.button("Nova Ocorrencia",  width='stretch'): st.session_state.menu="Registrar Ocorrencia"; st.rerun()
-    if qa4.button("Exportar",         width='stretch'): st.session_state.menu="Exportar Relatorios";  st.rerun()
+    if is_vet():
+        qa1, qa2, qa3 = st.columns(3)
+        if qa1.button("Registrar Ocorrencia", use_container_width=True):
+            st.session_state.menu = "Registrar Ocorrencia"; st.rerun()
+        if qa2.button("Registrar Pesagem",    use_container_width=True):
+            st.session_state.menu = "Registrar Pesagem";    st.rerun()
+        if qa3.button("Prontuario Animal",    use_container_width=True):
+            st.session_state.menu = "Prontuario Animal";    st.rerun()
+    else:
+        qa1, qa2, qa3, qa4 = st.columns(4)
+        if qa1.button("Novo Lote",       use_container_width=True):
+            st.session_state.menu = "Cadastrar Lote";       st.rerun()
+        if qa2.button("Registrar Peso",  use_container_width=True):
+            st.session_state.menu = "Registrar Pesagem";    st.rerun()
+        if qa3.button("Nova Ocorrencia", use_container_width=True):
+            st.session_state.menu = "Registrar Ocorrencia"; st.rerun()
+        if qa4.button("Exportar",        use_container_width=True):
+            st.session_state.menu = "Exportar Relatorios";  st.rerun()
 
     # ============================================================
     # BUSCAR ANIMAL
