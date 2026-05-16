@@ -57,116 +57,221 @@ def page_inicio(u):
     st.caption(datetime.now().strftime("%d/%m/%Y - %H:%M"))
     st.divider()
 
-    lotes = listar_lotes_usuario()
-
-    # ── owner_id correto por perfil ───────────────────────────────────────────
-    if is_admin():
-        _oid_dash = None
-    elif is_vet():
-        _oid_dash = owner_id()  # medicamentos e vacinas do proprio vet
-    else:
-        _oid_dash = owner_id()  # fazendeiro
+    lotes   = listar_lotes_usuario()
+    _oid    = owner_id()
+    _is_faz = is_fazendeiro()
+    _is_vet = is_vet()
 
     # ── Alertas do proprio usuario ────────────────────────────────────────────
-    pendo = listar_vacinas_pendentes(owner_id=_oid_dash)
-    crit  = listar_medicamentos_criticos(owner_id=_oid_dash)
-    parto = listar_partos_previstos(owner_id=_oid_dash)
+    pendo = listar_vacinas_pendentes(owner_id=_oid)
+    crit  = listar_medicamentos_criticos(owner_id=_oid)
+    parto = listar_partos_previstos(owner_id=_oid)
 
-    # ── Contagem de animais ───────────────────────────────────────────────────
-    _n_animais = sum(len(listar_animais_por_lote(l[0])) for l in lotes)
+    # ══════════════════════════════════════════════════════════════════════════
+    # DASHBOARD DO FAZENDEIRO
+    # ══════════════════════════════════════════════════════════════════════════
+    if _is_faz:
+        # ── Calcular metricas financeiras e produtivas ────────────────────────
+        _todos_animais = []
+        _prontos_abate = 0
+        _receita_est   = 0.0
+        _margem_est    = 0.0
+        _custo_total   = 0.0
 
-    # ── Cards de KPIs ─────────────────────────────────────────────────────────
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Lotes ativos",    len(lotes))
-    k2.metric("Animais ativos",  _n_animais)
-    k3.metric("Vacinas pend.",   len(pendo),
-              delta="atencao" if pendo else None,
-              delta_color="inverse" if pendo else "normal")
-    k4.metric("Meds. criticos",  len(crit),
-              delta="atencao" if crit else None,
-              delta_color="inverse" if crit else "normal")
+        import database as _dbc
+        try:
+            cot = cotacao_com_cache(_dbc)
+            _preco_kg = float(cot["preco"]) if cot.get("sucesso") else 195.0
+        except Exception:
+            _preco_kg = 195.0
 
-    st.divider()
-
-    # ── Alertas e Cotacao ─────────────────────────────────────────────────────
-    if is_vet():
-        # Vet: sem cotacao, foco em sanitario
-        col_al = st.container()
-    else:
-        col_cot, col_al = st.columns([1, 2])
-        with col_cot:
-            st.subheader("Cotacao do dia")
-            import database as _dbc
+        for l in lotes:
+            _anim_lote = listar_animais_por_lote(l[0])
+            _todos_animais.extend(_anim_lote)
+            # Previsao de abate
             try:
-                cot = cotacao_com_cache(_dbc)
-                if cot["sucesso"]:
-                    st.success(f"**R$ {cot['preco']:.2f}** /@")
-                    st.caption(f"{cot['data']} - {cot['fonte']}")
-                else:
-                    st.warning("Cotacao indisponivel")
-                    with st.form("cot_home"):
-                        pr = st.number_input("R$/@", 0.0, 1000.0, 195.0,
-                                            label_visibility="collapsed")
-                        if st.form_submit_button("Salvar"):
-                            salvar_cotacao(str(date.today()), pr, "manual")
-                            st.rerun()
+                _prev = prever_abate(l[0], peso_alvo=450, preco_kg=_preco_kg, custo_diario=8.0)
+                for _p in _prev:
+                    if _p.get("dias_restantes") is not None and _p["dias_restantes"] <= 30:
+                        _prontos_abate += 1
+                    _receita_est += float(_p.get("receita_prevista") or 0)
+                    _margem_est  += float(_p.get("margem_estimada") or 0)
+                    _custo_total += float(_p.get("custo_estimado") or 0)
             except Exception:
-                st.info("Cotacao indisponivel")
+                pass
 
-    with col_al if not is_vet() else st.container():
-        st.subheader("Alertas")
-        if not pendo and not crit and not parto:
-            st.success("Tudo em ordem! Nenhum alerta critico.")
-        if pendo:
-            with st.expander(f"Vacinas pendentes ({len(pendo)})", expanded=True):
-                for v in pendo[:5]:
-                    st.caption(f"- {v[3]} | Lote: {v[2]} | {v[4]}")
-        if crit:
-            with st.expander(f"Medicamentos em alerta ({len(crit)})", expanded=True):
-                for m in crit[:5]:
-                    mot = "estoque baixo" if (m[3] or 0) <= (m[4] or 0) else f"vence {m[5]}"
-                    st.caption(f"- {m[1]} | {m[3]:.0f} {m[2]} ({mot})")
-        if parto:
-            with st.expander(f"Partos previstos ({len(parto)})"):
-                for p in parto[:5]:
-                    st.caption(f"- {p[1]} | Lote: {p[2]} | {p[3]}")
+        _n_animais = len(_todos_animais)
+        _n_partos  = len(parto)
 
-    st.divider()
-
-    # ── Lotes em cards ────────────────────────────────────────────────────────
-    st.subheader("Seus lotes" if not is_vet() else "Fazendas aprovadas")
-    if not lotes:
-        st.info("Nenhum lote. Va em Lote > Cadastrar Lote.")
-    else:
-        ncols = min(3, len(lotes))
-        cols  = st.columns(ncols)
-        for i, l in enumerate(lotes[:6]):
+        def _brl(v):
             try:
-                rs = resumo_lote(l[0])
-            except Exception:
-                rs = dict(ativos=0, mortos=0, vacinas_pendentes=0, ocorrencias=0)
-            alertas_lote = []
-            if rs.get("mortos"):            alertas_lote.append(f"Mortes: {rs['mortos']}")
-            if rs.get("vacinas_pendentes"): alertas_lote.append(f"Vac.: {rs['vacinas_pendentes']}")
-            if rs.get("ocorrencias"):       alertas_lote.append(f"Ocorr.: {rs['ocorrencias']}")
-            _icone = "🔴" if alertas_lote else "🟢"
-            with cols[i % ncols]:
-                st.markdown(f"**{_icone} {l[1]}**")
-                st.caption(f"Animais: {rs.get('ativos',0)} | Entrada: {l[3] or '—'}")
-                if alertas_lote:
-                    st.warning(" | ".join(alertas_lote))
-                else:
-                    st.caption("Sem alertas")
-                if st.button("Ver lote", key=f"btn_lote_{l[0]}", use_container_width=True):
+                i, d = f"{float(v):,.2f}".split(".")
+                return f"R$ {i.replace(',','.')},{d}"
+            except: return "R$ 0,00"
+
+        # ── Linha 1: Cards principais ─────────────────────────────────────────
+        st.subheader("Resumo da fazenda")
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            st.metric("Total de animais", _n_animais)
+            st.metric("Prontos p/ abate (≤30d)", _prontos_abate,
+                      delta="atencao" if _prontos_abate else None,
+                      delta_color="normal" if _prontos_abate else "off")
+
+        with c2:
+            st.metric("Partos nos proximos 30d", _n_partos,
+                      delta="atencao" if _n_partos else None,
+                      delta_color="normal" if _n_partos else "off")
+            st.metric("Cotacao atual", f"R$ {_preco_kg:.2f} /@")
+
+        with c3:
+            st.metric("Receita estimada", _brl(_receita_est))
+            st.metric("Margem estimada",  _brl(_margem_est))
+
+        # ── Linha 2: Custo e alertas ──────────────────────────────────────────
+        st.divider()
+        cc1, cc2, cc3 = st.columns(3)
+        cc1.metric("Custo total estimado", _brl(_custo_total))
+        cc2.metric("Vacinas pendentes",    len(pendo),
+                   delta="atencao" if pendo else None,
+                   delta_color="inverse" if pendo else "off")
+        cc3.metric("Meds. em alerta",      len(crit),
+                   delta="atencao" if crit else None,
+                   delta_color="inverse" if crit else "off")
+
+        st.divider()
+
+        # ── Alertas ───────────────────────────────────────────────────────────
+        if pendo or crit or parto:
+            st.subheader("Alertas")
+            al1, al2, al3 = st.columns(3)
+            with al1:
+                if pendo:
+                    with st.expander(f"💉 Vacinas ({len(pendo)})", expanded=True):
+                        for v in pendo[:4]:
+                            st.caption(f"- {v[3]} | {v[4]}")
+            with al2:
+                if crit:
+                    with st.expander(f"⚠ Medicamentos ({len(crit)})", expanded=True):
+                        for m in crit[:4]:
+                            mot = "baixo" if (m[3] or 0) <= (m[4] or 0) else f"vence {m[5]}"
+                            st.caption(f"- {m[1]}: {m[3]:.0f} {m[2]} ({mot})")
+            with al3:
+                if parto:
+                    with st.expander(f"🐄 Partos ({len(parto)})", expanded=True):
+                        for p in parto[:4]:
+                            st.caption(f"- {p[1]} | {p[3]}")
+            st.divider()
+
+        # ── Lotes em cards ────────────────────────────────────────────────────
+        st.subheader("Seus lotes")
+        if not lotes:
+            st.info("Nenhum lote. Va em Lote > Cadastrar Lote.")
+        else:
+            ncols = min(3, len(lotes))
+            cols  = st.columns(ncols)
+            for i, l in enumerate(lotes[:6]):
+                try: rs = resumo_lote(l[0])
+                except: rs = dict(ativos=0, mortos=0, vacinas_pendentes=0, ocorrencias=0)
+                _tags = []
+                if rs.get("mortos"):            _tags.append(f"Mortes: {rs['mortos']}")
+                if rs.get("vacinas_pendentes"): _tags.append(f"Vac.: {rs['vacinas_pendentes']}")
+                if rs.get("ocorrencias"):       _tags.append(f"Ocorr.: {rs['ocorrencias']}")
+                _ico = "🔴" if _tags else "🟢"
+                with cols[i % ncols]:
+                    st.markdown(f"**{_ico} {l[1]}**")
+                    st.caption(f"Animais: {rs.get('ativos',0)} | Entrada: {l[3] or '—'}")
+                    if _tags: st.warning(" | ".join(_tags))
+                    else:     st.caption("Sem alertas")
+                    if st.button("Ver lote", key=f"btn_lote_{l[0]}", use_container_width=True):
+                        st.session_state.menu = "Workspace do Lote"
+                        st.session_state["ws_lote_id"] = l[0]
+                        st.rerun()
+
+        st.divider()
+
+        # ── Acoes rapidas + IA ────────────────────────────────────────────────
+        ac1, ac2 = st.columns(2)
+
+        with ac1:
+            st.subheader("Acoes rapidas")
+            qa1, qa2 = st.columns(2)
+            with qa1:
+                if st.button("Registrar Pesagem",    use_container_width=True):
+                    st.session_state.menu = "Registrar Pesagem";    st.rerun()
+                if st.button("Nova Ocorrencia",      use_container_width=True):
+                    st.session_state.menu = "Registrar Ocorrencia"; st.rerun()
+            with qa2:
+                if st.button("Novo Lote",            use_container_width=True):
+                    st.session_state.menu = "Cadastrar Lote";       st.rerun()
+                if st.button("Exportar Relatorios",  use_container_width=True):
+                    st.session_state.menu = "Exportar Relatorios";  st.rerun()
+
+        with ac2:
+            st.subheader("Analise & IA")
+            ia1, ia2, ia3 = st.columns(3)
+            with ia1:
+                st.markdown("🤖")
+                if st.button("Risco Sanitario", use_container_width=True, key="btn_ia_risco"):
+                    st.session_state.menu = "Risco Sanitario IA"; st.rerun()
+            with ia2:
+                st.markdown("📈")
+                if st.button("Previsao de Abate", use_container_width=True, key="btn_ia_abate"):
+                    st.session_state.menu = "Previsao de Abate IA"; st.rerun()
+            with ia3:
+                st.markdown("⚠")
+                if st.button("Anomalias de Peso", use_container_width=True, key="btn_ia_anom"):
+                    st.session_state.menu = "Anomalias de Peso"; st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # DASHBOARD DO VETERINARIO
+    # ══════════════════════════════════════════════════════════════════════════
+    elif _is_vet:
+        _n_animais = sum(len(listar_animais_por_lote(l[0])) for l in lotes)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Fazendas aprovadas", len(lotes))
+        c2.metric("Animais sob cuidado", _n_animais)
+        c3.metric("Vacinas pendentes", len(pendo),
+                  delta="atencao" if pendo else None,
+                  delta_color="inverse" if pendo else "off")
+        c4.metric("Meds. em alerta", len(crit),
+                  delta="atencao" if crit else None,
+                  delta_color="inverse" if crit else "off")
+
+        st.divider()
+
+        al1, al2 = st.columns(2)
+        with al1:
+            st.subheader("Alertas sanitarios")
+            if not pendo and not crit:
+                st.success("Nenhum alerta critico.")
+            if pendo:
+                with st.expander(f"💉 Vacinas pendentes ({len(pendo)})", expanded=True):
+                    for v in pendo[:5]: st.caption(f"- {v[3]} | Lote: {v[2]} | {v[4]}")
+            if crit:
+                with st.expander(f"⚠ Medicamentos ({len(crit)})", expanded=True):
+                    for m in crit[:5]:
+                        mot = "baixo" if (m[3] or 0)<=(m[4] or 0) else f"vence {m[5]}"
+                        st.caption(f"- {m[1]}: {m[3]:.0f} {m[2]} ({mot})")
+
+        with al2:
+            st.subheader("Fazendas aprovadas")
+            if not lotes:
+                st.info("Nenhuma fazenda aprovada ainda.")
+            for l in lotes[:5]:
+                try: rs = resumo_lote(l[0])
+                except: rs = dict(ativos=0, ocorrencias=0)
+                _ico = "🔴" if rs.get("ocorrencias") else "🟢"
+                st.markdown(f"**{_ico} {l[1]}** — {rs.get('ativos',0)} animais")
+                if st.button("Abrir", key=f"vet_lote_{l[0]}", use_container_width=True):
                     st.session_state.menu = "Workspace do Lote"
                     st.session_state["ws_lote_id"] = l[0]
                     st.rerun()
 
-    st.divider()
-
-    # ── Acoes rapidas por perfil ──────────────────────────────────────────────
-    st.subheader("Acoes rapidas")
-    if is_vet():
+        st.divider()
+        st.subheader("Acoes rapidas")
         qa1, qa2, qa3 = st.columns(3)
         if qa1.button("Registrar Ocorrencia", use_container_width=True):
             st.session_state.menu = "Registrar Ocorrencia"; st.rerun()
@@ -174,16 +279,26 @@ def page_inicio(u):
             st.session_state.menu = "Registrar Pesagem";    st.rerun()
         if qa3.button("Prontuario Animal",    use_container_width=True):
             st.session_state.menu = "Prontuario Animal";    st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # DASHBOARD DO ADMIN
+    # ══════════════════════════════════════════════════════════════════════════
     else:
-        qa1, qa2, qa3, qa4 = st.columns(4)
-        if qa1.button("Novo Lote",       use_container_width=True):
-            st.session_state.menu = "Cadastrar Lote";       st.rerun()
-        if qa2.button("Registrar Peso",  use_container_width=True):
-            st.session_state.menu = "Registrar Pesagem";    st.rerun()
-        if qa3.button("Nova Ocorrencia", use_container_width=True):
-            st.session_state.menu = "Registrar Ocorrencia"; st.rerun()
-        if qa4.button("Exportar",        use_container_width=True):
-            st.session_state.menu = "Exportar Relatorios";  st.rerun()
+        _dash = resumo_dashboard(owner_id=None)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total lotes",   _dash.get("lotes", 0))
+        c2.metric("Total animais", _dash.get("animais", 0))
+        c3.metric("Usuarios",      len(listar_usuarios()))
+        c4.metric("Vacinas pend.", _dash.get("vacinas_pendentes", 0))
+        st.divider()
+        st.subheader("Acoes rapidas")
+        qa1, qa2, qa3 = st.columns(3)
+        if qa1.button("Gestao Usuarios",  use_container_width=True):
+            st.session_state.menu = "Gestao Usuarios";  st.rerun()
+        if qa2.button("Log Auditoria",    use_container_width=True):
+            st.session_state.menu = "Log Auditoria";    st.rerun()
+        if qa3.button("Administracao",    use_container_width=True):
+            st.session_state.menu = "Administracao";    st.rerun()
 
     # ============================================================
     # BUSCAR ANIMAL
