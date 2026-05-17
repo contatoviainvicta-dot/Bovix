@@ -97,7 +97,7 @@ def page_inicio(u):
             _anim_lote = listar_animais_por_lote(l[0])
             _todos_animais.extend(_anim_lote)
             try:
-                _prev = prever_abate(l[0], peso_alvo=450,
+                _prev = prever_abate(l[0], peso_alvo_kg=450,
                                      preco_kg=_preco_kg, custo_diario=8.0)
                 for _p in _prev:
                     _dr = _p.get("dias_restantes")
@@ -259,15 +259,38 @@ def page_inicio(u):
             st.subheader("Fazendas aprovadas")
             if not lotes:
                 st.info("Nenhuma fazenda aprovada ainda.")
-            for l in lotes[:5]:
-                try: rs = resumo_lote(l[0])
-                except: rs = dict(ativos=0, ocorrencias=0)
-                _ico = "🔴" if rs.get("ocorrencias") else "🟢"
-                st.markdown(f"**{_ico} {l[1]}** — {rs.get('ativos',0)} animais")
-                if st.button("Abrir", key=f"vet_lote_{l[0]}", use_container_width=True):
-                    st.session_state.menu = "Workspace do Lote"
-                    st.session_state["ws_lote_id"] = l[0]
-                    st.rerun()
+            else:
+                # Agrupar lotes por fazendeiro (owner_id do lote)
+                _faz_map = {}
+                for _l in lotes:
+                    _foid = _l[-1] if len(_l) > 4 else _l[0]
+                    _faz_map.setdefault(_foid, []).append(_l)
+
+                for _foid, _flotes in list(_faz_map.items())[:5]:
+                    _n_anim_faz = sum(
+                        len(listar_animais_por_lote(_fl[0]))
+                        for _fl in _flotes
+                    )
+                    with st.expander(
+                        f"Fazenda ({len(_flotes)} lotes, "
+                        f"{_n_anim_faz} animais)",
+                        expanded=True
+                    ):
+                        for _fl in _flotes:
+                            try: _rs = resumo_lote(_fl[0])
+                            except: _rs = dict(ativos=0, ocorrencias=0)
+                            _ico2 = "🔴" if _rs.get("ocorrencias") else "🟢"
+                            st.caption(
+                                f"{_ico2} **{_fl[1]}** — "
+                                f"{_rs.get('ativos',0)} animais"
+                            )
+                            if st.button(
+                                "Abrir", key=f"vet_lote_{_fl[0]}",
+                                use_container_width=True
+                            ):
+                                st.session_state.menu = "Workspace do Lote"
+                                st.session_state["ws_lote_id"] = _fl[0]
+                                st.rerun()
 
         st.divider()
         st.subheader("Acoes rapidas")
