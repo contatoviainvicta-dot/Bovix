@@ -220,6 +220,8 @@ def page_dashboard_executivo(u):
 
 def page_margem_real(u):
     hdr("Margem Real", "Margem Real do Lote", "Resultado: compra x venda x custos")
+    if st.session_state.get("msg_venda_ok"):
+        st.success(st.session_state.pop("msg_venda_ok"))
     if is_vet():
         st.error("Acesso restrito. Dados financeiros nao disponiveis para veterinarios.")
         st.stop()
@@ -308,9 +310,10 @@ def page_margem_real(u):
                                            f"R${pr_kg}/kg {peso_v}kg ({tipo_venda})")
                         limpar_cache()
                         n_baixa = len(_animais_vd) if _animais_vd else len(_animais_lote)
-                        st.success(
-                            f"Venda registrada! {n_baixa} animal(is) marcado(s) como vendido(s). "
-                            f"{peso_v:.0f} kg x R${pr_kg:.2f}/kg = R${peso_v*pr_kg:,.2f}"
+                        st.session_state["msg_venda_ok"] = (
+                            f"Venda registrada! {n_baixa} animal(is) vendido(s). "
+                            f"{peso_v:.0f} kg x R$ {pr_kg:.2f}/kg = "
+                            f"R$ {peso_v*pr_kg:,.2f}"
                         )
                         st.rerun()
 
