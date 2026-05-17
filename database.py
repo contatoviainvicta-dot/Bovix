@@ -559,10 +559,38 @@ def atualizar_lote(lote_id, nome, descricao, data_entrada, qtd_comprada, qtd_rec
             cur.execute(f"UPDATE lotes SET preco_por_animal={p} WHERE id={p}", (preco_por_animal, lote_id))
 
 def excluir_lote(lote_id):
+    """Exclui lote e todos os registros associados (animais, pesagens, etc)."""
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
+        # Buscar animais do lote
+        cur.execute(f"SELECT id FROM animais WHERE lote_id={p}", (lote_id,))
+        aids = [r[0] for r in cur.fetchall()]
+        # Excluir registros dos animais
+        for aid in aids:
+            for tbl in ['pesagens', 'ocorrencias', 'medicamentos_uso']:
+                try:
+                    cur.execute(
+                        f"DELETE FROM {tbl} WHERE animal_id={p}", (aid,)
+                    )
+                except Exception:
+                    pass
+        # Excluir animais
+        if aids:
+            cur.execute(
+                f"DELETE FROM animais WHERE lote_id={p}", (lote_id,)
+            )
+        # Excluir vacinas do lote
+        for tbl in ['vacinas_agenda', 'reproducao', 'piquetes_historico']:
+            try:
+                cur.execute(
+                    f"DELETE FROM {tbl} WHERE lote_id={p}", (lote_id,)
+                )
+            except Exception:
+                pass
+        # Excluir o lote
         cur.execute(f"DELETE FROM lotes WHERE id={p}", (lote_id,))
+        conn.commit()
 
 
 # ── ANIMAIS ──────────────────────────────────────────────────────────────────
@@ -1633,6 +1661,21 @@ def calcular_previsao_abate(animal_id):
 
 
 # ── VENDAS / MARGEM ───────────────────────────────────────────────────────────
+def lote_ja_vendido(lote_id):
+    """Verifica se lote ja foi vendido (sem animais ativos)."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        try:
+            cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND ativo=1",(lote_id,))
+            ativos = cur.fetchone()[0]
+            cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p}",(lote_id,))
+            total = cur.fetchone()[0]
+            return total > 0 and ativos == 0
+        except Exception:
+            return False
+
+
 def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg,
                          frigorific="", observacao="", animais_vendidos=None):
     """Registra venda e da baixa nos animais. Schema: ativo(int) status(text)"""
