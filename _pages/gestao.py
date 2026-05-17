@@ -245,9 +245,9 @@ def page_estoque_medicamentos(u):
                         f"FROM medicamentos_uso mu "
                         f"JOIN medicamentos m ON m.id=mu.medicamento_id "
                         f"JOIN animais a ON a.id=mu.animal_id "
-                        f"WHERE mu.medicamento_id IN ({_placeholders}) "
+                        f"WHERE m.owner_id={_phf()} "
                         f"ORDER BY mu.data_uso DESC LIMIT 100",
-                        tuple(_ids_meds)
+                        (_oid,)
                     )
                     usos = cur.fetchall()
                 if usos:
