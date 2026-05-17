@@ -248,12 +248,19 @@ def page_margem_real(u):
             # Calcular peso automatico dos animais
             _animais_lote = listar_animais_por_lote(lote_id)
             _pes_todos = listar_pesagens_todos_animais(lote_id)
-            # Peso mais recente por animal
+            # Peso mais recente por animal (fallback para peso_entrada)
             _peso_map = {}
             for p in _pes_todos:
                 aid = p[1]
                 if aid not in _peso_map or p[3] > _peso_map[aid][3]:
                     _peso_map[aid] = p
+            # Para animais sem pesagem, usar peso_entrada do cadastro
+            for _an in _animais_lote:
+                _aid = _an[0]
+                if _aid not in _peso_map:
+                    _pe = _an[6] if len(_an) > 6 else 0  # peso_entrada
+                    if _pe and float(_pe) > 0:
+                        _peso_map[_aid] = (None, _aid, float(_pe), "0000-00-00")
             _peso_total_lote = sum(float(p[2]) for p in _peso_map.values())
             _n_animais = len(_animais_lote)
 
@@ -287,17 +294,15 @@ def page_margem_real(u):
                     obs_v  = st.text_area("Observacao")
 
                 if st.form_submit_button("Registrar Venda", type="primary"):
-                    if peso_v > 0:
-                        # Determinar animais vendidos
-                        if tipo_venda == "Animal individual":
-                            _animais_vd = [_aid_sel]
-                        else:
-                            _animais_vd = None  # lote inteiro
-
+                    if peso_v <= 0:
+                        st.error("Informe o peso total.")
+                    elif lote_ja_vendido(lote_id):
+                        st.error("Este lote ja foi vendido. Todos os animais estao inativos.")
+                    else:
+                        _animais_vd = [_aid_sel] if tipo_venda == "Animal individual" else None
                         registrar_venda_lote(
                             lote_id, str(data_v), pr_kg, peso_v,
-                            frig_v, obs_v,
-                            animais_vendidos=_animais_vd
+                            frig_v, obs_v, animais_vendidos=_animais_vd
                         )
                         registrar_auditoria(u["id"], "venda_lote", "vendas", lote_id,
                                            f"R${pr_kg}/kg {peso_v}kg ({tipo_venda})")
@@ -308,8 +313,6 @@ def page_margem_real(u):
                             f"{peso_v:.0f} kg x R${pr_kg:.2f}/kg = R${peso_v*pr_kg:,.2f}"
                         )
                         st.rerun()
-                    else:
-                        st.error("Informe o peso total.")
 
     # ============================================================
     # COTACAO CEPEA
