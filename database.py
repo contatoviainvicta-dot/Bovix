@@ -2821,15 +2821,63 @@ def criar_dados_exemplo(uid):
 
 
 def remover_dados_exemplo(uid):
-    """Remove os dados de exemplo do usuario."""
-    lotes_demo = [l for l in listar_lotes(owner_id=uid) if '[DEMO]' in (l[1] or '')]
+    """Remove os dados de exemplo do usuario - cascade manual."""
+    lotes_demo = [l for l in listar_lotes(owner_id=uid)
+                  if '[DEMO]' in (l[1] or '')]
     n_removidos = 0
+    p = _ph()
     for lote in lotes_demo:
-        try:
-            excluir_lote(lote[0])
-            n_removidos += 1
-        except Exception:
-            pass
+        lid = lote[0]
+        with _conexao() as conn:
+            cur = conn.cursor()
+            try:
+                # 1. Buscar animais do lote
+                cur.execute(
+                    f"SELECT id FROM animais WHERE lote_id={p}", (lid,)
+                )
+                aids = [r[0] for r in cur.fetchall()]
+
+                # 2. Remover registros dos animais
+                for aid in aids:
+                    for tbl in ['pesagens', 'ocorrencias', 'medicamentos_uso']:
+                        try:
+                            cur.execute(
+                                f"DELETE FROM {tbl} WHERE animal_id={p}",
+                                (aid,)
+                            )
+                        except Exception:
+                            pass
+
+                # 3. Marcar animais como inativos E excluir
+                if aids:
+                    cur.execute(
+                        f"UPDATE animais SET ativo=0 WHERE lote_id={p}",
+                        (lid,)
+                    )
+                    cur.execute(
+                        f"DELETE FROM animais WHERE lote_id={p}",
+                        (lid,)
+                    )
+
+                # 4. Remover vacinas e outros do lote
+                for tbl in ['vacinas_agenda', 'reproducao',
+                            'piquetes_historico', 'vendas_lote']:
+                    try:
+                        cur.execute(
+                            f"DELETE FROM {tbl} WHERE lote_id={p}", (lid,)
+                        )
+                    except Exception:
+                        pass
+
+                # 5. Excluir o lote
+                cur.execute(f"DELETE FROM lotes WHERE id={p}", (lid,))
+                conn.commit()
+                n_removidos += 1
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
     return n_removidos
 
 
