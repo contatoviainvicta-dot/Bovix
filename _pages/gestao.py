@@ -21,6 +21,7 @@ from rules import (
     sel_lote, sel_animal, limpar_cache,
     requer_admin, requer_nao_vet, owner_id_lote_novo,
     _listar_lotes_cache, _listar_animais_cache,
+    sel_fazenda_vet,
 )
 
 def hdr(titulo, sub="", desc=""):
@@ -29,6 +30,15 @@ def hdr(titulo, sub="", desc=""):
     st.divider()
 
 def page_calendario_sanitario(u):
+    # Seletor de fazenda para veterinario
+    if is_vet():
+        from database import listar_lotes as _ll_vet
+        _foid_vet = sel_fazenda_vet(key="vet_faz_cal")
+        if _foid_vet:
+            st.session_state["_vet_lotes_faz"] = [
+                l[0] for l in _ll_vet(owner_id=_foid_vet)
+            ]
+
     hdr("Calendario Sanitario", "Vacinas e Medicacoes", "Agenda de vacinas e alertas")
     t1,t2,t3 = st.tabs(["Agenda","Agendar","Confirmar"])
     with t1:
@@ -398,6 +408,15 @@ def page_mapa_piquetes(u):
 
 
 def page_workspace_do_lote(u):
+    # Seletor de fazenda para veterinario
+    if is_vet():
+        from database import listar_lotes as _ll_vet
+        _foid_vet = sel_fazenda_vet(key="vet_faz_ws")
+        if _foid_vet:
+            st.session_state["_vet_lotes_faz"] = [
+                l[0] for l in _ll_vet(owner_id=_foid_vet)
+            ]
+
     hdr("Workspace do Lote", "Visao Completa", "Tudo sobre o lote em um lugar so")
 
     lotes = listar_lotes_usuario()
@@ -750,6 +769,15 @@ def page_workspace_do_lote(u):
 
 def page_prontuario_animal(u):
     parto = listar_partos_previstos(owner_id=owner_id())
+    # Seletor de fazenda para veterinario
+    if is_vet():
+        from database import listar_lotes as _ll_vet
+        _foid_vet = sel_fazenda_vet(key="vet_faz_pron")
+        if _foid_vet:
+            st.session_state["_vet_lotes_faz"] = [
+                l[0] for l in _ll_vet(owner_id=_foid_vet)
+            ]
+
     hdr("Prontuario Animal", "Prontuario Completo", "Historico de peso, saude e reproducao")
 
     @st.cache_data(ttl=900, show_spinner="Carregando prontuario...")
