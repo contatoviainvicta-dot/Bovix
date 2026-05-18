@@ -230,63 +230,104 @@ def page_inicio(u):
     # DASHBOARD DO VETERINARIO
     # ══════════════════════════════════════════════════════════════════════════
     elif _is_vet:
-        _n_animais = sum(len(listar_animais_por_lote(l[0])) for l in lotes)
+        # ── Agrupar lotes por fazenda (owner_id) ──────────────────────────────
+        _faz_map = {}
+        for _l in lotes:
+            _foid = _l[-1] if len(_l) > 4 else _l[0]
+            _faz_map.setdefault(_foid, []).append(_l)
 
+        _n_fazendas = len(_faz_map)
+        _n_animais  = sum(len(listar_animais_por_lote(l[0])) for l in lotes)
+
+        # ── Cards globais ─────────────────────────────────────────────────────
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Fazendas aprovadas", len(lotes))
-        c2.metric("Animais sob cuidado", _n_animais)
-        c3.metric("Vacinas pendentes", len(pendo),
+        c1.metric("Fazendas vinculadas",  _n_fazendas)
+        c2.metric("Total animais",        _n_animais)
+        c3.metric("Vacinas pendentes",    len(pendo),
                   delta="atencao" if pendo else None,
                   delta_color="inverse" if pendo else "off")
-        c4.metric("Meds. em alerta", len(crit),
+        c4.metric("Meds. em alerta",      len(crit),
                   delta="atencao" if crit else None,
                   delta_color="inverse" if crit else "off")
 
         st.divider()
 
-        al1, al2 = st.columns(2)
-        with al1:
-            st.subheader("Alertas sanitarios")
-            if not pendo and not crit:
-                st.success("Nenhum alerta critico.")
-            if pendo:
-                with st.expander(f"💉 Vacinas pendentes ({len(pendo)})", expanded=True):
-                    for v in pendo[:5]: st.caption(f"- {v[3]} | Lote: {v[2]} | {v[4]}")
-            if crit:
-                with st.expander(f"⚠ Medicamentos ({len(crit)})", expanded=True):
-                    for m in crit[:5]:
-                        mot = "baixo" if (m[3] or 0)<=(m[4] or 0) else f"vence {m[5]}"
-                        st.caption(f"- {m[1]}: {m[3]:.0f} {m[2]} ({mot})")
+        # ── Seletor de fazenda ────────────────────────────────────────────────
+        if _n_fazendas == 0:
+            st.info("Nenhuma fazenda aprovada. Solicite acesso a um fazendeiro.")
+            _lotes_sel = []
+        else:
+            # Montar opcoes de fazenda com nome dos lotes
+            _faz_opcoes = {}
+            for _foid, _flotes in _faz_map.items():
+                _n_an  = sum(len(listar_animais_por_lote(_fl[0])) for _fl in _flotes)
+                _nomes = ", ".join(_fl[1] for _fl in _flotes[:2])
+                if len(_flotes) > 2: _nomes += f" +{len(_flotes)-2}"
+                _label = f"Fazenda {_foid} | {_nomes} | {_n_an} animais"
+                _faz_opcoes[_label] = _foid
 
-        with al2:
-            st.subheader("Fazendas aprovadas")
-            if not lotes:
-                st.info("Nenhuma fazenda aprovada ainda.")
+            if _n_fazendas == 1:
+                # Uma fazenda: mostrar label sem seletor interativo
+                _unico_label = list(_faz_opcoes.keys())[0]
+                st.info(f"Fazenda vinculada: **{_unico_label}**")
+                _foid_sel  = list(_faz_opcoes.values())[0]
             else:
-                # Agrupar lotes por fazendeiro (owner_id do lote)
-                _faz_map = {}
-                for _l in lotes:
-                    _foid = _l[-1] if len(_l) > 4 else _l[0]
-                    _faz_map.setdefault(_foid, []).append(_l)
+                # Multiplas fazendas: seletor dropdown
+                st.subheader("Selecione a fazenda")
+                _sel_label = st.selectbox(
+                    "Fazenda",
+                    list(_faz_opcoes.keys()),
+                    key="vet_faz_sel",
+                    label_visibility="collapsed"
+                )
+                _foid_sel = _faz_opcoes[_sel_label]
 
-                for _foid, _flotes in list(_faz_map.items())[:5]:
-                    _n_anim_faz = sum(
-                        len(listar_animais_por_lote(_fl[0]))
-                        for _fl in _flotes
-                    )
+            _lotes_sel = _faz_map[_foid_sel]
+            st.divider()
+
+            # ── Alertas da fazenda selecionada ────────────────────────────────
+            _ids_lotes_sel = [_fl[0] for _fl in _lotes_sel]
+            _pendo_faz = [v for v in pendo if v[1] in _ids_lotes_sel]
+            _parto_faz = [p for p in parto if p[2] in [_fl[1] for _fl in _lotes_sel]]
+
+            al1, al2 = st.columns(2)
+            with al1:
+                st.subheader("Alertas sanitarios")
+                if not _pendo_faz and not crit:
+                    st.success("Nenhum alerta critico.")
+                if _pendo_faz:
                     with st.expander(
-                        f"Fazenda ({len(_flotes)} lotes, "
-                        f"{_n_anim_faz} animais)",
+                        f"💉 Vacinas pendentes ({len(_pendo_faz)})",
                         expanded=True
                     ):
-                        for _fl in _flotes:
-                            try: _rs = resumo_lote(_fl[0])
-                            except: _rs = dict(ativos=0, ocorrencias=0)
-                            _ico2 = "🔴" if _rs.get("ocorrencias") else "🟢"
-                            st.caption(
-                                f"{_ico2} **{_fl[1]}** — "
-                                f"{_rs.get('ativos',0)} animais"
+                        for v in _pendo_faz[:5]:
+                            st.caption(f"- {v[3]} | Lote: {v[2]} | {v[4]}")
+                if crit:
+                    with st.expander(
+                        f"⚠ Meds. proprios em alerta ({len(crit)})",
+                        expanded=True
+                    ):
+                        for m in crit[:5]:
+                            mot = "baixo" if (m[3] or 0)<=(m[4] or 0)                                   else f"vence {m[5]}"
+                            st.caption(f"- {m[1]}: {m[3]:.0f} {m[2]} ({mot})")
+
+            with al2:
+                st.subheader("Lotes desta fazenda")
+                for _fl in _lotes_sel:
+                    try: _rs = resumo_lote(_fl[0])
+                    except: _rs = dict(ativos=0, ocorrencias=0)
+                    _ico2 = "🔴" if _rs.get("ocorrencias") else "🟢"
+                    _n_at = _rs.get("ativos", 0)
+                    _n_oc = _rs.get("ocorrencias", 0)
+                    with st.container():
+                        cc1, cc2 = st.columns([3, 1])
+                        with cc1:
+                            st.markdown(
+                                f"**{_ico2} {_fl[1]}** — "
+                                f"{_n_at} animais"
+                                + (f" | {_n_oc} ocorr." if _n_oc else "")
                             )
+                        with cc2:
                             if st.button(
                                 "Abrir", key=f"vet_lote_{_fl[0]}",
                                 use_container_width=True
