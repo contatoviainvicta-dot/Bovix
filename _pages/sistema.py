@@ -230,11 +230,15 @@ def page_inicio(u):
     # DASHBOARD DO VETERINARIO
     # ══════════════════════════════════════════════════════════════════════════
     elif _is_vet:
-        # ── Agrupar lotes por fazenda (owner_id) ──────────────────────────────
+        # ── Buscar fazendas aprovadas e agrupar lotes corretamente ────────────
+        from database import listar_fazendas_do_vet
+        _faz_ids = listar_fazendas_do_vet(u["id"])  # lista de owner_ids aprovados
         _faz_map = {}
-        for _l in lotes:
-            _foid = _l[-1] if len(_l) > 4 else _l[0]
-            _faz_map.setdefault(_foid, []).append(_l)
+        for _foid in _faz_ids:
+            _lotes_faz = [l for l in lotes if True]  # placeholder
+            # Buscar lotes desta fazenda especifica
+            from database import listar_lotes as _ll
+            _faz_map[_foid] = _ll(owner_id=_foid)
 
         _n_fazendas = len(_faz_map)
         _n_animais  = sum(len(listar_animais_por_lote(l[0])) for l in lotes)
