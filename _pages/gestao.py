@@ -34,12 +34,11 @@ def page_calendario_sanitario(u):
     hdr("Calendario Sanitario", "Vacinas e Medicacoes", "Agenda de vacinas e alertas")
     t1,t2,t3 = st.tabs(["Agenda","Agendar","Confirmar"])
     with t1:
+        if is_vet():
+            sel_fazenda_vet(key="vet_faz_cal")
         lotes = listar_lotes_usuario()
-        if lotes:
-            # Seletor de fazenda para veterinario
-            if is_vet():
-                sel_fazenda_vet(key="vet_faz_cal")
 
+        if lotes:
             d = {"Todos": None, **{f"{l[1]} (ID {l[0]})": l[0] for l in lotes}}
             f  = st.selectbox("Lote", list(d.keys()), key="cal_f")
             if d[f] is None:
@@ -904,6 +903,9 @@ def page_prontuario_animal(u):
         st.markdown("".join(html_parts), unsafe_allow_html=True)
 
     # ── selecao ───────────────────────────────────────────────────────────
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_pron")
+
     lotes = listar_lotes_usuario()
     if not lotes: st.warning("Nenhum lote.")
     else:
