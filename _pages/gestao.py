@@ -31,20 +31,18 @@ def hdr(titulo, sub="", desc=""):
     st.divider()
 
 def page_calendario_sanitario(u):
-    # Seletor de fazenda para veterinario (aparece antes de tudo)
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_cal")
-        st.divider()
-
     hdr("Calendario Sanitario", "Vacinas e Medicacoes", "Agenda de vacinas e alertas")
     t1,t2,t3 = st.tabs(["Agenda","Agendar","Confirmar"])
     with t1:
         lotes = listar_lotes_usuario()
         if lotes:
+            # Seletor de fazenda para veterinario
+            if is_vet():
+                sel_fazenda_vet(key="vet_faz_cal")
+
             d = {"Todos": None, **{f"{l[1]} (ID {l[0]})": l[0] for l in lotes}}
             f  = st.selectbox("Lote", list(d.keys()), key="cal_f")
             if d[f] is None:
-                # Todos: buscar vacinas de cada lote do usuario
                 vs = []
                 for lote in lotes:
                     vs.extend(listar_vacinas_agenda(lote[0]))
@@ -53,57 +51,11 @@ def page_calendario_sanitario(u):
             if vs:
                 df_v = pd.DataFrame(vs, columns=["ID","Lote","Vacina","Previsto","Realizado","Status","Obs"])
                 st.dataframe(df_v, width='stretch')
-                hoje = date.today()
-                for _, row in df_v.iterrows():
-                    try:
-                        dt_p = datetime.strptime(str(row["Previsto"]), "%Y-%m-%d").date()
-                        atrasado = dt_p < hoje and row["Status"]=="pendente"
-                    except: atrasado = False
-                    if row["Status"]=="realizado":  st.success(f"{row['Vacina']} - realizada")
-                    elif atrasado:                  st.error(f"ATRASADA: {row['Vacina']} - previsto {row['Previsto']}")
-                    else:                           st.warning(f"Pendente: {row['Vacina']} - {row['Previsto']}")
-            else: st.info("Nenhuma vacina agendada.")
-    with t2:
-        lotes = listar_lotes_usuario()
-        if not lotes: st.warning("Cadastre um lote.")
+            else:
+                st.info("Nenhuma vacina agendada.")
         else:
-            dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
-            with st.form("form_vac"):
-                vs1,vs2 = st.columns(2)
-                with vs1:
-                    lote_v = st.selectbox("Lote", list(dict_l.keys()))
-                    nome_v = st.text_input("Nome da vacina *")
-                with vs2:
-                    data_v = st.date_input("Data prevista", value=date.today()+timedelta(days=7))
-                    obs_v  = st.text_area("Observacao")
-                if st.form_submit_button("Agendar", type="primary"):
-                    if nome_v:
-                        adicionar_vacina_agenda(dict_l[lote_v], nome_v, str(data_v), obs_v)
-                        st.success("Agendado!"); st.rerun()
-                    else: st.error("Informe o nome.")
-    with t3:
-        pend_v = listar_vacinas_pendentes(owner_id=owner_id())
-        if not pend_v: st.success("Nenhuma vacina pendente.")
-        else:
-            df_p = pd.DataFrame(pend_v, columns=["ID","Lote ID","Lote","Vacina","Previsto","Status","Obs"])
-            op   = {f"{r['Vacina']} - {r['Lote']} (prev. {r['Previsto']})": r["ID"] for _,r in df_p.iterrows()}
-            with st.form("form_real_v"):
-                sel_v = st.selectbox("Vacina", list(op.keys()))
-                dt_r  = st.date_input("Data realizacao")
-                if st.form_submit_button("Confirmar", type="primary"):
-                    registrar_vacina_realizada(op[sel_v], str(dt_r))
-                    st.success("Registrado!"); st.rerun()
-
-    # ============================================================
-    # ESTOQUE MEDICAMENTOS
-    # ============================================================
-
-
+            st.warning("Nenhum lote cadastrado.")
 def page_estoque_medicamentos(u):
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_est_med")
-        st.divider()
-
     hdr("Estoque Medicamentos", "Controle de Medicamentos", "Estoque, validade e uso")
     # Isolamento: cada usuario ve somente seus proprios medicamentos
     # Para vet: usa o id do proprio vet (medicamentos dele)
@@ -111,6 +63,9 @@ def page_estoque_medicamentos(u):
     _oid = u.get("owner_id") or u["id"]
     if not _oid:
         _oid = u["id"]
+
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_est")
 
     t1, t2, t3, t4 = st.tabs(["Estoque", "Cadastrar", "Registrar Uso", "Historico de Uso"])
 
@@ -283,13 +238,11 @@ def page_estoque_medicamentos(u):
 
 def page_controle_reprodutivo(u):
     parto = listar_partos_previstos(owner_id=owner_id())
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_reprod")
-        st.divider()
-
     hdr("Controle Reprodutivo", "Reproducao", "IATF, diagnostico, prenhez e partos")
     t1,t2,t3,t4 = st.tabs(["Indicadores","Registrar","Diagnostico","Partos"])
     with t1:
+        if is_vet():
+            sel_fazenda_vet(key="vet_faz_reprod")
         lote_id, _ = sel_lote("rep_ind")
         if lote_id:
             tp = taxa_prenhez_lote(lote_id)
@@ -352,10 +305,6 @@ def page_controle_reprodutivo(u):
 
 
 def page_mapa_piquetes(u):
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_piq")
-        st.divider()
-
     hdr("Mapa Piquetes", "Pastagens e Piquetes", "Alocacao de lotes e historico")
     t1,t2,t3 = st.tabs(["Piquetes","Cadastrar","Alocar / Liberar"])
     with t1:
@@ -387,6 +336,8 @@ def page_mapa_piquetes(u):
                 else: st.error("Informe o nome.")
     with t3:
         pqs   = listar_piquetes()
+        if is_vet():
+            sel_fazenda_vet(key="vet_faz_piq")
         lotes = listar_lotes_usuario()
         if not pqs or not lotes: st.warning("Cadastre piquetes e lotes.")
         else:
@@ -397,6 +348,7 @@ def page_mapa_piquetes(u):
                 st.subheader("Alocar")
                 with st.form("form_aloc"):
                     pq_a  = st.selectbox("Piquete", list(dict_pq.keys()), key="al_pq")
+
                     lt_a  = st.selectbox("Lote",    list(dict_l.keys()),  key="al_lt")
                     dt_a  = st.date_input("Entrada",                      key="al_dt")
                     if st.form_submit_button("Alocar", type="primary"):
@@ -417,11 +369,6 @@ def page_mapa_piquetes(u):
 
 
 def page_workspace_do_lote(u):
-    # Seletor de fazenda para veterinario (aparece antes de tudo)
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_ws")
-        st.divider()
-
     hdr("Workspace do Lote", "Visao Completa", "Tudo sobre o lote em um lugar so")
 
     lotes = listar_lotes_usuario()
@@ -436,6 +383,7 @@ def page_workspace_do_lote(u):
 
     col_sel, col_status = st.columns([3, 1])
     with col_sel:
+
         lote_ws_nome = st.selectbox("Selecione o lote", list(dict_ws.keys()), key="ws_lote")
     lote_ws_id = dict_ws[lote_ws_nome]
 
@@ -774,12 +722,12 @@ def page_workspace_do_lote(u):
 
 def page_prontuario_animal(u):
     parto = listar_partos_previstos(owner_id=owner_id())
-    # Seletor de fazenda para veterinario (aparece antes de tudo)
+    hdr("Prontuario Animal", "Prontuario Completo", "Historico de peso, saude e reproducao")
+
     if is_vet():
         sel_fazenda_vet(key="vet_faz_pron")
         st.divider()
 
-    hdr("Prontuario Animal", "Prontuario Completo", "Historico de peso, saude e reproducao")
 
     @st.cache_data(ttl=900, show_spinner="Carregando prontuario...")
     def _dados_prontuario(animal_id):
