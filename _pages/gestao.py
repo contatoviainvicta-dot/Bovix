@@ -36,6 +36,7 @@ def page_calendario_sanitario(u):
     with t1:
         if is_vet():
             sel_fazenda_vet(key="vet_faz_cal")
+
         lotes = listar_lotes_usuario()
 
         if lotes:
@@ -305,6 +306,8 @@ def page_controle_reprodutivo(u):
 
 def page_mapa_piquetes(u):
     hdr("Mapa Piquetes", "Pastagens e Piquetes", "Alocacao de lotes e historico")
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_piq")
     t1,t2,t3 = st.tabs(["Piquetes","Cadastrar","Alocar / Liberar"])
     with t1:
         pqs = listar_piquetes()
@@ -335,8 +338,6 @@ def page_mapa_piquetes(u):
                 else: st.error("Informe o nome.")
     with t3:
         pqs   = listar_piquetes()
-        if is_vet():
-            sel_fazenda_vet(key="vet_faz_piq")
         lotes = listar_lotes_usuario()
         if not pqs or not lotes: st.warning("Cadastre piquetes e lotes.")
         else:
@@ -369,6 +370,9 @@ def page_mapa_piquetes(u):
 
 def page_workspace_do_lote(u):
     hdr("Workspace do Lote", "Visao Completa", "Tudo sobre o lote em um lugar so")
+
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_ws")
 
     lotes = listar_lotes_usuario()
     if not lotes:
