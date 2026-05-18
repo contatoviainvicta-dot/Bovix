@@ -14,6 +14,8 @@ from rules import (
     sel_lote, sel_animal, limpar_cache,
     requer_admin, requer_nao_vet, owner_id_lote_novo,
     _listar_lotes_cache, _listar_animais_cache,
+    sel_fazenda_vet,
+    listar_lotes_vet_filtrado,
 )
 
 def hdr(titulo, sub="", desc=""):
@@ -102,6 +104,10 @@ def page_dashboard_sanitario(u):
 def page_analisar_por_lote(u):
     lotes = listar_lotes_usuario()
     pend  = listar_vacinas_pendentes(owner_id=owner_id())
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_anal_lote")
+        st.divider()
+
     hdr("Analisar por Lote", "Analise do Lote", "Desempenho economico e zootecnico")
     lote_id, lotes = sel_lote("analise_lote")
     if lote_id:
@@ -267,6 +273,10 @@ def page_analisar_animal(u):
 
 
 def page_score_de_saude(u):
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_score")
+        st.divider()
+
     hdr("Score de Saude", "Ranking de Saude", "Nota 0-100 por animal (GMD + ocorrencias + reproducao)")
     lote_id, _ = sel_lote("score_lote")
     if lote_id:
@@ -302,6 +312,10 @@ def page_score_de_saude(u):
 
 
 def page_gmd_temporal(u):
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_gmd")
+        st.divider()
+
     hdr("GMD Temporal", "Evolucao do GMD", "Evolucao do ganho de peso ao longo do tempo")
     lote_id, _ = sel_lote("gmd_lote")
     if lote_id:
@@ -325,6 +339,10 @@ def page_gmd_temporal(u):
 
 
 def page_comparativo_lotes(u):
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_comp")
+        st.divider()
+
     hdr("Comparativo Lotes", "Comparativo entre Lotes", "Side-by-side de GMD, custos e resultados")
     lotes = listar_lotes_usuario()
     if len(lotes) < 2:
@@ -423,6 +441,10 @@ def page_pesquisar_ocorrencias(u):
 
 def page_risco_sanitario_ia(u):
     import pandas as pd
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_risco")
+        st.divider()
+
     hdr("Risco Sanitario IA", "Score de Risco", "Analise inteligente de risco sanitario do lote")
 
     # Visao geral da fazenda (independente de lote selecionado)
