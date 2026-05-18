@@ -425,77 +425,161 @@ def page_editar_lote(u):
 
 
 def page_editar_animal(u):
-    hdr("Editar Animal", "Editar / Excluir Animal", "Altere ou remova um animal cadastrado")
+    hdr("Editar Animal", "Editar / Excluir Animal", "Altere dados ou exclua animais em massa")
     lotes = listar_lotes_usuario()
     if not lotes:
         st.warning("Nenhum lote cadastrado.")
-    else:
-        dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
-        ea1,ea2 = st.columns(2)
-        with ea1: lote_sel = st.selectbox("Lote", list(dict_l.keys()), key="ea_lote")
-        lote_id  = dict_l[lote_sel]
-        # Mostrar todos incluindo inativos para poder editar
-        animais  = listar_animais_por_lote(lote_id, incluir_inativos=True)
-        if not animais:
-            st.warning("Nenhum animal neste lote.")
+        return
+
+    dict_l  = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+    lote_sel = st.selectbox("Selecionar lote", list(dict_l.keys()), key="ea_lote")
+    lote_id  = dict_l[lote_sel]
+
+    animais = listar_animais_por_lote(lote_id, incluir_inativos=True)
+    if not animais:
+        st.warning("Nenhum animal neste lote.")
+        return
+
+    tab_editar, tab_excluir = st.tabs(["Editar animal", "Excluir animais"])
+
+    # ── ABA 1: Editar animal individual ──────────────────────────────────────
+    with tab_editar:
+        dict_a   = {f"{a[1]} (ID {a[0]})": a[0] for a in animais}
+        anim_sel = st.selectbox("Animal", list(dict_a.keys()), key="ea_anim")
+        anim_id  = dict_a[anim_sel]
+
+        dados = obter_animal(anim_id)
+        if dados:
+            with st.form("form_edit_anim"):
+                f1, f2 = st.columns(2)
+                with f1:
+                    n_ident = st.text_input("Identificacao (brinco)",
+                                            value=dados.get("identificacao",""))
+                    n_idade = st.number_input("Idade (meses)", 0, 300,
+                                             int(dados.get("idade") or 0))
+                    n_raca  = st.text_input("Raca",
+                                           value=dados.get("raca",""))
+                with f2:
+                    n_sexo  = st.selectbox("Sexo",
+                                          ["indefinido","macho","femea"],
+                                          index=["indefinido","macho","femea"].index(
+                                              dados.get("sexo","indefinido")
+                                          ))
+                    n_pe    = st.number_input("Peso de entrada (kg)", 0.0,
+                                             value=float(dados.get("peso_entrada") or 0))
+                    n_palvo = st.number_input("Peso alvo (kg)", 0.0,
+                                             value=float(dados.get("peso_alvo") or 0))
+                n_obs = st.text_area("Observacoes",
+                                    value=dados.get("observacoes",""))
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.form_submit_button("Salvar alteracoes", type="primary"):
+                        atualizar_animal(anim_id, n_ident, n_idade, n_raca,
+                                        n_sexo, n_pe, n_palvo, n_obs)
+                        registrar_auditoria(u["id"], "editar_animal",
+                                           "animais", anim_id, n_ident)
+                        st.success(f"Animal {n_ident} atualizado!")
+                        limpar_cache(); st.rerun()
+                with c2:
+                    if st.form_submit_button("Excluir este animal",
+                                            type="secondary"):
+                        excluir_animal(anim_id)
+                        registrar_auditoria(u["id"], "excluir_animal",
+                                           "animais", anim_id, "excluido")
+                        st.warning("Animal excluido.")
+                        limpar_cache(); st.rerun()
+
+    # ── ABA 2: Excluir em massa com data_editor ──────────────────────────────
+    with tab_excluir:
+        st.subheader("Excluir animais em massa")
+        st.caption("Marque a coluna Excluir nos animais desejados e clique em confirmar.")
+
+        _busca_ex = st.text_input(
+            "Filtrar por brinco",
+            placeholder="Digite parte do brinco...",
+            key="ex_busca"
+        )
+        _anim_filtrados = [
+            a for a in animais
+            if _busca_ex.lower() in str(a[1]).lower()
+        ] if _busca_ex else animais
+
+        if not _anim_filtrados:
+            st.info("Nenhum animal encontrado.")
         else:
-            dict_a = {f"{a[1]} (ID {a[0]})": a[0] for a in animais}
-            with ea2: anim_sel = st.selectbox("Animal", list(dict_a.keys()), key="ea_anim")
-            animal_id = dict_a[anim_sel]
-            det = obter_animal(animal_id)
+            import pandas as pd
 
-            # Indicadores do animal
-            n_pes = len(listar_pesagens(animal_id))
-            n_ocs = len(listar_ocorrencias(animal_id))
-            sc    = calcular_score_saude(animal_id)
-            i1,i2,i3 = st.columns(3)
-            i1.metric("Pesagens",     n_pes)
-            i2.metric("Ocorrencias",  n_ocs)
-            i3.metric("Score saude",  f"{sc['score']}/100")
+            # Montar DataFrame para edicao
+            _df_ex = pd.DataFrame([
+                {
+                    "Excluir": False,
+                    "ID":      a[0],
+                    "Brinco":  a[1],
+                    "Idade":   f"{a[2]} meses",
+                }
+                for a in _anim_filtrados
+            ])
+
+            # Botoes rapidos de selecao
+            _bc1, _bc2, _bc3 = st.columns(3)
+            if _bc1.button("Selecionar todos", key="ex_sel_todos",
+                           use_container_width=True):
+                st.session_state["ex_todos_flag"] = True
+            if _bc2.button("Desmarcar todos", key="ex_desel_todos",
+                           use_container_width=True):
+                st.session_state["ex_todos_flag"] = False
+            _bc3.caption(f"{len(_anim_filtrados)} animais no lote")
+
+            # Aplicar selecao rapida
+            if st.session_state.get("ex_todos_flag") is True:
+                _df_ex["Excluir"] = True
+            elif st.session_state.get("ex_todos_flag") is False:
+                _df_ex["Excluir"] = False
+
+            # Tabela editavel
+            _df_editado = st.data_editor(
+                _df_ex,
+                column_config={
+                    "Excluir": st.column_config.CheckboxColumn(
+                        "Excluir", help="Marque para excluir", default=False
+                    ),
+                    "ID":     st.column_config.NumberColumn("ID",  disabled=True),
+                    "Brinco": st.column_config.TextColumn("Brinco", disabled=True),
+                    "Idade":  st.column_config.TextColumn("Idade",  disabled=True),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="ex_data_editor"
+            )
+
+            _selecionados = _df_editado[_df_editado["Excluir"] == True]
+            _n_sel = len(_selecionados)
+
             st.divider()
-
-            tab_edit, tab_del = st.tabs(["Editar dados", "Excluir animal"])
-
-            with tab_edit:
-                with st.form("form_edit_animal"):
-                    eab1,eab2 = st.columns(2)
-                    with eab1:
-                        ident_e  = st.text_input("Identificacao / Brinco *", value=det[1] if det else "")
-                        idade_e  = st.number_input("Idade (meses)", 0, 240, value=int(det[2]) if det else 0)
-                        raca_e   = st.text_input("Raca", value=det[5] if det else "")
-                    with eab2:
-                        p_alvo_e = st.number_input("Peso alvo abate (kg)", 0.0, value=float(det[7]) if det else 0.0)
-                        sexo_e   = st.selectbox("Sexo", ["indefinido","macho","femea"],
-                                                 index=["indefinido","macho","femea"].index(det[4])
-                                                 if det and det[4] in ["indefinido","macho","femea"] else 0)
-                        obs_e    = st.text_area("Observacoes", value=det[8] if det else "", height=68)
-                    salvar_ea = st.form_submit_button("Salvar alteracoes", type="primary", width='stretch')
-                if salvar_ea:
-                    if not ident_e:
-                        st.error("Informe a identificacao.")
-                    else:
-                        atualizar_animal(animal_id, ident_e, idade_e)
-                        atualizar_animal_detalhes(animal_id,
-                                                  peso_alvo=p_alvo_e if p_alvo_e > 0 else None,
-                                                  observacoes=obs_e)
-                        registrar_auditoria(u["id"], "editar_animal", "animais", animal_id, ident_e)
-                        st.success(f"Animal **{ident_e}** atualizado!")
-                        st.rerun()
-
-            with tab_del:
-                st.warning("A exclusao remove o animal e todo seu historico.")
-                st.caption(f"Este animal tem {n_pes} pesagem(ns) e {n_ocs} ocorrencia(s).")
-                confirma_a = st.checkbox("Confirmo a exclusao permanente deste animal")
-                if confirma_a:
-                    if st.button("Excluir animal definitivamente", type="primary"):
-                        excluir_animal(animal_id)
-                        registrar_auditoria(u["id"], "excluir_animal", "animais", animal_id, det[1] if det else "")
-                        st.success("Animal excluido.")
-                        st.rerun()
-
-    # ============================================================
-    # EDITAR PESAGENS
-    # ============================================================
+            if _n_sel == 0:
+                st.info("Marque animais na coluna Excluir para continuar.")
+            else:
+                st.warning(f"**{_n_sel} animal(is) selecionado(s)** para exclusao definitiva.")
+                if st.button(
+                    f"Confirmar exclusao de {_n_sel} animal(is)",
+                    type="primary", key="ex_confirmar"
+                ):
+                    _n_ok = 0
+                    for _, _row in _selecionados.iterrows():
+                        try:
+                            excluir_animal(int(_row["ID"]))
+                            registrar_auditoria(
+                                u["id"], "excluir_animal_massa",
+                                "animais", int(_row["ID"]),
+                                f"excluido: {_row['Brinco']}"
+                            )
+                            _n_ok += 1
+                        except Exception:
+                            pass
+                    st.session_state.pop("ex_todos_flag", None)
+                    limpar_cache()
+                    st.success(f"{_n_ok} animal(is) excluido(s) com sucesso!")
+                    st.rerun()
 
 
 def page_editar_pesagens(u):
