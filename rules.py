@@ -115,29 +115,50 @@ def requer_nao_vet():
         st.stop()
 
 def sel_fazenda_vet(key="vet_faz_global"):
-    """Exibe seletor de fazenda para veterinario e retorna o owner_id selecionado.
-    Retorna None se nao e vet ou nao tem fazenda aprovada."""
+    """Exibe seletor de fazenda para vet e filtra os lotes na sessao.
+    Retorna owner_id selecionado ou None se nao e vet."""
+    import streamlit as st
     u = usuario_atual()
     if not u or not is_vet():
         return None
     from database import listar_fazendas_do_vet, listar_lotes
-    import streamlit as st
     faz_ids = listar_fazendas_do_vet(u["id"])
     if not faz_ids:
         st.warning("Nenhuma fazenda aprovada. Solicite acesso a um fazendeiro.")
+        st.stop()
         return None
     if len(faz_ids) == 1:
-        return faz_ids[0]
-    # Montar opcoes com nome dos lotes
-    opcoes = {}
-    for fid in faz_ids:
-        lts = listar_lotes(owner_id=fid)
-        nomes = ", ".join(l[1] for l in lts[:2])
-        if len(lts) > 2: nomes += f" +{len(lts)-2}"
-        opcoes[f"Fazenda {fid} | {nomes}"] = fid
-    sel = st.selectbox("Fazenda", list(opcoes.keys()),
-                       key=key, label_visibility="collapsed")
-    return opcoes[sel]
+        foid = faz_ids[0]
+    else:
+        # Montar opcoes legíveis
+        opcoes = {}
+        for fid in faz_ids:
+            lts = listar_lotes(owner_id=fid)
+            nomes = ", ".join(l[1] for l in lts[:2])
+            if len(lts) > 2: nomes += f" +{len(lts)-2}"
+            opcoes[f"Fazenda {fid} | {nomes}"] = fid
+        st.markdown("**Selecione a fazenda:**")
+        sel = st.selectbox("Fazenda", list(opcoes.keys()),
+                           key=key, label_visibility="collapsed")
+        foid = opcoes[sel]
+    # Salvar lotes da fazenda selecionada na sessao para uso nas telas
+    lotes_faz = listar_lotes(owner_id=foid)
+    st.session_state["_vet_foid"]      = foid
+    st.session_state["_vet_lotes_faz"] = [l[0] for l in lotes_faz]
+    return foid
+
+
+def listar_lotes_vet_filtrado():
+    """Para vet: retorna lotes da fazenda selecionada no seletor.
+    Se nao e vet ou sem filtro, retorna listar_lotes_usuario() normal."""
+    import streamlit as st
+    if not is_vet():
+        return _listar_lotes_cache(owner_id=None) if is_admin()                else _listar_lotes_cache(owner_id=owner_id())
+    from database import listar_lotes
+    foid = st.session_state.get("_vet_foid")
+    if foid:
+        return listar_lotes(owner_id=foid)
+    return listar_lotes_usuario()
 
 
 def owner_id_lote_novo():
