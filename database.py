@@ -1348,9 +1348,10 @@ def listar_medicamentos_criticos(owner_id=None):
         filtro = f" AND owner_id={p}" if owner_id is not None else ""
         params = (owner_id,) if owner_id is not None else ()
         try:
+            # IMPORTANTE: parenteses para que AND owner_id se aplique a toda a condicao
             cur.execute(
                 f"SELECT id,nome,unidade,estoque_atual,estoque_minimo,validade,custo_unitario FROM medicamentos"
-                f" WHERE estoque_atual<=estoque_minimo OR (validade IS NOT NULL AND {_cast_date('validade')}<={_date_add(30)})"
+                f" WHERE (estoque_atual<=estoque_minimo OR (validade IS NOT NULL AND {_cast_date('validade')}<={_date_add(30)}))"
                 f"{filtro}",
                 params,
             )
