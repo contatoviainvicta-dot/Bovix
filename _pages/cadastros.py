@@ -448,46 +448,52 @@ def page_editar_animal(u):
         anim_sel = st.selectbox("Animal", list(dict_a.keys()), key="ea_anim")
         anim_id  = dict_a[anim_sel]
 
+        # obter_animal retorna tupla: (id,ident,idade,lote_id,sexo,raca,peso_ent,peso_alvo,obs,foto)
         dados = obter_animal(anim_id)
         if dados:
+            _d_ident = dados[1] or ""
+            _d_idade = int(dados[2] or 0)
+            _d_sexo  = dados[4] or "indefinido"
+            _d_raca  = dados[5] or ""
+            _d_pe    = float(dados[6] or 0)
+            _d_palvo = float(dados[7] or 0)
+            _d_obs   = dados[8] or ""
+
             with st.form("form_edit_anim"):
                 f1, f2 = st.columns(2)
                 with f1:
-                    n_ident = st.text_input("Identificacao (brinco)",
-                                            value=dados.get("identificacao",""))
-                    n_idade = st.number_input("Idade (meses)", 0, 300,
-                                             int(dados.get("idade") or 0))
-                    n_raca  = st.text_input("Raca",
-                                           value=dados.get("raca",""))
+                    n_ident = st.text_input("Identificacao (brinco)", value=_d_ident)
+                    n_idade = st.number_input("Idade (meses)", 0, 300, _d_idade)
+                    n_raca  = st.text_input("Raca", value=_d_raca)
                 with f2:
-                    n_sexo  = st.selectbox("Sexo",
-                                          ["indefinido","macho","femea"],
-                                          index=["indefinido","macho","femea"].index(
-                                              dados.get("sexo","indefinido")
-                                          ))
-                    n_pe    = st.number_input("Peso de entrada (kg)", 0.0,
-                                             value=float(dados.get("peso_entrada") or 0))
-                    n_palvo = st.number_input("Peso alvo (kg)", 0.0,
-                                             value=float(dados.get("peso_alvo") or 0))
-                n_obs = st.text_area("Observacoes",
-                                    value=dados.get("observacoes",""))
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.form_submit_button("Salvar alteracoes", type="primary"):
-                        atualizar_animal(anim_id, n_ident, n_idade, n_raca,
-                                        n_sexo, n_pe, n_palvo, n_obs)
-                        registrar_auditoria(u["id"], "editar_animal",
-                                           "animais", anim_id, n_ident)
-                        st.success(f"Animal {n_ident} atualizado!")
-                        limpar_cache(); st.rerun()
-                with c2:
-                    if st.form_submit_button("Excluir este animal",
-                                            type="secondary"):
-                        excluir_animal(anim_id)
-                        registrar_auditoria(u["id"], "excluir_animal",
-                                           "animais", anim_id, "excluido")
-                        st.warning("Animal excluido.")
-                        limpar_cache(); st.rerun()
+                    _sexos  = ["indefinido","macho","femea"]
+                    _si     = _sexos.index(_d_sexo) if _d_sexo in _sexos else 0
+                    n_sexo  = st.selectbox("Sexo", _sexos, index=_si)
+                    n_pe    = st.number_input("Peso de entrada (kg)", 0.0, value=_d_pe)
+                    n_palvo = st.number_input("Peso alvo (kg)", 0.0, value=_d_palvo)
+                n_obs = st.text_area("Observacoes", value=_d_obs)
+
+                # Um form deve ter exatamente um submit button principal
+                _salvar = st.form_submit_button("Salvar alteracoes", type="primary")
+
+            # Acoes fora do form para evitar conflito
+            if _salvar:
+                atualizar_animal(anim_id, n_ident, n_idade, n_raca,
+                                n_sexo, n_pe, n_palvo, n_obs)
+                registrar_auditoria(u["id"], "editar_animal",
+                                   "animais", anim_id, n_ident)
+                st.success(f"Animal {n_ident} atualizado!")
+                limpar_cache(); st.rerun()
+
+            st.divider()
+            st.caption("Zona de perigo")
+            if st.button("Excluir este animal", type="secondary",
+                         key="excluir_1_anim"):
+                excluir_animal(anim_id)
+                registrar_auditoria(u["id"], "excluir_animal",
+                                   "animais", anim_id, "excluido")
+                st.warning(f"Animal {_d_ident} excluido.")
+                limpar_cache(); st.rerun()
 
     # ── ABA 2: Excluir em massa com data_editor ──────────────────────────────
     with tab_excluir:
