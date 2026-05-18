@@ -114,6 +114,32 @@ def requer_nao_vet():
         st.error("Acesso restrito. Dados financeiros nao disponiveis para veterinarios.")
         st.stop()
 
+def sel_fazenda_vet(key="vet_faz_global"):
+    """Exibe seletor de fazenda para veterinario e retorna o owner_id selecionado.
+    Retorna None se nao e vet ou nao tem fazenda aprovada."""
+    u = usuario_atual()
+    if not u or not is_vet():
+        return None
+    from database import listar_fazendas_do_vet, listar_lotes
+    import streamlit as st
+    faz_ids = listar_fazendas_do_vet(u["id"])
+    if not faz_ids:
+        st.warning("Nenhuma fazenda aprovada. Solicite acesso a um fazendeiro.")
+        return None
+    if len(faz_ids) == 1:
+        return faz_ids[0]
+    # Montar opcoes com nome dos lotes
+    opcoes = {}
+    for fid in faz_ids:
+        lts = listar_lotes(owner_id=fid)
+        nomes = ", ".join(l[1] for l in lts[:2])
+        if len(lts) > 2: nomes += f" +{len(lts)-2}"
+        opcoes[f"Fazenda {fid} | {nomes}"] = fid
+    sel = st.selectbox("Fazenda", list(opcoes.keys()),
+                       key=key, label_visibility="collapsed")
+    return opcoes[sel]
+
+
 def owner_id_lote_novo():
     """owner_id correto ao criar um lote novo."""
     u = usuario_atual()
