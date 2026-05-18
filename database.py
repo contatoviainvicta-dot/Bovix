@@ -1,35 +1,9 @@
-# pages/sistema.py -- Telas: Inicio, Buscar Animal, Notificacoes, Log Auditoria, Administracao, Gestao Usuarios
+# pages/cadastros.py -- Telas: Cadastrar Lote, Cadastrar Animal, Registrar Pesagem, Registrar Ocorrencia, Registrar Morte, Importar CSV, Editar Lote, Editar Animal, Editar Pesagens, Gerenciar Ocorrencias, Transferir Animal, Status do Lote
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 from database import *
-from database import _conexao, _ph
-
-try:
-    from notifications import (
-        email_boas_vindas, email_trial_expirando, email_trial_expirado,
-        email_vacina_pendente, email_medicamento_critico, email_configurado
-    )
-except ImportError:
-    def email_configurado(): return False
-    def email_boas_vindas(*a, **k): return False, "Email nao configurado"
-    def email_trial_expirando(*a, **k): return False, "Email nao configurado"
-    def email_trial_expirado(*a, **k): return False, "Email nao configurado"
-    def email_vacina_pendente(*a, **k): return False, "Email nao configurado"
-    def email_medicamento_critico(*a, **k): return False, "Email nao configurado"
-
-try:
-    from cepea import cotacao_com_cache, historico_grafico
-except ImportError:
-    def cotacao_com_cache(_db): return dict(preco=0.0, data="", fonte="", sucesso=False, msg="")
-    def historico_grafico(c): return dict(datas=[], precos=[])
-
-try:
-    from exports import gerar_excel_lote, gerar_pdf_relatorio
-except ImportError:
-    def gerar_excel_lote(*a, **k): return b""
-    def gerar_pdf_relatorio(*a, **k): return b""
 from ui import (
     card_kpi, card_kpi_row, alerta, badge,
     badge_status_animal, badge_status_lote, badge_gravidade,
@@ -48,868 +22,973 @@ def hdr(titulo, sub="", desc=""):
     if sub: st.caption(f"{sub} - {desc}" if desc else sub)
     st.divider()
 
-def page_inicio(u):
-    hora = datetime.now().hour
-    sau  = "Bom dia" if hora < 12 else "Boa tarde" if hora < 18 else "Boa noite"
+def page_cadastrar_lote(u):
+    lotes = listar_lotes_usuario()
+    hdr("Cadastrar Lote", "Novo Lote", "Registre um novo lote de animais")
+    c1,c2 = st.columns([2,1])
+    with c1:
+        with st.form("form_lote"):
+            st.markdown("#### Dados do lote")
+            col1,col2 = st.columns(2)
+            with col1:
+                nome         = st.text_input("Nome do lote *")
+                data_ent     = st.date_input("Data de entrada")
+                qtd_comp     = st.number_input("Qtd comprada", 0, step=1)
+                transporte   = st.text_input("Transportadora")
+            with col2:
+                descricao    = st.text_area("Descricao", height=70)
+                qtd_rec      = st.number_input("Qtd recebida", 0, step=1)
+                preco_anim   = st.number_input("Preco por animal (R$)", 0.0)
+            st.markdown("#### Manejo")
+            m1,m2 = st.columns(2)
+            with m1: tipo_alim = st.selectbox("Alimentacao", ["Pasto","Confinamento","Semi-confinamento"])
+            with m2: tipo_diet = st.selectbox("Dieta", ["Capim","Racao","Silagem","Misto"])
+            salvar = st.form_submit_button("Salvar Lote", width='stretch', type="primary")
+        if salvar:
+            if not nome:               st.error("Informe o nome do lote")
+            elif qtd_rec > qtd_comp:   st.error("Qtd recebida nao pode ser maior que comprada")
+            elif qtd_rec == 0:         st.error("Informe a quantidade recebida")
+            else:
+                _oid_lote = u.get("owner_id", u["id"])
+                lid = adicionar_lote(nome, descricao, str(data_ent), qtd_comp, qtd_rec, transporte,
+                                    owner_id=_oid_lote)
+                registrar_auditoria(u["id"], "criar_lote", "lotes", lid, nome)
+                limpar_cache()
+                st.success(f"Lote **{nome}** criado!")
+    with c2:
+        st.markdown("#### Dicas")
+        st.info("Use um nome facil de identificar, ex: Nelore Jan/25")
+        st.info("Qtd recebida pode ser menor que a comprada se houve perdas no transporte")
+        if qtd_comp > 0 and preco_anim > 0:
+            st.metric("Custo total estimado", f"R$ {preco_anim*qtd_comp:,.2f}")
 
-    # ── Header ────────────────────────────────────────────────────────────────
-    st.markdown(f"## {sau}, **{u['nome']}**")
-    st.caption(datetime.now().strftime("%d/%m/%Y - %H:%M"))
-    st.divider()
-
-    lotes   = listar_lotes_usuario()
-    _oid    = owner_id()
-    _is_faz = is_fazendeiro()
-    _is_vet = is_vet()
-
-    # ── Alertas do proprio usuario ─────────────────────────────────────────────
-    # Para medicamentos: sempre usa o id do usuario (nunca None)
-    _oid_med = _oid if _oid is not None else u["id"]
-    pendo = listar_vacinas_pendentes(owner_id=_oid)
-    crit  = listar_medicamentos_criticos(owner_id=_oid_med)
-    parto = listar_partos_previstos(owner_id=_oid)
+    # ============================================================
+    # CADASTRAR ANIMAL
+    # ============================================================
 
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # DASHBOARD DO FAZENDEIRO
-    # ══════════════════════════════════════════════════════════════════════════
-    if _is_faz:
-
-        def _brl(v):
-            try:
-                i, d = f"{float(v):,.2f}".split(".")
-                return f"R$ {i.replace(',','.')},{d}"
-            except: return "R$ 0,00"
-
-        # ── Calcular dados de IA e metricas ──────────────────────────────────
-        import database as _dbc
-        try:
-            cot = cotacao_com_cache(_dbc)
-            _preco_kg = float(cot["preco"]) if cot.get("sucesso") else 195.0
-        except Exception:
-            _preco_kg = 195.0
-
-        _todos_animais = []
-        _prontos_abate = 0
-        _melhor_data   = None
-        _receita_est   = 0.0
-        _margem_est    = 0.0
-        _custo_total   = 0.0
-
-        for l in lotes:
-            _anim_lote = listar_animais_por_lote(l[0])
-            _todos_animais.extend(_anim_lote)
-            try:
-                _prev = prever_abate(l[0], peso_alvo_kg=450,
-                                     preco_kg=_preco_kg, custo_diario=8.0)
-                for _p in _prev:
-                    _dr = _p.get("dias_restantes")
-                    if _dr is not None and _dr <= 30:
-                        _prontos_abate += 1
-                    _receita_est += float(_p.get("receita_prevista") or 0)
-                    _margem_est  += float(_p.get("margem_estimada") or 0)
-                    _custo_total += float(_p.get("custo_estimado") or 0)
-                    _dp = _p.get("data_prevista")
-                    if _dp and (_melhor_data is None or _dp < _melhor_data):
-                        _melhor_data = _dp
-            except Exception:
-                pass
-
-        _n_animais = len(_todos_animais)
-        _n_partos  = len(parto)
-
-        # ── Formatar melhor data ──────────────────────────────────────────────
-        def _fmt_dt(ds):
-            if not ds: return "—"
-            try:
-                from datetime import datetime as _dtm
-                meses = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
-                         7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
-                dt = _dtm.strptime(str(ds)[:10], "%Y-%m-%d").date()
-                return f"{dt.day:02d} {meses[dt.month]} {dt.year}"
-            except: return str(ds)
-
-        # ══ BLOCO 1: PREVISAO DE ABATE IA ════════════════════════════════════
-        st.subheader("Previsao de Abate IA")
-        st.caption(f"Cotacao: R$ {_preco_kg:.2f}/@ — baseada nos dados de pesagem")
-
-        ia_c1, ia_c2, ia_c3, ia_c4 = st.columns(4)
-        ia_c1.metric("Total de animais",      _n_animais)
-        ia_c2.metric("Prontos p/ abate",      _prontos_abate,
-                     delta="prontos" if _prontos_abate else None,
-                     delta_color="normal" if _prontos_abate else "off")
-        ia_c3.metric("Receita total estimada", _brl(_receita_est))
-        ia_c4.metric("Margem total estimada",  _brl(_margem_est))
-
-        ia_c5, ia_c6, ia_c7, ia_c8 = st.columns(4)
-        ia_c5.metric("Custo total estimado",   _brl(_custo_total))
-        ia_c6.metric("Proxima data de abate",  _fmt_dt(_melhor_data))
-        ia_c7.metric("Partos proximos 30d",    _n_partos)
-        ia_c8.metric("Meds. em alerta",        len(crit),
-                     delta="atencao" if crit else None,
-                     delta_color="inverse" if crit else "off")
-
-        if st.button("Ver analise completa de abate", key="btn_ver_abate"):
-            st.session_state.menu = "Previsao de Abate IA"; st.rerun()
-
-        st.divider()
-
-        # ══ BLOCO 2: ALERTAS ═════════════════════════════════════════════════
-        if pendo or crit or parto:
-            st.subheader("Alertas")
-            al1, al2, al3 = st.columns(3)
-            with al1:
-                if pendo:
-                    with st.expander(f"💉 Vacinas ({len(pendo)})", expanded=True):
-                        for v in pendo[:4]:
-                            st.caption(f"- {v[3]} | {v[4]}")
-            with al2:
-                if crit:
-                    with st.expander(f"⚠ Medicamentos ({len(crit)})", expanded=True):
-                        for m in crit[:4]:
-                            mot = "baixo" if (m[3] or 0)<=(m[4] or 0) else f"vence {m[5]}"
-                            st.caption(f"- {m[1]}: {m[3]:.0f} {m[2]} ({mot})")
-            with al3:
-                if parto:
-                    with st.expander(f"🐄 Partos ({len(parto)})", expanded=True):
-                        for p in parto[:4]:
-                            st.caption(f"- {p[1]} | {p[3]}")
-            st.divider()
-
-        # ══ BLOCO 3: LOTES ═══════════════════════════════════════════════════
-        st.subheader("Seus lotes")
-        if not lotes:
-            st.info("Nenhum lote. Va em Lote > Cadastrar Lote.")
+def page_cadastrar_animal(u):
+    hdr("Cadastrar Animal", "Novo Animal", "Vincule um animal a um lote")
+    lotes = listar_lotes_usuario()
+    if not lotes:
+        st.warning("Cadastre um lote primeiro.")
+    else:
+        dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+        c_sel,c_info = st.columns([2,1])
+        with c_sel: lote_sel = st.selectbox("Lote", list(dict_l.keys()))
+        lote_id = dict_l[lote_sel]
+        lote    = obter_lote(lote_id)
+        total   = contar_animais_no_lote(lote_id)
+        vagas   = max(0, lote[5] - total)
+        with c_info:
+            st.metric("Cadastrados / Capacidade", f"{total} / {lote[5]}",
+                      delta=f"{vagas} vaga(s)" if vagas > 0 else "Lote cheio",
+                      delta_color="normal" if vagas > 0 else "inverse")
+        if total >= lote[5]:
+            st.error("Limite do lote atingido.")
         else:
-            ncols = min(3, len(lotes))
-            cols  = st.columns(ncols)
-            for i, l in enumerate(lotes[:6]):
-                try: rs = resumo_lote(l[0])
-                except: rs = dict(ativos=0, mortos=0,
-                                  vacinas_pendentes=0, ocorrencias=0)
-                _tags = []
-                if rs.get("mortos"):            _tags.append(f"Mortes: {rs['mortos']}")
-                if rs.get("vacinas_pendentes"): _tags.append(f"Vac.: {rs['vacinas_pendentes']}")
-                if rs.get("ocorrencias"):       _tags.append(f"Ocorr.: {rs['ocorrencias']}")
-                _ico = "🔴" if _tags else "🟢"
-                with cols[i % ncols]:
-                    st.markdown(f"**{_ico} {l[1]}**")
-                    st.caption(f"Animais: {rs.get('ativos',0)} | "
-                               f"Entrada: {l[3] or '—'}")
-                    if _tags: st.warning(" | ".join(_tags))
-                    else:     st.caption("Sem alertas")
-                    if st.button("Ver lote", key=f"btn_lote_{l[0]}",
-                                 use_container_width=True):
-                        st.session_state.menu = "Workspace do Lote"
-                        st.session_state["ws_lote_id"] = l[0]
+            with st.form("form_animal"):
+                a1,a2,a3 = st.columns(3)
+                with a1: ident  = st.text_input("Brinco / Identificacao *", placeholder="BOI-001")
+                with a2: idade  = st.number_input("Idade (meses)", 0, 240, 24)
+                with a3: p_ent  = st.number_input("Peso entrada (kg)", 0.0)
+                b1,b2,b3 = st.columns(3)
+                with b1: raca   = st.text_input("Raca", placeholder="Nelore")
+                with b2: sexo   = st.selectbox("Sexo", ["indefinido","macho","femea"])
+                with b3: p_alvo = st.number_input("Peso alvo abate (kg)", 0.0)
+                salvar = st.form_submit_button("Cadastrar Animal", width='stretch', type="primary")
+            if salvar:
+                if not ident:
+                    st.error("Informe a identificacao do animal")
+                else:
+                    # Verificar limite do plano antes de cadastrar
+                    _oid_anim = u.get("owner_id", u["id"])
+                    _lim = verificar_limite_animais(_oid_anim) if not is_admin() else dict(ok=True)
+                    if not _lim["ok"]:
+                        st.error(f"Limite do plano atingido: {_lim.get('msg','')}. Faca upgrade para continuar.")
+                    else:
+                        aid = adicionar_animal(ident, idade, lote_id)
+                        if p_alvo > 0: atualizar_animal_detalhes(aid, peso_alvo=p_alvo)
+                        registrar_auditoria(u["id"], "cadastro_animal", "animais", aid, ident)
+                        limpar_cache()
+                        st.success(f"**{ident}** cadastrado no lote **{lote[1]}**!")
                         st.rerun()
 
-        st.divider()
+    # ============================================================
+    # REGISTRAR PESAGEM
+    # ============================================================
 
-        # ══ BLOCO 4: BOTOES GRADE 2x3 ════════════════════════════════════════
-        _BTNS = [
-            ("📝", "Registrar Pesagem",   "Registrar Pesagem"),
-            ("🚨", "Nova Ocorrencia",     "Registrar Ocorrencia"),
-            ("🐄", "Novo Lote",           "Cadastrar Lote"),
-            ("🤖", "Risco Sanitario IA",  "Risco Sanitario IA"),
-            ("📈", "Previsao de Abate",   "Previsao de Abate IA"),
-            ("📊", "Anomalias de Peso",   "Anomalias de Peso"),
-        ]
-        _bcols = st.columns(3)
-        for _bi, (_ico, _label, _menu) in enumerate(_BTNS):
-            with _bcols[_bi % 3]:
-                st.markdown(
-                    f"<div style='text-align:center;font-size:28px'>{_ico}</div>",
-                    unsafe_allow_html=True
-                )
-                if st.button(_label, key=f"grid_btn_{_bi}",
-                             use_container_width=True):
-                    st.session_state.menu = _menu; st.rerun()
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # DASHBOARD DO VETERINARIO
-    # ══════════════════════════════════════════════════════════════════════════
-    elif _is_vet:
-        # ── Agrupar lotes por fazenda (owner_id) ──────────────────────────────
-        _faz_map = {}
-        for _l in lotes:
-            _foid = _l[-1] if len(_l) > 4 else _l[0]
-            _faz_map.setdefault(_foid, []).append(_l)
-
-        _n_fazendas = len(_faz_map)
-        _n_animais  = sum(len(listar_animais_por_lote(l[0])) for l in lotes)
-
-        # ── Cards globais ─────────────────────────────────────────────────────
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Fazendas vinculadas",  _n_fazendas)
-        c2.metric("Total animais",        _n_animais)
-        c3.metric("Vacinas pendentes",    len(pendo),
-                  delta="atencao" if pendo else None,
-                  delta_color="inverse" if pendo else "off")
-        c4.metric("Meds. em alerta",      len(crit),
-                  delta="atencao" if crit else None,
-                  delta_color="inverse" if crit else "off")
-
-        st.divider()
-
-        # ── Seletor de fazenda ────────────────────────────────────────────────
-        if _n_fazendas == 0:
-            st.info("Nenhuma fazenda aprovada. Solicite acesso a um fazendeiro.")
-        elif _n_fazendas == 1:
-            # So uma fazenda - abrir direto
-            _foid_sel = list(_faz_map.keys())[0]
-            _lotes_sel = _faz_map[_foid_sel]
-            st.subheader(f"Fazenda vinculada")
+def page_registrar_pesagem(u):
+    hdr("Registrar Pesagem", "Novo Peso", "Registre o peso atual de um animal")
+    lotes = listar_lotes_usuario()
+    if not lotes:
+        st.warning("Cadastre um lote primeiro.")
+    else:
+        dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+        c1,c2 = st.columns(2)
+        with c1: lote_sel = st.selectbox("Lote", list(dict_l.keys()), key="pes_lote")
+        lote_id = dict_l[lote_sel]
+        animais = listar_animais_por_lote(lote_id)
+        if not animais:
+            st.warning("Nenhum animal neste lote.")
         else:
-            # Multiplas fazendas - mostrar seletor
-            st.subheader("Selecione a fazenda")
-            _faz_opcoes = {}
-            for _foid, _flotes in _faz_map.items():
-                _n_an = sum(len(listar_animais_por_lote(_fl[0])) for _fl in _flotes)
-                _label = f"Fazenda {_foid} — {len(_flotes)} lote(s), {_n_an} animais"
-                _faz_opcoes[_label] = _foid
+            dict_a = {f"{a[1]} (ID {a[0]})": a[0] for a in animais}
+            with c2: anim_sel = st.selectbox("Animal", list(dict_a.keys()), key="pes_anim")
+            animal_id = dict_a[anim_sel]
+            ps_ant = listar_pesagens(animal_id)
+            if ps_ant:
+                ult = ps_ant[-1]
+                det = obter_animal(animal_id)
+                r1,r2,r3 = st.columns(3)
+                r1.metric("Ultimo peso", f"{ult[2]:.1f} kg", f"em {ult[3]}")
+                if det and det[7] > 0:
+                    falta = det[7] - ult[2]
+                    r2.metric("Peso alvo", f"{det[7]:.0f} kg", f"faltam {falta:.1f} kg" if falta>0 else "Atingido!")
+                if len(ps_ant) >= 2:
+                    df_r = pd.DataFrame(ps_ant, columns=["id","aid","peso","data"])
+                    df_r["data"] = pd.to_datetime(df_r["data"])
+                    df_r = df_r.sort_values("data")
+                    dias_r = (df_r["data"].iloc[-1]-df_r["data"].iloc[0]).days
+                    if dias_r > 0:
+                        gmd_r = (df_r["peso"].iloc[-1]-df_r["peso"].iloc[0])/dias_r
+                        r3.metric("GMD atual", f"{gmd_r:.3f} kg/dia")
+                st.divider()
+            with st.form("form_pesagem"):
+                p1,p2 = st.columns(2)
+                with p1: peso   = st.number_input("Peso (kg) *", 0.0, 1000.0, step=0.5)
+                with p2: data_p = st.date_input("Data")
+                salvar = st.form_submit_button("Salvar Pesagem", width='stretch', type="primary")
+            if salvar:
+                if peso <= 0:    st.error("Peso invalido")
+                elif peso > 1000: st.error("Peso muito alto")
+                else:
+                    adicionar_pesagem(animal_id, peso, str(data_p))
+                    registrar_auditoria(u["id"], "pesagem", "pesagens", animal_id, f"{peso}kg em {data_p}")
+                    st.success(f"Pesagem de **{peso:.1f} kg** registrada!")
+                    st.rerun()
 
-            _sel_label = st.selectbox(
-                "Fazenda",
-                list(_faz_opcoes.keys()),
-                key="vet_faz_sel",
-                label_visibility="collapsed"
-            )
-            _foid_sel  = _faz_opcoes[_sel_label]
-            _lotes_sel = _faz_map[_foid_sel]
+    # ============================================================
+    # REGISTRAR OCORRENCIA
+    # ============================================================
+
+
+def page_registrar_ocorrencia(u):
+    hdr("Registrar Ocorrencia", "Nova Ocorrencia", "Doencas, lesoes e medicacoes")
+    lotes = listar_lotes_usuario()
+    if not lotes:
+        st.warning("Cadastre um lote primeiro.")
+    else:
+        dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+        o1,o2 = st.columns(2)
+        with o1: lote_sel = st.selectbox("Lote", list(dict_l.keys()), key="oc_lote")
+        lote_id = dict_l[lote_sel]
+        animais = listar_animais_por_lote(lote_id)
+        if not animais:
+            st.warning("Nenhum animal neste lote.")
+        else:
+            dict_a = {f"{a[1]} (ID {a[0]})": a[0] for a in animais}
+            with o2: anim_sel = st.selectbox("Animal", list(dict_a.keys()), key="oc_anim")
+            animal_id = dict_a[anim_sel]
+            with st.form("form_oc"):
+                oc1,oc2,oc3 = st.columns(3)
+                with oc1: data_oc  = st.date_input("Data")
+                with oc2: tipo_oc  = st.selectbox("Tipo", ["Doenca","Lesao","Medicamento","Outros"])
+                with oc3: grav_oc  = st.selectbox("Gravidade", ["Baixa","Media","Alta"])
+                desc_oc  = st.text_area("Descricao")
+                oc4,oc5,oc6 = st.columns(3)
+                with oc4: custo_oc = st.number_input("Custo (R$)", 0.0)
+                with oc5: dias_oc  = st.number_input("Dias recuperacao", 0)
+                with oc6: stat_oc  = st.selectbox("Status", ["Em tratamento","Resolvido"])
+                salvar = st.form_submit_button("Salvar Ocorrencia", width='stretch', type="primary")
+            if salvar:
+                oid = adicionar_ocorrencia(animal_id, str(data_oc), tipo_oc, desc_oc, grav_oc, custo_oc, dias_oc, stat_oc)
+                registrar_auditoria(u["id"], "ocorrencia", "ocorrencias", oid, f"{tipo_oc}/{grav_oc}")
+                st.success("Ocorrencia registrada!")
+                st.rerun()
+
+    # ============================================================
+    # REGISTRAR MORTE
+    # ============================================================
+
+
+def page_registrar_morte(u):
+    hdr("Registrar Morte", "Baixa de Animal", "Registre a morte e retire o animal do lote")
+    tab1,tab2 = st.tabs(["Registrar", "Historico"])
+    with tab1:
+        lotes = listar_lotes_usuario()
+        if not lotes:
+            st.warning("Cadastre um lote primeiro.")
+        else:
+            dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+            lote_sel_m = st.selectbox("Lote", list(dict_l.keys()), key="morte_lote")
+            lote_id_m  = dict_l[lote_sel_m]
+            animais_m  = listar_animais_por_lote(lote_id_m)
+            if not animais_m:
+                st.warning("Nenhum animal ativo neste lote.")
+            else:
+                dict_am = {f"{a[1]} (ID {a[0]})": a[0] for a in animais_m}
+                with st.form("form_morte"):
+                    anim_sel_m = st.selectbox("Animal", list(dict_am.keys()))
+                    m1,m2 = st.columns(2)
+                    with m1:
+                        data_m  = st.date_input("Data")
+                        causa_m = st.selectbox("Causa", ["Doenca","Acidente","Desaparecimento","Predador","Outras"])
+                    with m2:
+                        custo_m = st.number_input("Custo da perda (R$)", 0.0)
+                        desc_m  = st.text_area("Descricao")
+                    salvar = st.form_submit_button("Registrar Morte", width='stretch', type="primary")
+                if salvar:
+                    registrar_morte(dict_am[anim_sel_m], str(data_m), causa_m, desc_m, custo_m)
+                    registrar_auditoria(u["id"], "morte_animal", "animais", dict_am[anim_sel_m], f"{anim_sel_m} - {causa_m}")
+                    st.success("Morte registrada. Animal removido do lote.")
+                    st.rerun()
+    with tab2:
+        lotes = listar_lotes_usuario()
+        if lotes:
+            dict_l2 = {"Todos": None, **{f"{l[1]} (ID {l[0]})": l[0] for l in lotes}}
+            filtro_m = st.selectbox("Filtrar por lote", list(dict_l2.keys()), key="mort_hist")
+            morts = listar_mortalidade(dict_l2[filtro_m])
+            if morts:
+                df_m = pd.DataFrame(morts, columns=["ID","Animal ID","Animal","Data","Causa","Descricao","Custo Perda"])
+                st.dataframe(df_m, width='stretch')
+                st.metric("Custo total perdas", f"R$ {sum(m[6] for m in morts if m[6]):.2f}")
+            else:
+                st.success("Nenhuma morte registrada.")
+
+    # ============================================================
+    # IMPORTAR CSV
+    # ============================================================
+
+
+def page_importar_csv(u):
+    hdr("Importar CSV", "Importacao em Lote", "Importe pesagens e animais via planilha CSV")
+    lotes = listar_lotes_usuario()
+    st.subheader("Lote de destino")
+    opcao = st.radio("", ["Usar lote existente","Criar novo lote"], horizontal=True, key="imp_op")
+    lote_id = None
+    if opcao == "Criar novo lote":
+        with st.form("form_lote_imp"):
+            ci1,ci2 = st.columns(2)
+            with ci1:
+                nome_nl = st.text_input("Nome do lote *")
+                qtd_c2  = st.number_input("Qtd comprada", 0, step=1)
+                qtd_r2  = st.number_input("Qtd recebida", 0, step=1)
+            with ci2:
+                data_nl = st.date_input("Data entrada")
+                trp_nl  = st.text_input("Transportadora")
+            if st.form_submit_button("Criar lote"):
+                if nome_nl:
+                    lote_id = adicionar_lote(nome_nl, "", str(data_nl), qtd_c2, qtd_r2, trp_nl, owner_id=u.get("owner_id", u["id"]))
+                    registrar_auditoria(u["id"], "criar_lote", "lotes", lote_id, nome_nl)
+                    limpar_cache()
+                    st.success(f"Lote '{nome_nl}' criado!")
+                    st.rerun()
+                else: st.error("Informe o nome.")
+        lotes = listar_lotes_usuario()
+        if lotes: lote_id = lotes[0][0]; st.info(f"Lote: {lotes[0][1]}")
+    else:
+        if not lotes: st.warning("Crie um lote primeiro."); st.stop()
+        dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+        lote_id = dict_l[st.selectbox("Selecione o lote", list(dict_l.keys()), key="imp_lote")]
+
+    if not lote_id: st.stop()
+    st.divider()
+    tab_p,tab_a = st.tabs(["Importar Pesagens","Importar Animais"])
+
+    with tab_p:
+        st.markdown("**Formato CSV:**")
+        st.code("identificacao,peso,data\nBOI-001,310.5,2024-01-15")
+        arq = st.file_uploader("CSV de pesagens", type=["csv"], key="csv_pes")
+        if arq:
+            import csv, io as _io
+            txt = arq.read().decode("utf-8-sig", errors="ignore")
+            linhas = list(csv.DictReader(_io.StringIO(txt)))
+            st.info(f"{len(linhas)} linhas encontradas.")
+            if st.button("Importar pesagens"):
+                res = importar_pesagens_csv(linhas, lote_id)
+                registrar_auditoria(u["id"], "import_pesagens", "pesagens", lote_id, f"{res['importados']} importadas")
+                st.success(f"Importadas: {res['importados']} | Animais criados: {res['animais_criados']} | Erros: {res['erros']}")
+                for msg in res["mensagens"]: st.warning(msg)
+
+    with tab_a:
+        st.markdown("**Formato CSV:**")
+        st.code("identificacao,idade,raca,sexo,peso_alvo\nBOI-001,24,Nelore,macho,450")
+        arq2 = st.file_uploader("CSV de animais", type=["csv"], key="csv_anim")
+        if arq2:
+            import csv, io as _io
+            txt2 = arq2.read().decode("utf-8-sig", errors="ignore")
+            linhas2 = list(csv.DictReader(_io.StringIO(txt2)))
+            st.info(f"{len(linhas2)} linhas encontradas.")
+            if st.button("Importar animais"):
+                # Verificar limite do plano ANTES de importar
+                n_novos = len(linhas2)
+                lim = verificar_limite_animais(u["id"], n_novos)
+                if not lim["pode"]:
+                    st.error(
+                        f"Importacao bloqueada: voce tentou importar {n_novos} animais "
+                        f"mas seu plano permite apenas {lim['disponiveis']} adicionais "
+                        f"(limite: {lim['limite']}, atual: {lim['atual']}). "
+                        f"Faca upgrade do plano para continuar."
+                    )
+                else:
+                    res2 = importar_animais_csv(linhas2, lote_id)
+                    registrar_auditoria(u["id"], "import_animais", "animais", lote_id, f"{res2['importados']} importados")
+                    st.success(f"Importados: {res2['importados']} | Erros: {res2['erros']}")
+                    for msg in res2["mensagens"]: st.warning(msg)
+
+    # ============================================================
+    # DASHBOARD SANITARIO
+    # ============================================================
+
+
+def page_editar_lote(u):
+    hdr("Editar Lote", "Editar / Excluir Lote", "Altere ou remova um lote cadastrado")
+
+    # Botao de sincronizacao em massa (corrige dados historicos)
+    with st.expander("Corrigir contagem de animais em todos os lotes"):
+        st.caption("Use este botao se a quantidade de animais exibida estiver incorreta.")
+        if st.button("Sincronizar todos os lotes agora", key="sync_todos"):
+            resultados = sincronizar_todos_lotes()
+            for lid_s, nome_s, n_s in resultados:
+                st.write(f"Lote **{nome_s}**: {n_s} animais ativos")
+            st.success("Contagens atualizadas com sucesso!")
+            st.rerun()
+
+    lotes = listar_lotes_usuario()
+    if not lotes:
+        st.warning("Nenhum lote cadastrado.")
+    else:
+        dict_l  = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+        lote_sel = st.selectbox("Selecione o lote para editar", list(dict_l.keys()), key="ed_lote")
+        lote_id  = dict_l[lote_sel]
+        lote     = obter_lote(lote_id)
+        rs       = resumo_lote(lote_id)
+
+        # Resumo do lote
+        k1,k2,k3,k4 = st.columns(4)
+        k1.metric("Animais ativos", rs["ativos"])
+        k2.metric("Ocorrencias",    rs["ocorrencias"])
+        k3.metric("Mortes",         rs["mortos"])
+        k4.metric("GTAs emitidas",  rs["gtas_emitidas"])
+        st.divider()
+
+        # Contagem real de animais ativos (fonte da verdade)
+        ativos_reais = rs["ativos"]
+        st.info(f"Animais ativos no banco: **{ativos_reais}** (calculado automaticamente a partir dos cadastros)")
+
+        tab_edit, tab_del = st.tabs(["Editar dados", "Excluir lote"])
+
+        with tab_edit:
+            with st.form("form_edit_lote"):
+                el1,el2 = st.columns(2)
+                with el1:
+                    nome_e     = st.text_input("Nome *",          value=lote[1])
+                    data_e     = st.date_input("Data entrada",    value=pd.to_datetime(lote[3]).date())
+                    qtd_comp_e = st.number_input("Qtd comprada",  0, step=1, value=int(lote[4]))
+                    transp_e   = st.text_input("Transportadora",  value=lote[6] or "")
+                with el2:
+                    desc_e     = st.text_area("Descricao",        value=lote[2] or "", height=70)
+                    st.caption(f"Qtd recebida atual: {ativos_reais} animais ativos (atualizado automaticamente)")
+                    preco_e    = st.number_input("Preco por animal (R$)", 0.0, step=50.0)
+                salvar_e = st.form_submit_button("Salvar alteracoes", type="primary", width='stretch')
+            if salvar_e:
+                if not nome_e:
+                    st.error("Informe o nome do lote.")
+                else:
+                    # qtd_recebida e sempre recalculada pelos animais ativos reais
+                    atualizar_lote(lote_id, nome_e, desc_e, str(data_e), qtd_comp_e, ativos_reais, transp_e, preco_e)
+                    registrar_auditoria(u["id"], "editar_lote", "lotes", lote_id, nome_e)
+                    limpar_cache()
+                    st.success(f"Lote **{nome_e}** atualizado! Animais ativos: {ativos_reais}")
+                    st.rerun()
+
+        with tab_del:
+            st.warning("A exclusao e permanente e nao pode ser desfeita.")
+            n_anim = contar_animais_no_lote(lote_id, incluir_inativos=True)
+            if n_anim > 0:
+                st.error(f"Impossivel excluir: este lote tem {n_anim} animal(is) cadastrado(s).")
+                st.info("Exclua ou transfira todos os animais antes de remover o lote.")
+            else:
+                confirma = st.checkbox("Confirmo que desejo excluir este lote permanentemente")
+                if confirma:
+                    if st.button("Excluir lote definitivamente", type="primary"):
+                        excluir_lote(lote_id)
+                        registrar_auditoria(u["id"], "excluir_lote", "lotes", lote_id, lote[1])
+                        limpar_cache()
+                        st.success("Lote excluido com sucesso.")
+                        st.rerun()
+
+    # ============================================================
+    # EDITAR ANIMAL
+    # ============================================================
+
+
+def page_editar_animal(u):
+    hdr("Editar Animal", "Editar / Excluir Animal", "Altere dados ou exclua animais em massa")
+    lotes = listar_lotes_usuario()
+    if not lotes:
+        st.warning("Nenhum lote cadastrado.")
+        return
+
+    dict_l  = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+    lote_sel = st.selectbox("Selecionar lote", list(dict_l.keys()), key="ea_lote")
+    lote_id  = dict_l[lote_sel]
+
+    animais = listar_animais_por_lote(lote_id, incluir_inativos=True)
+    if not animais:
+        st.warning("Nenhum animal neste lote.")
+        return
+
+    tab_editar, tab_excluir = st.tabs(["Editar animal", "Excluir animais"])
+
+    # ── ABA 1: Editar animal individual ──────────────────────────────────────
+    with tab_editar:
+        dict_a   = {f"{a[1]} (ID {a[0]})": a[0] for a in animais}
+        anim_sel = st.selectbox("Animal", list(dict_a.keys()), key="ea_anim")
+        anim_id  = dict_a[anim_sel]
+
+        dados = obter_animal(anim_id)
+        if dados:
+            with st.form("form_edit_anim"):
+                f1, f2 = st.columns(2)
+                with f1:
+                    n_ident = st.text_input("Identificacao (brinco)",
+                                            value=dados.get("identificacao",""))
+                    n_idade = st.number_input("Idade (meses)", 0, 300,
+                                             int(dados.get("idade") or 0))
+                    n_raca  = st.text_input("Raca",
+                                           value=dados.get("raca",""))
+                with f2:
+                    n_sexo  = st.selectbox("Sexo",
+                                          ["indefinido","macho","femea"],
+                                          index=["indefinido","macho","femea"].index(
+                                              dados.get("sexo","indefinido")
+                                          ))
+                    n_pe    = st.number_input("Peso de entrada (kg)", 0.0,
+                                             value=float(dados.get("peso_entrada") or 0))
+                    n_palvo = st.number_input("Peso alvo (kg)", 0.0,
+                                             value=float(dados.get("peso_alvo") or 0))
+                n_obs = st.text_area("Observacoes",
+                                    value=dados.get("observacoes",""))
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.form_submit_button("Salvar alteracoes", type="primary"):
+                        atualizar_animal(anim_id, n_ident, n_idade, n_raca,
+                                        n_sexo, n_pe, n_palvo, n_obs)
+                        registrar_auditoria(u["id"], "editar_animal",
+                                           "animais", anim_id, n_ident)
+                        st.success(f"Animal {n_ident} atualizado!")
+                        limpar_cache(); st.rerun()
+                with c2:
+                    if st.form_submit_button("Excluir este animal",
+                                            type="secondary"):
+                        excluir_animal(anim_id)
+                        registrar_auditoria(u["id"], "excluir_animal",
+                                           "animais", anim_id, "excluido")
+                        st.warning("Animal excluido.")
+                        limpar_cache(); st.rerun()
+
+    # ── ABA 2: Excluir em massa com checkboxes ────────────────────────────────
+    with tab_excluir:
+        st.subheader("Selecionar animais para excluir")
+        st.caption("Marque os animais que deseja excluir. A acao e irreversivel.")
+
+        # Filtro rapido
+        _busca_ex = st.text_input("Filtrar por brinco",
+                                  placeholder="Digite parte do brinco...",
+                                  key="ex_busca")
+        _anim_filtrados = [
+            a for a in animais
+            if _busca_ex.lower() in a[1].lower()
+        ] if _busca_ex else animais
+
+        if not _anim_filtrados:
+            st.info("Nenhum animal encontrado com esse filtro.")
+        else:
+            # Selecionar/Desmarcar todos
+            col_check, col_info = st.columns([1, 3])
+            with col_check:
+                _sel_todos = st.checkbox("Selecionar todos", key="ex_todos")
+
+            # Inicializar selecao na sessao
+            if "excluir_ids" not in st.session_state:
+                st.session_state.excluir_ids = set()
+            if _sel_todos:
+                st.session_state.excluir_ids = {a[0] for a in _anim_filtrados}
+
             st.divider()
 
-        if _n_fazendas > 0:
-            _lotes_sel = _faz_map.get(
-                st.session_state.get("vet_faz_sel_id", list(_faz_map.keys())[0]),
-                list(_faz_map.values())[0]
-            ) if _n_fazendas > 1 else list(_faz_map.values())[0]
+            # Checkboxes por animal
+            for a in _anim_filtrados:
+                aid, aident, aidade, _ = a[0], a[1], a[2], a[3]
+                _marcado = st.checkbox(
+                    f"**{aident}** — {aidade} meses",
+                    value=aid in st.session_state.excluir_ids,
+                    key=f"ex_chk_{aid}"
+                )
+                if _marcado:
+                    st.session_state.excluir_ids.add(aid)
+                else:
+                    st.session_state.excluir_ids.discard(aid)
 
-            # Guardar fazenda selecionada na sessao
-            if _n_fazendas > 1:
-                st.session_state["vet_faz_sel_id"] = _foid_sel
+            st.divider()
+            _n_sel = len(st.session_state.excluir_ids)
 
-            # ── Alertas da fazenda selecionada ────────────────────────────────
-            _ids_lotes_sel = [_fl[0] for _fl in _lotes_sel]
-            _pendo_faz = [v for v in pendo if v[1] in _ids_lotes_sel]
-            _parto_faz = [p for p in parto if p[2] in [_fl[1] for _fl in _lotes_sel]]
-
-            al1, al2 = st.columns(2)
-            with al1:
-                st.subheader("Alertas sanitarios")
-                if not _pendo_faz and not crit:
-                    st.success("Nenhum alerta critico.")
-                if _pendo_faz:
-                    with st.expander(
-                        f"💉 Vacinas pendentes ({len(_pendo_faz)})",
-                        expanded=True
+            if _n_sel == 0:
+                st.info("Nenhum animal selecionado.")
+            else:
+                st.warning(f"**{_n_sel} animal(is) selecionado(s) para exclusao.**")
+                col_b1, col_b2 = st.columns(2)
+                with col_b1:
+                    if st.button("Limpar selecao", key="ex_limpar"):
+                        st.session_state.excluir_ids = set()
+                        st.rerun()
+                with col_b2:
+                    if st.button(
+                        f"Excluir {_n_sel} animal(is)",
+                        type="primary", key="ex_confirmar"
                     ):
-                        for v in _pendo_faz[:5]:
-                            st.caption(f"- {v[3]} | Lote: {v[2]} | {v[4]}")
-                if crit:
-                    with st.expander(
-                        f"⚠ Meds. proprios em alerta ({len(crit)})",
-                        expanded=True
-                    ):
-                        for m in crit[:5]:
-                            mot = "baixo" if (m[3] or 0)<=(m[4] or 0)                                   else f"vence {m[5]}"
-                            st.caption(f"- {m[1]}: {m[3]:.0f} {m[2]} ({mot})")
+                        _n_ok = 0
+                        for _aid_ex in list(st.session_state.excluir_ids):
+                            try:
+                                excluir_animal(_aid_ex)
+                                registrar_auditoria(
+                                    u["id"], "excluir_animal_massa",
+                                    "animais", _aid_ex, "excluido em massa"
+                                )
+                                _n_ok += 1
+                            except Exception:
+                                pass
+                        st.session_state.excluir_ids = set()
+                        limpar_cache()
+                        st.success(f"{_n_ok} animal(is) excluido(s) com sucesso!")
+                        st.rerun()
 
-            with al2:
-                st.subheader("Lotes desta fazenda")
-                for _fl in _lotes_sel:
-                    try: _rs = resumo_lote(_fl[0])
-                    except: _rs = dict(ativos=0, ocorrencias=0)
-                    _ico2 = "🔴" if _rs.get("ocorrencias") else "🟢"
-                    _n_at = _rs.get("ativos", 0)
-                    _n_oc = _rs.get("ocorrencias", 0)
-                    with st.container():
-                        cc1, cc2 = st.columns([3, 1])
-                        with cc1:
-                            st.markdown(
-                                f"**{_ico2} {_fl[1]}** — "
-                                f"{_n_at} animais"
-                                + (f" | {_n_oc} ocorr." if _n_oc else "")
-                            )
-                        with cc2:
-                            if st.button(
-                                "Abrir", key=f"vet_lote_{_fl[0]}",
-                                use_container_width=True
-                            ):
-                                st.session_state.menu = "Workspace do Lote"
-                                st.session_state["ws_lote_id"] = _fl[0]
+
+def page_editar_pesagens(u):
+    hdr("Editar Pesagens", "Corrigir Pesagens", "Edite ou exclua pesagens incorretas")
+    lotes = listar_lotes_usuario()
+    if not lotes:
+        st.warning("Nenhum lote cadastrado.")
+    else:
+        dict_l  = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+        ep1,ep2 = st.columns(2)
+        with ep1: lote_sel = st.selectbox("Lote", list(dict_l.keys()), key="ep_lote")
+        lote_id  = dict_l[lote_sel]
+        animais  = listar_animais_por_lote(lote_id)
+
+        if not animais:
+            st.warning("Nenhum animal neste lote.")
+        else:
+            modo = st.radio("Visualizar", ["Todas do lote","Por animal"], horizontal=True)
+
+            if modo == "Por animal":
+                dict_a = {f"{a[1]} (ID {a[0]})": a[0] for a in animais}
+                with ep2: anim_sel = st.selectbox("Animal", list(dict_a.keys()), key="ep_anim")
+                pesagens = listar_pesagens(dict_a[anim_sel])
+            else:
+                pesagens_raw = listar_pesagens_lote(lote_id)
+                pesagens     = [(r[0], r[4], r[2], r[3]) for r in pesagens_raw]
+                nomes_map    = {r[4]: r[1] for r in pesagens_raw}
+
+            if not pesagens:
+                st.info("Nenhuma pesagem registrada.")
+            else:
+                # Tabela visual
+                df_ps = pd.DataFrame(pesagens, columns=["ID","Animal ID","Peso (kg)","Data"])
+                if modo == "Todas do lote" and "nomes_map" in dir():
+                    df_ps["Animal"] = df_ps["Animal ID"].map(nomes_map)
+                    df_ps = df_ps[["ID","Animal","Peso (kg)","Data"]]
+                df_ps["Data"] = pd.to_datetime(df_ps["Data"]).dt.strftime("%d/%m/%Y")
+                st.dataframe(df_ps, width='stretch')
+
+                st.divider()
+                st.subheader("Selecionar pesagem para editar")
+                dict_pes = {f"ID {p[0]} | {pd.to_datetime(p[3]).strftime('%d/%m/%Y')} | {p[2]:.1f} kg": p[0]
+                            for p in pesagens}
+                pes_sel  = st.selectbox("Pesagem", list(dict_pes.keys()), key="ep_pes")
+                pes_id   = dict_pes[pes_sel]
+                pes_cur  = next((p for p in pesagens if p[0]==pes_id), None)
+
+                tab_edit_p, tab_del_p = st.tabs(["Corrigir", "Excluir"])
+
+                with tab_edit_p:
+                    with st.form("form_edit_pes"):
+                        fe1,fe2 = st.columns(2)
+                        with fe1:
+                            peso_novo = st.number_input("Peso (kg) *", 0.0, 1000.0,
+                                                         value=float(pes_cur[2]) if pes_cur else 0.0,
+                                                         step=0.5)
+                        with fe2:
+                            data_nova = st.date_input("Data",
+                                                       value=pd.to_datetime(pes_cur[3]).date() if pes_cur else date.today())
+                        if st.form_submit_button("Salvar correcao", type="primary", width='stretch'):
+                            if peso_novo <= 0:       st.error("Peso invalido.")
+                            elif peso_novo > 1000:   st.error("Peso muito alto.")
+                            else:
+                                atualizar_pesagem(pes_id, peso_novo, str(data_nova))
+                                registrar_auditoria(u["id"], "editar_pesagem", "pesagens", pes_id,
+                                                    f"{peso_novo}kg em {data_nova}")
+                                st.success("Pesagem corrigida!")
                                 st.rerun()
 
-        st.divider()
-        st.subheader("Acoes rapidas")
-        qa1, qa2, qa3 = st.columns(3)
-        if qa1.button("Registrar Ocorrencia", use_container_width=True):
-            st.session_state.menu = "Registrar Ocorrencia"; st.rerun()
-        if qa2.button("Registrar Pesagem",    use_container_width=True):
-            st.session_state.menu = "Registrar Pesagem";    st.rerun()
-        if qa3.button("Prontuario Animal",    use_container_width=True):
-            st.session_state.menu = "Prontuario Animal";    st.rerun()
+                with tab_del_p:
+                    if pes_cur:
+                        st.warning(f"Excluir pesagem de {pes_cur[2]:.1f} kg registrada em {pd.to_datetime(pes_cur[3]).strftime('%d/%m/%Y')}?")
+                    confirma_p = st.checkbox("Confirmo a exclusao desta pesagem")
+                    if confirma_p:
+                        if st.button("Excluir pesagem", type="primary"):
+                            excluir_pesagem(pes_id)
+                            registrar_auditoria(u["id"], "excluir_pesagem", "pesagens", pes_id, "excluido")
+                            st.success("Pesagem excluida.")
+                            st.rerun()
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # DASHBOARD DO ADMIN
-    # ══════════════════════════════════════════════════════════════════════════
+    # ============================================================
+    # GERENCIAR OCORRENCIAS
+    # ============================================================
+
+
+def page_gerenciar_ocorrencias(u):
+    hdr("Gerenciar Ocorrencias", "Tratamentos e Ocorrencias", "Edite ocorrencias e resolva tratamentos pendentes")
+
+    # ── Painel de alertas de tratamentos vencidos ──────────────────────
+    vencidos = listar_tratamentos_vencidos(owner_id=owner_id())
+    if vencidos:
+        st.error(f"ATENCAO: {len(vencidos)} tratamento(s) com prazo vencido!")
+        with st.expander(f"Ver {len(vencidos)} tratamento(s) vencido(s)", expanded=True):
+            for v in vencidos:
+                try:
+                    prev_alta  = pd.to_datetime(v[10]).date()
+                    dias_atraso = (date.today() - prev_alta).days
+                except Exception:
+                    dias_atraso = 0
+                c1,c2,c3,c4 = st.columns([2,2,1,2])
+                c1.write(f"**{v[2]}**")
+                c2.write(f"Lote: {v[3]}")
+                c3.write(f"Tipo: {v[5]}")
+                c4.write(f"Vencido ha {dias_atraso} dia(s)")
     else:
-        _dash = resumo_dashboard(owner_id=None)
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total lotes",   _dash.get("lotes", 0))
-        c2.metric("Total animais", _dash.get("animais", 0))
-        c3.metric("Usuarios",      len(listar_usuarios()))
-        c4.metric("Vacinas pend.", _dash.get("vacinas_pendentes", 0))
-        st.divider()
-        st.subheader("Acoes rapidas")
-        qa1, qa2, qa3 = st.columns(3)
-        if qa1.button("Gestao Usuarios",  use_container_width=True):
-            st.session_state.menu = "Gestao Usuarios";  st.rerun()
-        if qa2.button("Log Auditoria",    use_container_width=True):
-            st.session_state.menu = "Log Auditoria";    st.rerun()
-        if qa3.button("Administracao",    use_container_width=True):
-            st.session_state.menu = "Administracao";    st.rerun()
-
-    # ============================================================
-    # BUSCAR ANIMAL
-    # ============================================================
-
-
-def page_buscar_animal(u):
-    lotes = listar_lotes_usuario()
-    hdr("Buscar Animal", "Busca Global", "Encontre qualquer animal pelo brinco ou identificacao")
-    termo = st.text_input("Identificacao / brinco", placeholder="Ex: BOI-001")
-    if termo:
-        # Buscar apenas nos lotes do usuario logado
-        _lotes_busca = listar_lotes_usuario()
-        _lids_busca  = {l[0] for l in _lotes_busca}
-        encontrados  = [
-            a
-            for lid in _lids_busca
-            for a in listar_animais_por_lote(lid)
-            if termo.lower() in a[1].lower()
-        ]
-        if encontrados:
-            st.success(f"{len(encontrados)} animal(is) encontrado(s)")
-            for a in encontrados:
-                lote = obter_lote(a[3])
-                nome_lote = lote[1] if lote else "?"
-                with st.expander(f"{a[1]} -- Lote: {nome_lote}"):
-                    det = obter_animal(a[0])
-                    c1,c2 = st.columns(2)
-                    with c1:
-                        st.write(f"ID: {a[0]} | Idade: {a[2]} meses")
-                        if det: st.write(f"Raca: {det[5]} | Peso alvo: {det[7]} kg")
-                    with c2:
-                        ps = listar_pesagens(a[0])
-                        ocs = listar_ocorrencias(a[0])
-                        sc  = calcular_score_saude(a[0])
-                        st.write(f"Pesagens: {len(ps)} | Ocorrencias: {len(ocs)}")
-                        st.write(f"Score saude: {sc['score']}/100 ({sc['classificacao']})")
-                        car = verificar_carencia(a[0])
-                        if car["em_carencia"]:
-                            st.warning(f"Em carencia ate {car['liberado_em']}")
-        else:
-            st.warning(f"Nenhum animal encontrado para '{termo}'")
-
-    # ============================================================
-    # CADASTRAR LOTE
-    # ============================================================
-
-
-def page_notificacoes(u):
-    lotes = listar_lotes_usuario()
-    parto = listar_partos_previstos(owner_id=owner_id())
-    pend  = listar_vacinas_pendentes(owner_id=owner_id())
-    _oid_notif_med = owner_id() if owner_id() is not None else u["id"]
-    crit  = listar_medicamentos_criticos(owner_id=_oid_notif_med)
-    hdr("Notificacoes", "Central de Notificacoes", "Alertas automaticos e manuais por e-mail")
-
-    if not email_configurado():
-        st.warning("E-mail nao configurado. Configure em .streamlit/secrets.toml:")
-        st.code("""[email]
-    smtp_host     = smtp.gmail.com
-    smtp_port     = 587
-    smtp_user     = seu@gmail.com
-    smtp_password = senha_app_google
-    remetente     = Gestao Pecuaria <seu@gmail.com>""", language="toml")
-        st.info("Use Senha de App do Google - nao a senha da conta. Veja: myaccount.google.com/apppasswords")
-    else:
-        st.success("E-mail configurado e pronto para envio.")
+        st.success("Nenhum tratamento com prazo vencido.")
 
     st.divider()
-    tab_alertas, tab_risco, tab_abate, tab_config = st.tabs([
-        "Alertas do Sistema", "Alerta de Risco IA", "Alerta de Abate IA", "Historico"
-    ])
 
-    with tab_alertas:
-        st.subheader("Alertas manuais")
-        col_a1, col_a2, col_a3 = st.columns(3)
-
-        with col_a1:
-            st.metric("Vacinas pendentes", len(pend),
-                     delta="atencao" if pend else None, delta_color="inverse")
-            if pend:
-                destino_v = st.text_input("Email destino", value=u["email"], key="dest_vac")
-                if st.button("Enviar alerta vacinas", type="primary", key="btn_vac"):
-                    if email_configurado():
-                        vs = [{"lote":v[2],"vacina":v[3],"data_prevista":v[4]} for v in pend]
-                        ok, msg = email_vacina_pendente(destino_v, u["nome"], vs)
-                        st.success(msg) if ok else st.error(msg)
-                    else:
-                        st.error("Configure o e-mail primeiro")
-            else:
-                st.success("Nenhuma vacina pendente")
-
-        with col_a2:
-            st.metric("Medicamentos criticos", len(crit),
-                     delta="atencao" if crit else None, delta_color="inverse")
-            if crit:
-                destino_m = st.text_input("Email destino", value=u["email"], key="dest_med")
-                if st.button("Enviar alerta meds", type="primary", key="btn_med"):
-                    if email_configurado():
-                        meds = [{"nome":m[1],"estoque_atual":m[3],"unidade":m[2],"validade":m[5] or ""} for m in crit]
-                        ok, msg = email_medicamento_critico(destino_m, u["nome"], meds)
-                        st.success(msg) if ok else st.error(msg)
-                    else:
-                        st.error("Configure o e-mail primeiro")
-            else:
-                st.success("Estoque OK")
-
-        with col_a3:
-            st.metric("Partos previstos 30d", len(parto))
-            if parto:
-                destino_p = st.text_input("Email destino", value=u["email"], key="dest_par")
-                if st.button("Enviar alerta partos", type="primary", key="btn_par"):
-                    if email_configurado():
-                        pts = [{"animal":p[1],"lote":p[2],"data_parto_previsto":p[3]} for p in parto]
-                        ok, msg = email_parto_previsto(destino_p, u["nome"], pts)
-                        st.success(msg) if ok else st.error(msg)
-                    else:
-                        st.error("Configure o e-mail primeiro")
-            else:
-                st.info("Nenhum parto previsto")
-
-    with tab_risco:
-        st.subheader("Alerta de Risco Sanitario por IA")
-        st.caption("Envia analise de risco de todos os lotes para um email")
-        lotes_risco = listar_lotes_usuario()
-        if not lotes_risco:
-            st.info("Nenhum lote cadastrado.")
-        else:
-            with st.spinner("Calculando riscos..."):
-                resumo_r = resumo_ia_fazenda(owner_id=owner_id())
-
-            # Mostrar resumo
-            criticos_ia = [r for r in resumo_r if r['risco_nivel'] in ['Critico','Alto']]
-            if criticos_ia:
-                st.error(f"{len(criticos_ia)} lote(s) com risco Alto ou Critico!")
-                for r in criticos_ia:
-                    st.warning(f"**{r['lote_nome']}** - {r['risco_nivel']} ({r['risco_score']}pts) - {r['principal_risco']}")
-            else:
-                st.success("Nenhum lote em situacao critica.")
-
-            destino_r = st.text_input("Enviar relatorio para", value=u["email"], key="dest_risco")
-            if st.button("Enviar relatorio de risco por email", type="primary", key="btn_risco"):
-                if email_configurado():
-                    # Montar lista de vacinas pendentes como proxy de risco
-                    vs_r = [{"lote":r['lote_nome'],
-                             "vacina":f"Risco {r['risco_nivel']} ({r['risco_score']}pts)",
-                             "data_prevista":r['principal_risco']} for r in resumo_r]
-                    ok, msg = email_vacina_pendente(destino_r, u["nome"], vs_r)
-                    st.success("Relatorio enviado!") if ok else st.error(msg)
-                else:
-                    st.error("Configure o e-mail primeiro")
-
-    with tab_abate:
-        st.subheader("Alerta de Animais Proximos do Abate")
-        lote_id_ab, _ = sel_lote("notif_abate_lote")
-        if lote_id_ab:
-            col_ab1, col_ab2, col_ab3 = st.columns(3)
-            with col_ab1: peso_ab = st.number_input("Peso alvo (kg)", 300.0, 600.0, 450.0, key="notif_pa")
-            with col_ab2: preco_ab = st.number_input("Preco/kg (R$)", 1.0, 50.0, 10.0, key="notif_pp")
-            with col_ab3: custo_ab = st.number_input("Custo diario (R$)", 1.0, 100.0, 12.0, key="notif_cd")
-
-            with st.spinner("Calculando previsoes..."):
-                prev_ab = prever_abate(lote_id_ab, peso_ab, preco_ab, custo_ab)
-
-            prontos_ab = [p for p in prev_ab
-                         if p['status'] in ['Pronto para abate','Proximo do abate']]
-            st.metric("Animais prontos ou proximos", len(prontos_ab))
-
-            if prontos_ab:
-                destino_ab = st.text_input("Enviar para", value=u["email"], key="dest_abate")
-                if st.button("Enviar alerta de abate", type="primary", key="btn_abate"):
-                    if email_configurado():
-                        lista_ab = [{"animal":p['identificacao'],
-                                    "lote": lote_id_ab,
-                                    "peso_atual":p['peso_atual'],
-                                    "peso_alvo":peso_ab,
-                                    "data_prevista":p['data_prevista'] or "Pronto"} for p in prontos_ab]
-                        ok, msg = email_abate_previsto(destino_ab, u["nome"], lista_ab)
-                        st.success(msg) if ok else st.error(msg)
-                    else:
-                        st.error("Configure o e-mail primeiro")
-            else:
-                st.info("Nenhum animal proximo do peso de abate com os parametros atuais.")
-
-    with tab_config:
-        st.info("Historico de notificacoes enviadas em breve.")
-
-    if u["perfil"] == "admin":
-        st.divider()
-        st.subheader("Gestao de Planos")
-        usuarios = listar_usuarios()
-        if usuarios:
-            df_u = pd.DataFrame(usuarios, columns=["ID","Nome","Email","Perfil","Fazenda"])
-            st.dataframe(df_u, width='stretch')
-        with st.form("form_conv"):
-            uid_c = st.number_input("ID usuario para converter para PAGO", 1, step=1)
-            if st.form_submit_button("Converter para pago"):
-                converter_para_pago(int(uid_c))
-                st.success(f"Usuario {uid_c} convertido!"); st.rerun()
-
-    # ============================================================
-    # LOG AUDITORIA
-    # ============================================================
-
-
-def page_log_auditoria(u):
-    hdr("Log Auditoria", "Log de Auditoria", "Historico de acoes por usuario")
-    if u["perfil"] != "admin":
-        st.warning("Acesso restrito a administradores.")
-    else:
-        c1,c2 = st.columns(2)
-        lim   = c1.slider("Ultimos registros", 10, 500, 100)
-        usuarios = listar_usuarios()
-        dict_us  = {"Todos": None, **{f"{x[1]} (ID {x[0]})": x[0] for x in usuarios}}
-        uf       = c2.selectbox("Filtrar usuario", list(dict_us.keys()))
-        logs = listar_auditoria(lim, dict_us[uf])
-        if logs:
-            df_log = pd.DataFrame(logs, columns=["ID","Usuario","Acao","Tabela","Reg ID","Detalhe","Data/Hora"])
-            st.dataframe(df_log, width='stretch')
-            st.metric("Total registros", len(logs))
-        else: st.info("Nenhum registro.")
-
-    # ============================================================
-    # ADMINISTRACAO
-    # ============================================================
-
-
-def page_administracao(u):
-    hdr("Administracao", "Administracao", "Usuarios, planos e configuracoes")
-    is_admin_local = u["perfil"] == "admin"
-    t1, t2, t_em = st.tabs(["Usuarios", "Alterar Senha", "Disparar Emails Trial"])
-
-    with t_em:
-        if not is_admin_local:
-            st.warning("Acesso restrito a administradores.")
-        else:
-            st.subheader("Emails automaticos de trial")
-            st.caption("Envia emails para usuarios com trial expirando ou expirado.")
-            try:
-                from notifications import (
-                    email_trial_expirando, email_trial_expirado, email_configurado
-                )
-                _has_email = True
-            except ImportError:
-                _has_email = False
-
-            if not _has_email or not email_configurado():
-                st.warning("E-mail nao configurado. Configure SMTP em .streamlit/secrets.toml.")
-            else:
-                try:
-                    usuarios_trial = listar_usuarios_trial_expirando(dias_limite=7)
-                except Exception:
-                    usuarios_trial = []
-
-                if not usuarios_trial:
-                    st.success("Nenhum usuario com trial expirando nos proximos 7 dias.")
-                else:
-                    st.info(f"**{len(usuarios_trial)} usuario(s) em situacao de trial:**")
-                    for usr in usuarios_trial:
-                        uid_t, nome_t, email_t = usr[0], usr[1], usr[2]
-                        dias_rest = usr[3] if len(usr) > 3 else 0
-                        status = "Expirado" if dias_rest <= 0 else f"{dias_rest} dia(s) restantes"
-                        with st.expander(f"{nome_t} - {email_t} - {status}"):
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                if 0 < dias_rest <= 7:
-                                    if st.button("Enviar 'expirando'", key=f"em_e_{uid_t}"):
-                                        ok, msg = email_trial_expirando(email_t, nome_t, dias_rest)
-                                        st.success(msg) if ok else st.error(msg)
-                            with c2:
-                                if dias_rest <= 0:
-                                    if st.button("Enviar 'expirado'", key=f"em_x_{uid_t}"):
-                                        ok, msg = email_trial_expirado(email_t, nome_t)
-                                        st.success(msg) if ok else st.error(msg)
-
-                    st.divider()
-                    if st.button("Disparar TODOS os emails", type="primary", key="em_all"):
-                        ok_n, err_n = 0, 0
-                        for usr in usuarios_trial:
-                            uid_t, nome_t, email_t = usr[0], usr[1], usr[2]
-                            dias_rest = usr[3] if len(usr) > 3 else 0
-                            try:
-                                if 0 < dias_rest <= 7:
-                                    ok, _ = email_trial_expirando(email_t, nome_t, dias_rest)
-                                elif dias_rest <= 0:
-                                    ok, _ = email_trial_expirado(email_t, nome_t)
-                                else:
-                                    continue
-                                if ok: ok_n += 1
-                                else:  err_n += 1
-                            except Exception:
-                                err_n += 1
-                        st.success(f"Sucesso: {ok_n} | Erros: {err_n}")
-
-    with t1:
-        if not is_admin_local: st.warning("Acesso restrito a administradores.")
-        else:
-            usuarios = listar_usuarios()
-            if usuarios:
-                df_u = pd.DataFrame(usuarios, columns=["ID","Nome","Email","Perfil","Fazenda"])
-                st.dataframe(df_u, width='stretch')
-            st.subheader("Criar usuario")
-            with st.form("form_user"):
-                au1,au2 = st.columns(2)
-                with au1:
-                    n_nome  = st.text_input("Nome")
-                    n_email = st.text_input("Email")
-                with au2:
-                    n_senha = st.text_input("Senha", type="password")
-                    n_perf  = st.selectbox("Perfil", ["fazendeiro","veterinario","admin"])
-                if st.form_submit_button("Criar", type="primary"):
-                    if n_nome and n_email and n_senha:
-                        try:
-                            uid_n = criar_usuario(n_nome, n_email, n_senha, n_perf)
-                            ativar_trial(uid_n)
-                            st.success("Usuario criado!"); st.rerun()
-                        except Exception: st.error("Email ja cadastrado.")
-                    else: st.error("Preencha todos os campos.")
-    with t2:
-        with st.form("form_senha"):
-            senha_a = st.text_input("Senha atual", type="password")
-            nova_s  = st.text_input("Nova senha", type="password")
-            conf_s  = st.text_input("Confirmar", type="password")
-            if st.form_submit_button("Alterar", type="primary"):
-                if not autenticar_usuario(u["email"], senha_a): st.error("Senha atual incorreta.")
-                elif nova_s != conf_s:                          st.error("Senhas nao coincidem.")
-                elif len(nova_s) < 6:                          st.error("Minimo 6 caracteres.")
-                else:
-                    alterar_senha(u["id"], nova_s)
-                    st.success("Senha alterada!")
-
-    # ============================================================
-    # EDITAR LOTE
-    # ============================================================
-
-
-def page_gestao_usuarios(u):
-    hdr("Gestao Usuarios", "Planos e Acessos", "Gerencie planos e acessos de veterinarios")
-
-    if not is_admin():
-        st.error("Acesso restrito ao administrador.")
+    # ── Selecao ────────────────────────────────────────────────────────
+    lotes = listar_lotes_usuario()
+    if not lotes:
+        st.warning("Nenhum lote cadastrado.")
         st.stop()
 
-    tab_pend, tab_usuarios, tab_acessos, tab_faz = st.tabs([
-        "Solicitacoes Pendentes",
-        "Gerenciar Planos",
-        "Acessos Veterinarios",
-        "Acesso Fazendeiros",
-    ])
+    dict_l   = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+    go1,go2  = st.columns(2)
+    with go1: lote_sel = st.selectbox("Lote", list(dict_l.keys()), key="go_lote")
+    lote_id  = dict_l[lote_sel]
+    animais  = listar_animais_por_lote(lote_id)
 
-    # ── ABA 1: Solicitacoes pendentes ────────────────────────────────────────
-    with tab_pend:
-        st.subheader("Solicitacoes de acesso pendentes")
-        pendentes = listar_solicitacoes_pendentes()
-        if not pendentes:
-            st.success("Nenhuma solicitacao pendente.")
+    if not animais:
+        st.warning("Nenhum animal neste lote.")
+        st.stop()
+
+    dict_a   = {f"{a[1]} (ID {a[0]})": a[0] for a in animais}
+    with go2: anim_sel = st.selectbox("Animal", list(dict_a.keys()), key="go_anim")
+    animal_id = dict_a[anim_sel]
+    ocs = listar_ocorrencias(animal_id)
+
+    if not ocs:
+        st.info("Nenhuma ocorrencia registrada para este animal.")
+        st.stop()
+
+    # ── Cards de status ────────────────────────────────────────────────
+    st.subheader(f"Ocorrencias de {anim_sel.split(' (ID')[0]}")
+
+    em_trat  = [o for o in ocs if o[8] == "Em tratamento"]
+    resolvidas = [o for o in ocs if o[8] == "Resolvido"]
+
+    r1,r2,r3 = st.columns(3)
+    r1.metric("Total",         len(ocs))
+    r2.metric("Em tratamento", len(em_trat),
+              delta="Atencao" if em_trat else None,
+              delta_color="inverse" if em_trat else "normal")
+    r3.metric("Resolvidas",    len(resolvidas))
+
+    st.divider()
+
+    for oc in ocs:
+        oc_id, _, data_oc, tipo_oc, desc_oc, grav_oc, custo_oc, dias_oc, stat_oc = oc
+        try:
+            prev_alta   = (pd.to_datetime(data_oc) + pd.Timedelta(days=int(dias_oc or 0))).date()
+            dias_rest   = (prev_alta - date.today()).days
+            atraso      = max(0, -dias_rest) if stat_oc == "Em tratamento" else 0
+        except Exception:
+            prev_alta = None; dias_rest = 0; atraso = 0
+
+        if stat_oc == "Resolvido":
+            ic = "Resolvido"
+            st.success(f"{ic} | {data_oc} | {tipo_oc} | Grav: {grav_oc} | {desc_oc[:60]}")
+        elif atraso > 0:
+            ic = f"VENCIDO ha {atraso} dia(s)"
+            st.error(f"{ic} | {data_oc} | {tipo_oc} | Prev. alta: {prev_alta} | {desc_oc[:60]}")
         else:
-            st.warning(f"{len(pendentes)} solicitacao(oes) aguardando aprovacao")
-            for req in pendentes:
-                vet_id, vet_nome, vet_email = req[1], req[2], req[3]
-                owner_id, faz_nome = req[4], req[5]
-                data_req = req[8]
-                with st.expander(f"Vet: {vet_nome} -> Fazenda: {faz_nome} | {data_req}"):
-                    st.write(f"**Veterinario:** {vet_nome} ({vet_email})")
-                    st.write(f"**Fazenda:** {faz_nome}")
-                    st.write(f"**Solicitado em:** {data_req}")
-                    lim_vet = verificar_limite_fazendas(vet_id)
-                    st.caption(f"Fazendas do vet: {lim_vet['msg']}")
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if st.button("Aprovar", key=f"apr_{vet_id}_{owner_id}", type="primary"):
-                            r = aprovar_acesso_vet(vet_id, owner_id, u["id"], True)
-                            st.success(r["msg"]); st.rerun()
-                    with c2:
-                        if st.button("Rejeitar", key=f"rej_{vet_id}_{owner_id}"):
-                            r = aprovar_acesso_vet(vet_id, owner_id, u["id"], False)
-                            st.error(r["msg"]); st.rerun()
+            ic = f"Em tratamento | faltam {dias_rest}d"
+            st.warning(f"{ic} | {data_oc} | {tipo_oc} | Prev. alta: {prev_alta} | {desc_oc[:60]}")
 
-    # ── ABA 2: Gerenciar Planos ──────────────────────────────────────────────
-    with tab_usuarios:
-        st.subheader("Gerenciar planos dos usuarios")
-        usuarios_todos = listar_usuarios()
-        if not usuarios_todos:
-            st.info("Nenhum usuario cadastrado.")
-        else:
-            for usr in usuarios_todos:
-                uid_u, nome_u, email_u, perfil_u = usr[0], usr[1], usr[2], usr[3]
-                limites = obter_limites_usuario(uid_u)
-                plano_atual = limites["plano_nome"] if limites else "trial"
-                status_conta = limites["status_conta"] if limites else "pendente"
+    st.divider()
+    st.subheader("Selecionar ocorrencia para editar")
 
-                with st.expander(f"{nome_u} | {perfil_u} | Plano: {plano_atual} | Status: {status_conta}"):
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        st.write(f"**Email:** {email_u}")
-                        st.write(f"**Perfil:** {perfil_u}")
-                    with c2:
-                        if limites:
-                            if perfil_u == "veterinario":
-                                lim = verificar_limite_fazendas(uid_u)
-                            else:
-                                lim = verificar_limite_animais(uid_u)
-                            st.write(f"**Uso:** {lim['msg']}")
-                    with c3:
-                        if status_conta == "pendente" and perfil_u != "admin":
-                            if st.button("Aprovar conta", key=f"aprc_{uid_u}"):
-                                aprovar_conta_usuario(uid_u, u["id"])
-                                st.success("Conta aprovada!"); st.rerun()
+    dict_oc = {}
+    for oc in ocs:
+        label = f"ID {oc[0]} | {oc[2]} | {oc[3]} | {oc[8]}"
+        dict_oc[label] = oc[0]
 
-                    if perfil_u != "admin":
-                        st.divider()
-                        if perfil_u == "veterinario":
-                            opcoes_plano = list(PLANOS_VETERINARIO.keys())
-                            planos_info  = PLANOS_VETERINARIO
-                        else:
-                            opcoes_plano = list(PLANOS_FAZENDEIRO.keys())
-                            planos_info  = PLANOS_FAZENDEIRO
+    oc_sel  = st.selectbox("Ocorrencia", list(dict_oc.keys()), key="go_oc_sel")
+    oc_id   = dict_oc[oc_sel]
+    oc_cur  = next((o for o in ocs if o[0]==oc_id), None)
 
-                        idx_atual = opcoes_plano.index(plano_atual) if plano_atual in opcoes_plano else 0
-                        novo_plano = st.selectbox(
-                            "Alterar plano", opcoes_plano,
-                            index=idx_atual, key=f"plano_{uid_u}",
-                            format_func=lambda x: f"{planos_info[x]['nome']} - R$ {planos_info[x]['preco']}/mes"
-                        )
+    if oc_cur:
+        stat_cur = oc_cur[8]
+        is_resolv = (stat_cur == "Resolvido")
 
-                        col_btn, col_exp = st.columns(2)
-                        with col_btn:
-                            if st.button("Salvar plano", key=f"sv_plano_{uid_u}", type="primary"):
-                                definir_plano_usuario(uid_u, perfil_u, novo_plano, u["id"])
-                                st.success(f"Plano atualizado para {planos_info[novo_plano]['nome']}")
-                                st.rerun()
-                        with col_exp:
-                            sp_u = obter_status_plano(uid_u)
-                            st.caption(f"Expira: {sp_u.get('plano_expira','N/A')}")
+        if is_resolv:
+            st.info("Esta ocorrencia esta resolvida. Voce pode editar os dados mas nao pode reabrir o tratamento.")
 
-    # ── ABA 3: Acessos Veterinarios ─────────────────────────────────────────
-    with tab_faz:
-        st.subheader("Gerenciar acesso de fazendeiros")
-        st.caption("Suspenda ou reative o acesso de fazendeiros ao sistema.")
-        fazendeiros = [u2 for u2 in listar_usuarios()
-                       if u2[3] == "fazendeiro"]
-        if not fazendeiros:
-            st.info("Nenhum fazendeiro cadastrado.")
-        else:
-            for faz in fazendeiros:
-                fid, fnome, femail = faz[0], faz[1], faz[2]
-                lim_faz = obter_limites_usuario(fid)
-                status_faz = lim_faz["status_conta"] if lim_faz else "pendente"
-                plano_faz  = lim_faz["plano_nome"]   if lim_faz else "trial"
-                with st.expander(f"{fnome} | {femail} | {plano_faz} | Status: {status_faz}"):
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.write(f"**Email:** {femail}")
-                        st.write(f"**Plano:** {plano_faz}")
-                        lim_a = verificar_limite_animais(fid)
-                        st.write(f"**Uso:** {lim_a['msg']}")
-                    with c2:
-                        if status_faz == "ativo":
-                            if st.button("Suspender acesso", key=f"susp_{fid}",
-                                         type="primary"):
-                                with _conexao() as conn:
-                                    cur = conn.cursor()
-                                    p = _ph()
-                                    cur.execute(
-                                        f"UPDATE usuarios SET status_conta={p} WHERE id={p}",
-                                        ("suspenso", fid)
-                                    )
-                                    conn.commit()
-                                registrar_auditoria(u["id"], "suspender_fazendeiro",
-                                                    "usuarios", fid, fnome)
-                                st.warning(f"Acesso de {fnome} suspenso.")
-                                st.rerun()
-                        elif status_faz in ("suspenso", "pendente"):
-                            if st.button("Reativar acesso", key=f"reativ_{fid}"):
-                                with _conexao() as conn:
-                                    cur = conn.cursor()
-                                    p = _ph()
-                                    cur.execute(
-                                        f"UPDATE usuarios SET status_conta={p} WHERE id={p}",
-                                        ("ativo", fid)
-                                    )
-                                    conn.commit()
-                                registrar_auditoria(u["id"], "reativar_fazendeiro",
-                                                    "usuarios", fid, fnome)
-                                st.success(f"Acesso de {fnome} reativado.")
-                                st.rerun()
-                        else:
-                            st.caption(f"Status: {status_faz}")
+        tab_edit_o, tab_del_o = st.tabs(["Editar ocorrencia", "Excluir"])
 
-    with tab_acessos:
-        st.subheader("Acessos veterinario-fazenda")
+        with tab_edit_o:
+            with st.form("form_edit_oc"):
+                oe1,oe2,oe3 = st.columns(3)
+                with oe1:
+                    data_oe = st.date_input("Data",    value=pd.to_datetime(oc_cur[2]).date())
+                    tipo_oe = st.selectbox("Tipo",     ["Doenca","Lesao","Medicamento","Outros"],
+                                            index=["Doenca","Lesao","Medicamento","Outros"].index(oc_cur[3])
+                                            if oc_cur[3] in ["Doenca","Lesao","Medicamento","Outros"] else 0)
+                with oe2:
+                    grav_oe  = st.selectbox("Gravidade",["Baixa","Media","Alta"],
+                                             index=["Baixa","Media","Alta"].index(oc_cur[5])
+                                             if oc_cur[5] in ["Baixa","Media","Alta"] else 0)
+                    custo_oe = st.number_input("Custo (R$)", 0.0,
+                                               value=float(oc_cur[6]) if oc_cur[6] else 0.0)
+                with oe3:
+                    dias_oe  = st.number_input("Dias recuperacao", 0,
+                                               value=int(oc_cur[7]) if oc_cur[7] else 0)
+                    if is_resolv:
+                        st.info("Status: Resolvido (imutavel)")
+                        stat_oe = "Resolvido"
+                    else:
+                        stat_oe = st.selectbox("Novo status",
+                                               ["Em tratamento","Resolvido"],
+                                               index=0 if stat_cur=="Em tratamento" else 1)
+                desc_oe   = st.text_area("Descricao", value=oc_cur[4] or "")
+                salvar_oc = st.form_submit_button("Salvar alteracoes", type="primary", width='stretch')
 
-        todos_acessos = listar_acessos_vet()
-        if not todos_acessos:
-            st.info("Nenhum acesso configurado.")
-        else:
-            df_ac = pd.DataFrame(todos_acessos, columns=[
-                "ID","Vet ID","Veterinario","Email Vet",
-                "Fazenda ID","Fazenda","Email Faz",
-                "Status","Data Solicitacao","Data Aprovacao"
-            ])
-            st.dataframe(
-                df_ac[["Veterinario","Fazenda","Status","Data Solicitacao","Data Aprovacao"]],
-                width='stretch'
-            )
-            st.divider()
-            st.subheader("Revogar acesso")
-            aprovados = [a for a in todos_acessos if a[7] == "aprovado"]
-            if aprovados:
-                opts = {f"{a[2]} -> {a[5]}": (a[1], a[4]) for a in aprovados}
-                sel_rev = st.selectbox("Selecionar acesso aprovado", list(opts.keys()), key="rev_sel")
-                if st.button("Revogar acesso", type="primary", key="rev_btn"):
-                    vet_r, own_r = opts[sel_rev]
-                    r = revogar_acesso_vet(vet_r, own_r, u["id"])
-                    st.success(r["msg"]); st.rerun()
-            else:
-                st.info("Nenhum acesso aprovado para revogar.")
-
-        st.divider()
-        st.subheader("Conceder acesso manualmente")
-        st.caption("Adicione acesso de veterinario a uma fazenda sem solicitacao")
-        usuarios_vet = [usr for usr in listar_usuarios() if usr[3] == "veterinario"]
-        usuarios_faz = [usr for usr in listar_usuarios() if usr[3] == "fazendeiro"]
-        if usuarios_vet and usuarios_faz:
-            cv1, cv2 = st.columns(2)
-            with cv1:
-                dict_vet_m = {f"{v[1]} ({v[2]})": v[0] for v in usuarios_vet}
-                vet_man = st.selectbox("Veterinario", list(dict_vet_m.keys()), key="man_vet")
-            with cv2:
-                dict_faz_m = {f"{f[1]} ({f[2]})": f[0] for f in usuarios_faz}
-                faz_man = st.selectbox("Fazenda", list(dict_faz_m.keys()), key="man_faz")
-            if st.button("Conceder acesso", type="primary", key="man_btn"):
-                vet_id_m = dict_vet_m[vet_man]
-                faz_id_m = dict_faz_m[faz_man]
-                r = solicitar_acesso_vet(vet_id_m, faz_id_m)
-                if r["ok"] or "ja existe" in r["msg"]:
-                    aprovar_acesso_vet(vet_id_m, faz_id_m, u["id"], True)
-                    st.success("Acesso concedido!"); st.rerun()
+            if salvar_oc:
+                atualizar_ocorrencia(oc_id, tipo_oe, desc_oe, grav_oe, custo_oe, dias_oe, stat_oe, str(data_oe))
+                registrar_auditoria(u["id"], "editar_ocorrencia", "ocorrencias", oc_id,
+                                    f"{tipo_oe}/{grav_oe}/{stat_oe}")
+                if stat_oe == "Resolvido" and stat_cur == "Em tratamento":
+                    st.success("Tratamento encerrado! Ocorrencia marcada como Resolvida.")
                 else:
-                    st.error(r["msg"])
+                    st.success("Ocorrencia atualizada!")
+                st.rerun()
+
+        with tab_del_o:
+            if stat_cur == "Em tratamento":
+                st.warning("Resolva o tratamento antes de excluir esta ocorrencia.")
+                st.info("Edite o status para 'Resolvido' na aba ao lado e depois exclua se necessario.")
+            else:
+                st.warning("A exclusao e permanente e nao pode ser desfeita.")
+                confirma_oc = st.checkbox("Confirmo a exclusao permanente desta ocorrencia")
+                if confirma_oc:
+                    if st.button("Excluir ocorrencia definitivamente", type="primary"):
+                        excluir_ocorrencia(oc_id)
+                        registrar_auditoria(u["id"], "excluir_ocorrencia", "ocorrencias", oc_id, "excluido")
+                        st.success("Ocorrencia excluida.")
+                        st.rerun()
+
 
     # ============================================================
-    # RISCO SANITARIO IA
+    # TRANSFERIR ANIMAL
+    # ============================================================
+
+
+def page_transferir_animal(u):
+    hdr("Transferir Animal", "Transferencia entre Lotes", "Mova animais mantendo o historico completo")
+
+    lotes = listar_lotes_usuario()
+    if len(lotes) < 2:
+        st.warning("Necessario ter ao menos 2 lotes cadastrados para transferir animais.")
+        st.stop()
+
+    dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Lote de Origem")
+        lote_orig_s = st.selectbox("Selecione o lote de origem", list(dict_l.keys()), key="tr_orig")
+        lote_orig_id = dict_l[lote_orig_s]
+
+    animais_orig = listar_animais_por_lote(lote_orig_id)
+    if not animais_orig:
+        st.warning("Nenhum animal ativo neste lote.")
+        st.stop()
+
+    with col2:
+        st.subheader("Lote de Destino")
+        opcoes_dest = {k: v for k, v in dict_l.items() if v != lote_orig_id}
+        lote_dest_s = st.selectbox("Selecione o lote de destino", list(opcoes_dest.keys()), key="tr_dest")
+        lote_dest_id = opcoes_dest[lote_dest_s]
+
+    st.divider()
+
+    # Resumo dos lotes
+    rs_orig = resumo_lote(lote_orig_id)
+    rs_dest = resumo_lote(lote_dest_id)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Animais em " + lote_orig_s.split(" (")[0], rs_orig["ativos"])
+    m2.metric("Animais em " + lote_dest_s.split(" (")[0], rs_dest["ativos"])
+    m3.metric("Transferencias realizadas", len(listar_movimentacoes(lote_id=lote_orig_id)))
+    m4.metric("Total historico", len(listar_movimentacoes()))
+
+    st.divider()
+
+    tab_unico, tab_massa, tab_historico = st.tabs(["Transferir 1 animal", "Transferir em massa", "Historico"])
+
+    with tab_unico:
+        dict_a = {f"{a[1]} (ID {a[0]})": a[0] for a in animais_orig}
+        anim_s = st.selectbox("Animal para transferir", list(dict_a.keys()), key="tr_anim")
+        animal_id = dict_a[anim_s]
+        motivo = st.text_input("Motivo (opcional)", placeholder="Ex: Quarentena, Reagrupamento, Doenca")
+        if st.button("Transferir animal", type="primary", width='stretch'):
+            res = transferir_animal(animal_id, lote_dest_id, motivo, u["id"])
+            if res["ok"]:
+                registrar_auditoria(u["id"], "transferir_animal", "animais", animal_id,
+                                    f"{lote_orig_s} -> {lote_dest_s}")
+                st.success(f"Animal transferido com sucesso!")
+                st.rerun()
+            else:
+                st.error(res["msg"])
+
+    with tab_massa:
+        st.caption("Selecione os animais que deseja transferir em grupo.")
+        nomes = [f"{a[1]} (ID {a[0]})" for a in animais_orig]
+        selecionados = st.multiselect("Selecionar animais", nomes, key="tr_massa")
+        motivo_m = st.text_input("Motivo", placeholder="Ex: Reagrupamento", key="tr_mot_m")
+        if selecionados:
+            st.info(f"{len(selecionados)} animal(is) selecionado(s)")
+            if st.button(f"Transferir {len(selecionados)} animal(is)", type="primary", width='stretch'):
+                ok_count = 0
+                for nome in selecionados:
+                    aid_m = int(nome.split("ID ")[1].rstrip(")"))
+                    res_m = transferir_animal(aid_m, lote_dest_id, motivo_m, u["id"])
+                    if res_m["ok"]:
+                        ok_count += 1
+                registrar_auditoria(u["id"], "transferir_massa", "animais", lote_orig_id,
+                                    f"{ok_count} animais -> {lote_dest_s}")
+                st.success(f"{ok_count} animal(is) transferido(s) com sucesso!")
+                if ok_count > 0:
+                    pass  # transferencia ok
+                st.rerun()
+
+    with tab_historico:
+        movs = listar_movimentacoes(lote_id=lote_orig_id)
+        if movs:
+            df_mov = pd.DataFrame(movs,
+                columns=["ID", "Animal ID", "Animal", "Lote Origem", "Lote Destino", "Data", "Motivo"])
+            st.dataframe(df_mov[["Animal", "Lote Origem", "Lote Destino", "Data", "Motivo"]],
+                         width='stretch')
+        else:
+            st.info("Nenhuma transferencia registrada para este lote.")
+
+    # ============================================================
+    # STATUS DO LOTE
+    # ============================================================
+
+
+def page_status_do_lote(u):
+    hdr("Status do Lote", "Gerenciar Status", "Atualize o status dos seus lotes e animais")
+
+    lotes = listar_lotes_usuario()
+    if not lotes:
+        st.warning("Nenhum lote cadastrado.")
+        st.stop()
+
+    tab_lotes, tab_animais = st.tabs(["Status dos Lotes", "Status dos Animais"])
+
+    with tab_lotes:
+        st.subheader("Status atual dos lotes")
+
+        COR_LOTE = {
+            "ATIVO":      ("green",  "Operando normalmente"),
+            "CRITICO":    ("red",    "Requer atencao imediata"),
+            "QUARENTENA": ("orange", "Animais em isolamento"),
+            "ENCERRADO":  ("gray",   "Lote finalizado"),
+            "VENDIDO":    ("blue",   "Lote comercializado"),
+        }
+
+        _lotes_raw = listar_lotes_usuario()
+        todos_lotes = [(l[0],l[1],l[2],l[3],l[4],l[5],l[6],l[7] if len(l)>7 else "ATIVO") for l in _lotes_raw]
+        for lote_row in todos_lotes:
+            lid_s, nome_s = lote_row[0], lote_row[1]
+            status_s = lote_row[7] if len(lote_row) > 7 else "ATIVO"
+            cor, desc = COR_LOTE.get(status_s, ("gray", ""))
+            rs_s = resumo_lote(lid_s)
+            with st.expander(f"{nome_s}  -  {status_s}  -  {rs_s['ativos']} animais ativos"):
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    novo_status = st.selectbox(
+                        "Alterar status", STATUS_LOTE,
+                        index=STATUS_LOTE.index(status_s) if status_s in STATUS_LOTE else 0,
+                        key=f"sl_{lid_s}"
+                    )
+                with c2:
+                    st.write("")
+                    st.write("")
+                    if st.button("Salvar", key=f"sl_btn_{lid_s}", type="primary"):
+                        atualizar_status_lote(lid_s, novo_status)
+                        registrar_auditoria(u["id"], "status_lote", "lotes", lid_s, novo_status)
+                        st.success(f"Status atualizado para {novo_status}")
+                        st.rerun()
+
+    with tab_animais:
+        st.subheader("Status dos animais por lote")
+
+        dict_l2 = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+        lote_sel2 = st.selectbox("Selecione o lote", list(dict_l2.keys()), key="sa_lote")
+        lote_id2  = dict_l2[lote_sel2]
+
+        contagem = contagem_status_animais(lote_id2)
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Ativos",      contagem["ATIVO"])
+        c2.metric("Vendidos",    contagem["VENDIDO"])
+        c3.metric("Mortos",      contagem["MORTO"])
+        c4.metric("Transferidos",contagem["TRANSFERIDO"])
+        c5.metric("Descartados", contagem["DESCARTADO"])
+
+        st.divider()
+
+        todos_anim = listar_animais_por_status(lote_id2)
+        if not todos_anim:
+            st.info("Nenhum animal neste lote.")
+        else:
+            for anim_row in todos_anim:
+                aid_s, ident_s = anim_row[0], anim_row[1]
+                status_a = anim_row[4] if len(anim_row) > 4 else "ATIVO"
+                with st.expander(f"{ident_s}  -  {status_a}"):
+                    col_a, col_b = st.columns([2, 1])
+                    with col_a:
+                        novo_sa = st.selectbox(
+                            "Novo status", STATUS_ANIMAL,
+                            index=STATUS_ANIMAL.index(status_a) if status_a in STATUS_ANIMAL else 0,
+                            key=f"sa_{aid_s}"
+                        )
+                    with col_b:
+                        st.write("")
+                        st.write("")
+                        if st.button("Salvar", key=f"sa_btn_{aid_s}", type="primary"):
+                            atualizar_status_animal(aid_s, novo_sa)
+                            registrar_auditoria(u["id"], "status_animal", "animais", aid_s, novo_sa)
+                            st.success(f"Status: {novo_sa}")
+                            st.rerun()
+
+    # ============================================================
+    # WORKSPACE DO LOTE
     # ============================================================
