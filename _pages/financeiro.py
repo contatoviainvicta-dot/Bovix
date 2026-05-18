@@ -66,10 +66,9 @@ def page_painel_de_decisao(u):
 
 
 def page_dashboard_executivo(u):
-    lotes = listar_lotes_usuario()
     if is_vet():
         sel_fazenda_vet(key="vet_faz_dash_exec")
-        st.divider()
+    lotes = listar_lotes_usuario()
 
     hdr("Dashboard Executivo", "Visao Executiva", "KPIs consolidados da fazenda com analise de IA")
 
