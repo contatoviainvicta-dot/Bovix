@@ -1,3000 +1,915 @@
-# database.py -- Camada de persistencia do Sistema de Gestao Pecuaria
-# Suporta PostgreSQL (Supabase) e SQLite (fallback local)
-
-import os
-import hashlib
-import secrets
-from contextlib import contextmanager
-from datetime import date as _date, timedelta as _td
-
-# ── Planos do sistema ───────────────────────────────────────────────────────
-PLANOS_FAZENDEIRO = {
-    'trial':        dict(nome='Trial 30 dias',  limite_animais=50,    preco=0,
-                        descricao='30 dias gratis, ate 50 animais'),
-    'starter':      dict(nome='Starter',         limite_animais=100,   preco=89,
-                        descricao='Ate 100 animais, suporte por email'),
-    'profissional': dict(nome='Profissional',    limite_animais=500,   preco=189,
-                        descricao='Ate 500 animais, relatorios avancados'),
-    'premium':      dict(nome='Premium',         limite_animais=2000,  preco=389,
-                        descricao='Ate 2000 animais, IA completa'),
-    'enterprise':   dict(nome='Enterprise',      limite_animais=99999, preco=789,
-                        descricao='Ilimitado, multi-fazenda, suporte prioritario'),
-}
-PLANOS_VETERINARIO = {
-    'trial':        dict(nome='Trial 30 dias',   limite_fazendas=2,   preco=0,
-                        descricao='30 dias gratis, ate 2 fazendas'),
-    'vet_solo':     dict(nome='Vet Solo',         limite_fazendas=5,   preco=119,
-                        descricao='Ate 5 fazendas'),
-    'vet_pro':      dict(nome='Vet Pro',          limite_fazendas=999, preco=249,
-                        descricao='Fazendas ilimitadas + receituario digital'),
-}
-
-# Mensagens de upgrade por plano (fazendeiro)
-UPGRADE_MSG_FAZENDEIRO = {
-    'trial':        'Faca upgrade para o plano Starter (R$ 89/mes) e gerencie ate 100 animais.',
-    'starter':      'Faca upgrade para o plano Profissional (R$ 189/mes) e gerencie ate 500 animais.',
-    'profissional': 'Faca upgrade para o plano Premium (R$ 389/mes) e gerencie ate 2.000 animais.',
-    'premium':      'Faca upgrade para o plano Enterprise (R$ 789/mes) para animais ilimitados e multi-fazenda.',
-    'enterprise':   'Voce ja tem o plano maximo.',
-}
-UPGRADE_MSG_VETERINARIO = {
-    'trial':    'Faca upgrade para o Vet Solo (R$ 119/mes) e gerencie ate 5 fazendas.',
-    'vet_solo': 'Faca upgrade para o Vet Pro (R$ 249/mes) para fazendas ilimitadas + receituario digital.',
-    'vet_pro':  'Voce ja tem o plano maximo.',
-}
-
-# ── Detectar qual banco usar ────────────────────────────────────────────────
-def _usar_postgres():
-    try:
-        import psycopg2
-    except ImportError:
-        return False
-    try:
-        import streamlit as st
-        db = st.secrets.get("database", {})
-        url = db.get("url", "")
-        return url.startswith("postgresql://") or url.startswith("postgres://")
-    except Exception:
-        return False
-
-def _diagnostico_banco():
-    try:
-        import psycopg2
-        psycopg2_ok = True
-    except ImportError:
-        return "psycopg2 NAO instalado - usando SQLite"
-    try:
-        import streamlit as st
-        db = st.secrets.get("database", {})
-        url = db.get("url", "")
-        if not url:
-            return "Secret [database][url] nao encontrado - usando SQLite"
-        if not (url.startswith("postgresql://") or url.startswith("postgres://")):
-            return f"URL invalida: {url[:30]}... - usando SQLite"
-        return f"PostgreSQL OK: {url[:40]}..."
-    except Exception as e:
-        return f"Erro ao ler secrets: {e} - usando SQLite"
-
-def _get_pg_url():
-    try:
-        import streamlit as st
-        return st.secrets["database"]["url"]
-    except Exception:
-        return os.environ.get("DATABASE_URL", "")
-
-def _date_add(dias, sinal="+"):
-    if _usar_postgres():
-        op = "+" if sinal == "+" else "-"
-        return f"CURRENT_DATE {op} INTERVAL '{abs(dias)} days'"
-    else:
-        op = "+" if sinal == "+" else "-"
-        return f"date('now','{op}{abs(dias)} days')"
-
-def _cast_date(campo):
-    # No PostgreSQL campos TEXT precisam de cast para comparar com datas
-    if _usar_postgres():
-        return f"({campo})::date"
-    else:
-        return f"date({campo})"
-
-# ── Conexao ─────────────────────────────────────────────────────────────────
-# Pool de conexoes para PostgreSQL (reutiliza conexoes em vez de abrir/fechar)
-_pg_pool = None
-
-def _get_pool():
-    global _pg_pool
-    if _pg_pool is not None:
-        return _pg_pool
-    try:
-        import psycopg2.pool
-        url = _get_pg_url()
-        _pg_pool = psycopg2.pool.ThreadedConnectionPool(1, 5, url, connect_timeout=15)
-        return _pg_pool
-    except Exception:
-        return None
-
-@contextmanager
-def _conexao():
-    if _usar_postgres():
-        import psycopg2
-        pool = _get_pool()
-        if pool:
-            conn = pool.getconn()
-            conn.autocommit = False
-            try:
-                yield conn
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
-            finally:
-                pool.putconn(conn)
-        else:
-            # Fallback sem pool
-            url = _get_pg_url()
-            conn = psycopg2.connect(url, connect_timeout=15)
-            conn.autocommit = False
-            try:
-                yield conn
-                conn.commit()
-            except Exception:
-                conn.rollback()
-                raise
-            finally:
-                conn.close()
-    else:
-        import sqlite3
-        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pecuaria.db")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
-
-def _ph():
-    # placeholder: %s para postgres, ? para sqlite
-    return "%s" if _usar_postgres() else "?"
-
-def _fetch(cur):
-    # normalizar rows para list of dicts/tuples
-    rows = cur.fetchall()
-    if not rows:
-        return []
-    if _usar_postgres():
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, row)) for row in rows]
-    else:
-        return [dict(row) for row in rows]
-
-def _fetchone(cur):
-    row = cur.fetchone()
-    if not row:
-        return None
-    if _usar_postgres():
-        cols = [d[0] for d in cur.description]
-        return dict(zip(cols, row))
-    else:
-        return dict(row)
-
-# ── Inicializar banco ────────────────────────────────────────────────────────
-def inicializar_banco():
-    pg = _usar_postgres()
-
-    # Verificar se banco ja foi inicializado (economiza 23 queries)
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if pg:
-            cur.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='lotes'")
-        else:
-            cur.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='lotes'")
-        ja_existe = cur.fetchone()[0] > 0
-
-    if ja_existe:
-        # Banco ja inicializado - apenas migrar colunas novas
-        _migrar_banco()
-        return
-
-    serial = "SERIAL" if pg else "INTEGER"
-    auto   = "" if pg else "AUTOINCREMENT"
-    pk     = f"{serial} PRIMARY KEY" if pg else f"INTEGER PRIMARY KEY {auto}"
-
-    with _conexao() as conn:
-        cur = conn.cursor()
-
-        tabelas = f"""
-            CREATE TABLE IF NOT EXISTS lotes (
-                id            {pk},
-                nome          TEXT    NOT NULL,
-                descricao     TEXT    DEFAULT '',
-                data_entrada  TEXT    NOT NULL,
-                qtd_comprada  INTEGER NOT NULL DEFAULT 0,
-                qtd_recebida  INTEGER NOT NULL DEFAULT 0,
-                transporte    TEXT    DEFAULT '',
-                tipo_alimentacao TEXT DEFAULT 'Pasto',
-                tipo_dieta    TEXT DEFAULT 'Capim',
-                preco_por_animal REAL DEFAULT 0,
-                fazenda_id    INTEGER DEFAULT NULL,
-                data_venda    TEXT DEFAULT NULL
-            );
-            CREATE TABLE IF NOT EXISTS animais (
-                id            {pk},
-                identificacao TEXT    NOT NULL,
-                idade         INTEGER NOT NULL DEFAULT 0,
-                lote_id       INTEGER NOT NULL,
-                sexo          TEXT    DEFAULT 'indefinido',
-                raca          TEXT    DEFAULT '',
-                peso_entrada  REAL    DEFAULT 0,
-                peso_alvo     REAL    DEFAULT 0,
-                observacoes   TEXT    DEFAULT '',
-                foto_path     TEXT    DEFAULT NULL,
-                ativo         INTEGER DEFAULT 1
-            );
-            CREATE TABLE IF NOT EXISTS pesagens (
-                id        {pk},
-                animal_id INTEGER NOT NULL,
-                peso      REAL    NOT NULL,
-                data      TEXT    NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS ocorrencias (
-                id               {pk},
-                animal_id        INTEGER NOT NULL,
-                data             TEXT    NOT NULL,
-                tipo             TEXT    NOT NULL,
-                descricao        TEXT    DEFAULT '',
-                gravidade        TEXT    NOT NULL DEFAULT 'Baixa',
-                custo            REAL    DEFAULT 0.0,
-                dias_recuperacao INTEGER DEFAULT 0,
-                status           TEXT    NOT NULL DEFAULT 'Em tratamento'
-            );
-            CREATE TABLE IF NOT EXISTS fazendas (
-                id     {pk},
-                nome   TEXT NOT NULL,
-                cidade TEXT DEFAULT '',
-                estado TEXT DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id         {pk},
-                nome       TEXT NOT NULL,
-                email      TEXT NOT NULL UNIQUE,
-                senha_hash TEXT NOT NULL,
-                salt       TEXT NOT NULL,
-                perfil     TEXT NOT NULL DEFAULT 'fazendeiro',
-                fazenda_id INTEGER DEFAULT NULL,
-                ativo      INTEGER NOT NULL DEFAULT 1,
-                trial_inicio TEXT DEFAULT NULL,
-                plano        TEXT DEFAULT 'trial',
-                plano_expira TEXT DEFAULT NULL
-            );
-            CREATE TABLE IF NOT EXISTS vacinas_agenda (
-                id             {pk},
-                lote_id        INTEGER NOT NULL,
-                nome_vacina    TEXT    NOT NULL,
-                data_prevista  TEXT    NOT NULL,
-                data_realizada TEXT    DEFAULT NULL,
-                status         TEXT    NOT NULL DEFAULT 'pendente',
-                observacao     TEXT    DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS medicamentos (
-                id             {pk},
-                nome           TEXT NOT NULL,
-                unidade        TEXT NOT NULL DEFAULT 'dose',
-                estoque_atual  REAL NOT NULL DEFAULT 0,
-                estoque_minimo REAL NOT NULL DEFAULT 0,
-                validade       TEXT DEFAULT NULL,
-                custo_unitario REAL NOT NULL DEFAULT 0.0,
-                carencia_dias  INTEGER DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS medicamentos_uso (
-                id             {pk},
-                medicamento_id INTEGER NOT NULL,
-                animal_id      INTEGER NOT NULL,
-                ocorrencia_id  INTEGER DEFAULT NULL,
-                data_uso       TEXT NOT NULL,
-                quantidade     REAL NOT NULL DEFAULT 1
-            );
-            CREATE TABLE IF NOT EXISTS reproducao (
-                id                  {pk},
-                animal_id           INTEGER NOT NULL,
-                data_cio            TEXT    DEFAULT NULL,
-                tipo_cobertura      TEXT    NOT NULL DEFAULT 'IATF',
-                data_diagnostico    TEXT    DEFAULT NULL,
-                resultado           TEXT    DEFAULT 'pendente',
-                data_parto_previsto TEXT    DEFAULT NULL,
-                data_parto_real     TEXT    DEFAULT NULL,
-                observacao          TEXT    DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS piquetes (
-                id            {pk},
-                fazenda_id    INTEGER DEFAULT NULL,
-                nome          TEXT NOT NULL,
-                area_ha       REAL DEFAULT 0,
-                capacidade_ua REAL DEFAULT 0
-            );
-            CREATE TABLE IF NOT EXISTS piquetes_historico (
-                id         {pk},
-                piquete_id INTEGER NOT NULL,
-                lote_id    INTEGER NOT NULL,
-                entrada    TEXT NOT NULL,
-                saida      TEXT DEFAULT NULL
-            );
-            CREATE TABLE IF NOT EXISTS mortalidade (
-                id          {pk},
-                animal_id   INTEGER NOT NULL,
-                data        TEXT NOT NULL,
-                causa       TEXT NOT NULL DEFAULT 'Doenca',
-                descricao   TEXT DEFAULT '',
-                custo_perda REAL DEFAULT 0.0
-            );
-            CREATE TABLE IF NOT EXISTS auditoria (
-                id          {pk},
-                usuario_id  INTEGER NOT NULL,
-                acao        TEXT NOT NULL,
-                tabela      TEXT DEFAULT '',
-                registro_id INTEGER DEFAULT NULL,
-                detalhe     TEXT DEFAULT '',
-                data_hora   TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS gta (
-                id            {pk},
-                lote_id       INTEGER NOT NULL,
-                numero_gta    TEXT NOT NULL,
-                data_emissao  TEXT NOT NULL,
-                origem        TEXT DEFAULT '',
-                destino       TEXT DEFAULT '',
-                quantidade    INTEGER DEFAULT 0,
-                finalidade    TEXT DEFAULT 'Abate',
-                observacao    TEXT DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS sisbov (
-                id                 {pk},
-                animal_id          INTEGER NOT NULL UNIQUE,
-                numero_sisbov      TEXT NOT NULL,
-                data_certificacao  TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS vendas_lote (
-                id             {pk},
-                lote_id        INTEGER NOT NULL,
-                data_venda     TEXT NOT NULL,
-                preco_venda_kg REAL NOT NULL DEFAULT 0,
-                peso_total_kg  REAL NOT NULL DEFAULT 0,
-                frigorific     TEXT DEFAULT '',
-                observacao     TEXT DEFAULT ''
-            );
-            CREATE TABLE IF NOT EXISTS cotacoes (
-                id     {pk},
-                data   TEXT NOT NULL UNIQUE,
-                preco  REAL NOT NULL,
-                fonte  TEXT DEFAULT 'manual'
-            );
-        """
-
-        for stmt in tabelas.strip().split(";"):
-            stmt = stmt.strip()
-            if stmt:
-                cur.execute(stmt)
-
-        conn.commit()
-    print("Banco inicializado com sucesso.")
-    _migrar_banco()
-
-
-def _migrar_banco():
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(
-                "SELECT table_name, column_name FROM information_schema.columns"
-                " WHERE table_schema='public' AND table_name IN"
-                " ('lotes','animais','movimentacoes_animais','usuarios')"
-            )
-            rows = cur.fetchall()
-            existentes = {(r[0], r[1]) for r in rows}
-
-            if ('movimentacoes_animais','id') not in existentes:
-                cur.execute("""CREATE TABLE IF NOT EXISTS movimentacoes_animais (
-                    id SERIAL PRIMARY KEY, animal_id INTEGER NOT NULL,
-                    lote_origem INTEGER NOT NULL, lote_destino INTEGER NOT NULL,
-                    data TEXT NOT NULL, motivo TEXT DEFAULT '', usuario_id INTEGER DEFAULT NULL
-                )""")
-
-            # Colunas de isolamento e status
-            for tabela, coluna, definicao in [
-                ('lotes',    'status',      "TEXT DEFAULT 'ATIVO'"),
-                ('lotes',    'ativo',       'INTEGER DEFAULT 1'),
-                ('lotes',    'deletado_em', 'TEXT DEFAULT NULL'),
-                ('lotes',    'owner_id',    'INTEGER DEFAULT NULL'),
-                ('animais',  'status',      "TEXT DEFAULT 'ATIVO'"),
-                ('animais',  'deletado_em', 'TEXT DEFAULT NULL'),
-                ('usuarios', 'owner_id',    'INTEGER DEFAULT NULL'),
-                ('medicamentos', 'owner_id',    'INTEGER DEFAULT NULL'),
-            ]:
-                if (tabela, coluna) not in existentes:
-                    try:
-                        cur.execute(
-                            f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS {coluna} {definicao}"
-                        )
-                    except Exception:
-                        pass
-        else:
-            for tabela, coluna, definicao in [
-                ('lotes',    'status',      "TEXT DEFAULT 'ATIVO'"),
-                ('lotes',    'ativo',       'INTEGER DEFAULT 1'),
-                ('lotes',    'deletado_em', 'TEXT DEFAULT NULL'),
-                ('lotes',    'owner_id',    'INTEGER DEFAULT NULL'),
-                ('animais',  'status',      "TEXT DEFAULT 'ATIVO'"),
-                ('animais',  'deletado_em', 'TEXT DEFAULT NULL'),
-                ('usuarios', 'owner_id',    'INTEGER DEFAULT NULL'),
-                ('medicamentos', 'owner_id',    'INTEGER DEFAULT NULL'),
-            ]:
-                try:
-                    cur.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}")
-                except Exception:
-                    pass
-            cur.execute("""CREATE TABLE IF NOT EXISTS movimentacoes_animais (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, animal_id INTEGER NOT NULL,
-                lote_origem INTEGER NOT NULL, lote_destino INTEGER NOT NULL,
-                data TEXT NOT NULL, motivo TEXT DEFAULT '', usuario_id INTEGER DEFAULT NULL
-            )""")
-        conn.commit()
-
-        # Tabela de acesso veterinario-fazenda
-        if _usar_postgres():
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS vet_fazenda_acesso (
-                    id            SERIAL PRIMARY KEY,
-                    vet_id        INTEGER NOT NULL,
-                    owner_id      INTEGER NOT NULL,
-                    status        TEXT NOT NULL DEFAULT 'pendente',
-                    aprovado_por  INTEGER DEFAULT NULL,
-                    data_request  TEXT NOT NULL,
-                    data_aprovacao TEXT DEFAULT NULL,
-                    UNIQUE(vet_id, owner_id)
-                )
-            """)
-            for col, defn in [
-                ('plano_nome',      "TEXT DEFAULT 'trial'"),
-                ('limite_animais',  'INTEGER DEFAULT 50'),
-                ('limite_fazendas', 'INTEGER DEFAULT 2'),
-                ('status_conta',    "TEXT DEFAULT 'pendente'"),
-            ]:
-                try:
-                    cur.execute(
-                        f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {col} {defn}"
-                    )
-                except Exception:
-                    pass
-        else:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS vet_fazenda_acesso (
-                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                    vet_id        INTEGER NOT NULL,
-                    owner_id      INTEGER NOT NULL,
-                    status        TEXT NOT NULL DEFAULT 'pendente',
-                    aprovado_por  INTEGER DEFAULT NULL,
-                    data_request  TEXT NOT NULL,
-                    data_aprovacao TEXT DEFAULT NULL,
-                    UNIQUE(vet_id, owner_id)
-                )
-            """)
-            for col, defn in [
-                ('plano_nome',      "TEXT DEFAULT 'trial'"),
-                ('limite_animais',  'INTEGER DEFAULT 50'),
-                ('limite_fazendas', 'INTEGER DEFAULT 2'),
-                ('status_conta',    "TEXT DEFAULT 'pendente'"),
-            ]:
-                try:
-                    cur.execute(f"ALTER TABLE usuarios ADD COLUMN {col} {defn}")
-                except Exception:
-                    pass
-        conn.commit()
-
-
-# ── LOTES ────────────────────────────────────────────────────────────────────
-def adicionar_lote(nome, descricao, data_entrada, qtd_comprada, qtd_recebida, transporte, owner_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO lotes (nome,descricao,data_entrada,qtd_comprada,qtd_recebida,transporte,owner_id)"
-                f" VALUES({p},{p},{p},{p},{p},{p},{p}) RETURNING id",
-                (nome, descricao, data_entrada, qtd_comprada, qtd_recebida, transporte, owner_id),
-            )
-            return cur.fetchone()[0]
-        else:
-            cur.execute(
-                f"INSERT INTO lotes (nome,descricao,data_entrada,qtd_comprada,qtd_recebida,transporte,owner_id)"
-                f" VALUES({p},{p},{p},{p},{p},{p},{p})",
-                (nome, descricao, data_entrada, qtd_comprada, qtd_recebida, transporte, owner_id),
-            )
-            return cur.lastrowid
-
-def listar_lotes(owner_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if owner_id is not None:
-            # Comparacao direta: so retorna lotes onde owner_id = valor exato
-            # Nao usa COALESCE para evitar que lotes sem owner_id vazem
-            cur.execute(
-                f"SELECT id,nome,descricao,data_entrada,qtd_comprada,qtd_recebida,transporte"
-                f" FROM lotes WHERE owner_id={p}"
-                f" ORDER BY data_entrada DESC,id DESC",
-                (owner_id,),
-            )
-        else:
-            cur.execute(
-                "SELECT id,nome,descricao,data_entrada,qtd_comprada,qtd_recebida,transporte"
-                " FROM lotes ORDER BY data_entrada DESC,id DESC"
-            )
-        rows = _fetch(cur)
-        return [(r["id"],r["nome"],r["descricao"],r["data_entrada"],r["qtd_comprada"],r["qtd_recebida"],r["transporte"]) for r in rows]
-
-def obter_lote(lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT id,nome,descricao,data_entrada,qtd_comprada,qtd_recebida,transporte FROM lotes WHERE id={p}", (lote_id,))
-        r = _fetchone(cur)
-        return (r["id"],r["nome"],r["descricao"],r["data_entrada"],r["qtd_comprada"],r["qtd_recebida"],r["transporte"]) if r else None
-
-def atualizar_lote(lote_id, nome, descricao, data_entrada, qtd_comprada, qtd_recebida, transporte, preco_por_animal=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1", (lote_id,))
-        ativos = cur.fetchone()[0]
-        cur.execute(
-            f"UPDATE lotes SET nome={p},descricao={p},data_entrada={p},qtd_comprada={p},qtd_recebida={p},transporte={p} WHERE id={p}",
-            (nome, descricao, data_entrada, qtd_comprada, ativos, transporte, lote_id),
-        )
-        if preco_por_animal is not None:
-            cur.execute(f"UPDATE lotes SET preco_por_animal={p} WHERE id={p}", (preco_por_animal, lote_id))
-
-def excluir_lote(lote_id):
-    """Exclui lote e todos os registros associados (animais, pesagens, etc)."""
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        # Buscar animais do lote
-        cur.execute(f"SELECT id FROM animais WHERE lote_id={p}", (lote_id,))
-        aids = [r[0] for r in cur.fetchall()]
-        # Excluir registros dos animais
-        for aid in aids:
-            for tbl in ['pesagens', 'ocorrencias', 'medicamentos_uso']:
-                try:
-                    cur.execute(
-                        f"DELETE FROM {tbl} WHERE animal_id={p}", (aid,)
-                    )
-                except Exception:
-                    pass
-        # Excluir animais
-        if aids:
-            cur.execute(
-                f"DELETE FROM animais WHERE lote_id={p}", (lote_id,)
-            )
-        # Excluir vacinas do lote
-        for tbl in ['vacinas_agenda', 'reproducao', 'piquetes_historico']:
-            try:
-                cur.execute(
-                    f"DELETE FROM {tbl} WHERE lote_id={p}", (lote_id,)
-                )
-            except Exception:
-                pass
-        # Excluir o lote
-        cur.execute(f"DELETE FROM lotes WHERE id={p}", (lote_id,))
-        conn.commit()
-
-
-# ── ANIMAIS ──────────────────────────────────────────────────────────────────
-def adicionar_animal(identificacao, idade, lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO animais (identificacao,idade,lote_id) VALUES({p},{p},{p}) RETURNING id",
-                (identificacao, idade, lote_id),
-            )
-            return cur.fetchone()[0]
-        else:
-            cur.execute(
-                f"INSERT INTO animais (identificacao,idade,lote_id) VALUES({p},{p},{p})",
-                (identificacao, idade, lote_id),
-            )
-            return cur.lastrowid
-
-def listar_animais(incluir_inativos=False):
-    with _conexao() as conn:
-        cur = conn.cursor()
-        sql = "SELECT id,identificacao,idade,lote_id FROM animais"
-        if not incluir_inativos:
-            sql += " WHERE COALESCE(ativo,1)=1"
-        sql += " ORDER BY id"
-        cur.execute(sql)
-        rows = _fetch(cur)
-        return [(r["id"],r["identificacao"],r["idade"],r["lote_id"]) for r in rows]
-
-def listar_animais_por_lote(lote_id, incluir_inativos=False):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if incluir_inativos:
-            cur.execute(f"SELECT id,identificacao,idade,lote_id FROM animais WHERE lote_id={p} ORDER BY id", (lote_id,))
-        else:
-            cur.execute(f"SELECT id,identificacao,idade,lote_id FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1 ORDER BY id", (lote_id,))
-        rows = _fetch(cur)
-        return [(r["id"],r["identificacao"],r["idade"],r["lote_id"]) for r in rows]
-
-def contar_animais_no_lote(lote_id, incluir_inativos=False):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if incluir_inativos:
-            cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p}", (lote_id,))
-        else:
-            cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1", (lote_id,))
-        return cur.fetchone()[0]
-
-def atualizar_animal_detalhes(animal_id, peso_alvo=None, observacoes=None, foto_path=None):
-    p = _ph()
-    campos, vals = [], []
-    if peso_alvo   is not None: campos.append(f"peso_alvo={p}");   vals.append(peso_alvo)
-    if observacoes is not None: campos.append(f"observacoes={p}"); vals.append(observacoes)
-    if foto_path   is not None: campos.append(f"foto_path={p}");   vals.append(foto_path)
-    if not campos: return
-    vals.append(animal_id)
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE animais SET {', '.join(campos)} WHERE id={p}", vals)
-
-def obter_animal(animal_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT id,identificacao,idade,lote_id,"
-            f"COALESCE(sexo,'indefinido') as sexo,COALESCE(raca,'') as raca,"
-            f"COALESCE(peso_entrada,0) as peso_entrada,COALESCE(peso_alvo,0) as peso_alvo,"
-            f"COALESCE(observacoes,'') as observacoes,foto_path FROM animais WHERE id={p}",
-            (animal_id,),
-        )
-        r = _fetchone(cur)
-        return (r["id"],r["identificacao"],r["idade"],r["lote_id"],r["sexo"],r["raca"],r["peso_entrada"],r["peso_alvo"],r["observacoes"],r["foto_path"]) if r else None
-
-def atualizar_animal(animal_id, identificacao, idade):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE animais SET identificacao={p},idade={p} WHERE id={p}", (identificacao, idade, animal_id))
-
-def excluir_animal(animal_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"DELETE FROM animais WHERE id={p}", (animal_id,))
-
-
-# ── PESAGENS ─────────────────────────────────────────────────────────────────
-# Status válidos para animais
-STATUS_ANIMAL = ['ATIVO', 'VENDIDO', 'MORTO', 'TRANSFERIDO', 'DESCARTADO']
-
-def atualizar_status_animal(animal_id, status):
-    p = _ph()
-    ativo = 1 if status == 'ATIVO' else 0
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"UPDATE animais SET status={p}, ativo={p} WHERE id={p}",
-            (status, ativo, animal_id),
-        )
-
-def listar_animais_por_status(lote_id, status=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if status:
-            cur.execute(
-                f"SELECT id,identificacao,idade,lote_id,COALESCE(status,'ATIVO') as status"
-                f" FROM animais WHERE lote_id={p} AND COALESCE(status,'ATIVO')={p} ORDER BY id",
-                (lote_id, status),
-            )
-        else:
-            cur.execute(
-                f"SELECT id,identificacao,idade,lote_id,COALESCE(status,'ATIVO') as status"
-                f" FROM animais WHERE lote_id={p} ORDER BY id",
-                (lote_id,),
-            )
-        rows = _fetch(cur)
-        return [(r['id'],r['identificacao'],r['idade'],r['lote_id'],r['status']) for r in rows]
-
-def contagem_status_animais(lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT COALESCE(status,'ATIVO') as status, COUNT(*) as total"
-            f" FROM animais WHERE lote_id={p} GROUP BY COALESCE(status,'ATIVO')",
-            (lote_id,),
-        )
-        rows = _fetch(cur)
-        base = {s: 0 for s in STATUS_ANIMAL}
-        for r in rows:
-            base[r['status']] = r['total']
-        return base
-
-
-# Status válidos para lotes
-STATUS_LOTE = ['ATIVO', 'ENCERRADO', 'QUARENTENA', 'VENDIDO', 'CRITICO']
-
-def atualizar_status_lote(lote_id, status):
-    p = _ph()
-    ativo = 1 if status == 'ATIVO' else 0
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"UPDATE lotes SET status={p}, ativo={p} WHERE id={p}",
-            (status, ativo, lote_id),
-        )
-
-def listar_lotes_por_status(status=None, owner_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        base = (
-            "SELECT id,nome,descricao,data_entrada,qtd_comprada,qtd_recebida,transporte,"
-            "COALESCE(status,'ATIVO') as status FROM lotes WHERE 1=1"
-        )
-        params = []
-        if owner_id is not None:
-            base += f" AND owner_id={p}"
-            params += [owner_id]
-        if status:
-            base += f" AND COALESCE(status,'ATIVO')={p}"
-            params.append(status)
-        base += " ORDER BY data_entrada DESC"
-        cur.execute(base, params)
-        rows = _fetch(cur)
-        return [(r['id'],r['nome'],r['descricao'],r['data_entrada'],
-                 r['qtd_comprada'],r['qtd_recebida'],r['transporte'],r['status']) for r in rows]
-
-
-def adicionar_pesagem(animal_id, peso, data):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO pesagens (animal_id,peso,data) VALUES({p},{p},{p}) RETURNING id", (animal_id, peso, data))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO pesagens (animal_id,peso,data) VALUES({p},{p},{p})", (animal_id, peso, data))
-            return cur.lastrowid
-
-def listar_pesagens(animal_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT id,animal_id,peso,data FROM pesagens WHERE animal_id={p} ORDER BY data ASC,id ASC", (animal_id,))
-        rows = _fetch(cur)
-        return [(r["id"],r["animal_id"],r["peso"],r["data"]) for r in rows]
-
-def atualizar_pesagem(pesagem_id, peso, data):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE pesagens SET peso={p},data={p} WHERE id={p}", (peso, data, pesagem_id))
-
-def excluir_pesagem(pesagem_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"DELETE FROM pesagens WHERE id={p}", (pesagem_id,))
-
-def listar_pesagens_lote(lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT p.id,a.lote_id,p.peso,p.data,a.identificacao,a.id as animal_id FROM pesagens p JOIN animais a ON a.id=p.animal_id WHERE a.lote_id={p} ORDER BY p.data ASC",
-            (lote_id,),
-        )
-        rows = _fetch(cur)
-        return [(r["id"],r["lote_id"],r["peso"],r["data"],r["identificacao"],r["animal_id"]) for r in rows]
-
-
-# ── OCORRENCIAS ──────────────────────────────────────────────────────────────
-def adicionar_ocorrencia(animal_id, data, tipo, descricao, gravidade, custo, dias_recuperacao, status):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO ocorrencias (animal_id,data,tipo,descricao,gravidade,custo,dias_recuperacao,status) VALUES({p},{p},{p},{p},{p},{p},{p},{p}) RETURNING id",
-                (animal_id, data, tipo, descricao, gravidade, custo, dias_recuperacao, status),
-            )
-            return cur.fetchone()[0]
-        else:
-            cur.execute(
-                f"INSERT INTO ocorrencias (animal_id,data,tipo,descricao,gravidade,custo,dias_recuperacao,status) VALUES({p},{p},{p},{p},{p},{p},{p},{p})",
-                (animal_id, data, tipo, descricao, gravidade, custo, dias_recuperacao, status),
-            )
-            return cur.lastrowid
-
-def listar_ocorrencias(animal_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT id,animal_id,data,tipo,descricao,gravidade,custo,dias_recuperacao,status FROM ocorrencias WHERE animal_id={p} ORDER BY data ASC,id ASC",
-            (animal_id,),
-        )
-        rows = _fetch(cur)
-        return [(r["id"],r["animal_id"],r["data"],r["tipo"],r["descricao"],r["gravidade"],r["custo"],r["dias_recuperacao"],r["status"]) for r in rows]
-
-def atualizar_ocorrencia(ocorrencia_id, tipo, descricao, gravidade, custo, dias_recuperacao, status, data=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if data:
-            cur.execute(
-                f"UPDATE ocorrencias SET tipo={p},descricao={p},gravidade={p},custo={p},dias_recuperacao={p},status={p},data={p} WHERE id={p}",
-                (tipo, descricao, gravidade, custo, dias_recuperacao, status, data, ocorrencia_id),
-            )
-        else:
-            cur.execute(
-                f"UPDATE ocorrencias SET tipo={p},descricao={p},gravidade={p},custo={p},dias_recuperacao={p},status={p} WHERE id={p}",
-                (tipo, descricao, gravidade, custo, dias_recuperacao, status, ocorrencia_id),
-            )
-
-def excluir_ocorrencia(ocorrencia_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"DELETE FROM ocorrencias WHERE id={p}", (ocorrencia_id,))
-
-def listar_ocorrencias_em_tratamento():
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT o.id,o.animal_id,a.identificacao,l.nome,o.data,o.tipo,o.descricao,o.gravidade,o.custo,o.dias_recuperacao,o.status"
-            " FROM ocorrencias o JOIN animais a ON a.id=o.animal_id JOIN lotes l ON l.id=a.lote_id"
-            " WHERE o.status='Em tratamento' ORDER BY o.data ASC"
-        )
-        rows = _fetch(cur)
-        return [tuple(r.values()) for r in rows]
-
-def listar_tratamentos_vencidos(owner_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        hoje = str(_date.today())
-        filtro_owner = f" AND l.owner_id={p}" if owner_id is not None else ""
-        params = (owner_id,) if owner_id is not None else ()
-        cur.execute(
-            "SELECT o.id,o.animal_id,a.identificacao,l.nome,o.data,o.tipo,o.descricao,o.gravidade,o.custo,o.dias_recuperacao,o.status"
-            " FROM ocorrencias o JOIN animais a ON a.id=o.animal_id JOIN lotes l ON l.id=a.lote_id"
-            f" WHERE o.status='Em tratamento' AND o.dias_recuperacao > 0{filtro_owner}",
-            params,
-        )
-        rows = _fetch(cur)
-        import datetime
-        vencidos = []
-        for r in rows:
-            try:
-                dt_oc = datetime.datetime.strptime(str(r["data"])[:10], "%Y-%m-%d").date()
-                dt_alta = dt_oc + datetime.timedelta(days=int(r["dias_recuperacao"] or 0))
-                if dt_alta < _date.today():
-                    vencidos.append(tuple(r.values()))
-            except Exception:
-                pass
-        return vencidos
-
-
-# ── USUARIOS ─────────────────────────────────────────────────────────────────
-def _hash_senha(senha, salt):
-    return hashlib.sha256((salt + senha).encode()).hexdigest()
-
-def criar_usuario(nome, email, senha, perfil="fazendeiro", fazenda_id=None, owner_id=None):
-    p = _ph()
-    salt = secrets.token_hex(16)
-    h = _hash_senha(senha, salt)
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO usuarios (nome,email,senha_hash,salt,perfil,fazenda_id,owner_id)"
-                f" VALUES({p},{p},{p},{p},{p},{p},{p}) RETURNING id",
-                (nome, email, h, salt, perfil, fazenda_id, owner_id),
-            )
-            uid = cur.fetchone()[0]
-        else:
-            cur.execute(
-                f"INSERT INTO usuarios (nome,email,senha_hash,salt,perfil,fazenda_id,owner_id)"
-                f" VALUES({p},{p},{p},{p},{p},{p},{p})",
-                (nome, email, h, salt, perfil, fazenda_id, owner_id),
-            )
-            uid = cur.lastrowid
-        # Se nao tem owner_id definido (primeiro admin), ele e dono de si mesmo
-        if owner_id is None and perfil == 'admin':
-            cur.execute(f"UPDATE usuarios SET owner_id={p} WHERE id={p}", (uid, uid))
-        return uid
-
-def autenticar_usuario(email, senha):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT id,nome,email,senha_hash,salt,perfil,fazenda_id,ativo,COALESCE(owner_id,id) as owner_id FROM usuarios WHERE email={p}", (email,))
-        r = _fetchone(cur)
-    if not r or not r["ativo"]: return None
-    if _hash_senha(senha, r["salt"]) != r["senha_hash"]: return None
-    owner = r.get("owner_id") or r["id"]
-    return dict(id=r["id"], nome=r["nome"], email=r["email"],
-                perfil=r["perfil"], fazenda_id=r["fazenda_id"],
-                owner_id=owner)
-
-def listar_usuarios():
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT id,nome,email,perfil,fazenda_id FROM usuarios WHERE ativo=1 ORDER BY nome")
-        rows = _fetch(cur)
-        return [(r["id"],r["nome"],r["email"],r["perfil"],r["fazenda_id"]) for r in rows]
-
-def usuario_existe():
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM usuarios")
-        return cur.fetchone()[0] > 0
-
-def alterar_senha(usuario_id, nova_senha):
-    p = _ph()
-    salt = secrets.token_hex(16)
-    h = _hash_senha(nova_senha, salt)
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE usuarios SET senha_hash={p},salt={p} WHERE id={p}", (h, salt, usuario_id))
-
-
-# ── TRIAL / PLANO ─────────────────────────────────────────────────────────────
-TRIAL_DIAS = 30
-
-def ativar_trial(usuario_id):
-    p = _ph()
-    hoje   = str(_date.today())
-    expira = str(_date.today() + _td(days=TRIAL_DIAS))
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE usuarios SET trial_inicio={p},plano='trial',plano_expira={p} WHERE id={p}", (hoje, expira, usuario_id))
-
-def obter_status_plano(usuario_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT plano,trial_inicio,plano_expira,ativo FROM usuarios WHERE id={p}", (usuario_id,))
-        r = _fetchone(cur)
-    if not r:
-        return dict(plano="expirado", dias_restantes=0, trial_inicio=None, plano_expira=None, pode_exportar=False, ativo=False)
-    plano        = r["plano"] or "trial"
-    trial_inicio = r["trial_inicio"]
-    plano_expira = r["plano_expira"]
-    ativo        = bool(r["ativo"])
-    hoje = _date.today()
-    if plano == "trial" and not trial_inicio:
-        ativar_trial(usuario_id)
-        trial_inicio = str(hoje)
-        plano_expira = str(hoje + _td(days=TRIAL_DIAS))
-    dias_restantes = (_date.fromisoformat(str(plano_expira)[:10]) - hoje).days if plano_expira else 0
-    if plano == "pago":
-        status, pode_exportar = "pago", True
-    elif dias_restantes > 0:
-        status, pode_exportar = "trial", False
-    else:
-        status, pode_exportar = "expirado", False
-    return dict(plano=status, dias_restantes=dias_restantes, trial_inicio=trial_inicio,
-                plano_expira=plano_expira, pode_exportar=pode_exportar, ativo=ativo)
-
-def converter_para_pago(usuario_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE usuarios SET plano='pago',plano_expira=NULL WHERE id={p}", (usuario_id,))
-
-def listar_usuarios_trial_expirando(dias=7):
-    p = _ph()
-    limite = str(_date.today() + _td(days=dias))
-    hoje   = str(_date.today())
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT id,nome,email,plano_expira FROM usuarios WHERE plano='trial' AND plano_expira IS NOT NULL AND plano_expira>={p} AND plano_expira<={p} ORDER BY plano_expira",
-            (hoje, limite),
-        )
-        rows = _fetch(cur)
-        return [(r["id"],r["nome"],r["email"],r["plano_expira"]) for r in rows]
-
-
-# ── PLANOS E VETERINARIO ────────────────────────────────────────────────────
-
-def definir_plano_usuario(usuario_id, perfil, plano_nome, admin_id):
-    p = _ph()
-    if perfil == 'veterinario':
-        cfg = PLANOS_VETERINARIO.get(plano_nome, PLANOS_VETERINARIO['trial'])
-        limite_f = cfg['limite_fazendas']
-        limite_a = 0
-    else:
-        cfg = PLANOS_FAZENDEIRO.get(plano_nome, PLANOS_FAZENDEIRO['trial'])
-        limite_f = 0
-        limite_a = cfg['limite_animais']
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"UPDATE usuarios SET plano={p}, plano_nome={p},"
-            f" limite_animais={p}, limite_fazendas={p},"
-            f" status_conta='ativo' WHERE id={p}",
-            ('pago', plano_nome, limite_a, limite_f, usuario_id),
-        )
-        conn.commit()
-    registrar_auditoria(admin_id, 'definir_plano', 'usuarios', usuario_id, plano_nome)
-
-def obter_limites_usuario(usuario_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT perfil, plano, COALESCE(plano_nome,'trial') as plano_nome,"
-            f" COALESCE(limite_animais,50) as limite_animais,"
-            f" COALESCE(limite_fazendas,2) as limite_fazendas,"
-            f" COALESCE(status_conta,'pendente') as status_conta"
-            f" FROM usuarios WHERE id={p}",
-            (usuario_id,),
-        )
-        return _fetchone(cur)
-
-def verificar_limite_animais(owner_id, n_novos=0):
-    """Verifica limite de animais. n_novos: quantos serão adicionados."""
-    limites = obter_limites_usuario(owner_id)
-    if not limites:
-        return dict(ok=False, pode=False, atual=0, limite=0, disponiveis=0,
-                    msg='Usuario nao encontrado', upgrade='')
-    if limites['perfil'] == 'admin':
-        return dict(ok=True, pode=True, atual=0, limite=99999, disponiveis=99999,
-                    msg='Admin sem limite', upgrade='')
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT COUNT(*) FROM animais a JOIN lotes l ON l.id=a.lote_id"
-            f" WHERE l.owner_id={p} AND COALESCE(a.ativo,1)=1",
-            (owner_id,),
-        )
-        atual = cur.fetchone()[0]
-    limite    = limites['limite_animais']
-    disponiv  = max(0, limite - atual)
-    pode      = (atual + n_novos) <= limite
-    plano_k   = limites.get('plano_nome', 'trial')
-    upgrade   = UPGRADE_MSG_FAZENDEIRO.get(plano_k, '')
-    if pode:
-        msg = f'{atual}/{limite} animais ({disponiv} disponiveis)'
-    else:
-        msg = (f'Limite atingido: {atual}/{limite} animais. '
-               f'Voce tentou adicionar {n_novos} mas so ha {disponiv} vagas. {upgrade}')
-    return dict(ok=pode, pode=pode, atual=atual, limite=limite,
-                disponiveis=disponiv, msg=msg, upgrade=upgrade)
-
-def verificar_limite_fazendas(vet_id):
-    limites = obter_limites_usuario(vet_id)
-    if not limites: return dict(ok=False, atual=0, limite=0, msg='Usuario nao encontrado')
-    if limites['perfil'] == 'admin': return dict(ok=True, atual=0, limite=9999, msg='Admin sem limite')
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT COUNT(*) FROM vet_fazenda_acesso WHERE vet_id={p} AND status='aprovado'",
-            (vet_id,),
-        )
-        atual = cur.fetchone()[0]
-    limite = limites['limite_fazendas']
-    return dict(ok=atual < limite, atual=atual, limite=limite,
-                msg=f'{atual}/{limite} fazendas' if atual < limite else f'Limite atingido ({limite} fazendas)')
-
-# ── Acesso veterinario-fazenda ───────────────────────────────────────────────
-
-def solicitar_acesso_vet(vet_id, owner_id):
-    p = _ph()
-    from datetime import date as _d
-    with _conexao() as conn:
-        cur = conn.cursor()
-        # Verificar se ja existe
-        cur.execute(
-            f"SELECT id,status FROM vet_fazenda_acesso WHERE vet_id={p} AND owner_id={p}",
-            (vet_id, owner_id),
-        )
-        existente = _fetchone(cur)
-        if existente:
-            return dict(ok=False, msg=f'Solicitacao ja existe com status: {existente["status"]}')
-        # Verificar limite de fazendas do vet
-        lim = verificar_limite_fazendas(vet_id)
-        if not lim['ok']:
-            return dict(ok=False, msg=lim['msg'])
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO vet_fazenda_acesso (vet_id,owner_id,status,data_request)"
-                f" VALUES({p},{p},'pendente',{p}) RETURNING id",
-                (vet_id, owner_id, str(_d.today())),
-            )
-        else:
-            cur.execute(
-                f"INSERT INTO vet_fazenda_acesso (vet_id,owner_id,status,data_request)"
-                f" VALUES({p},{p},'pendente',{p})",
-                (vet_id, owner_id, str(_d.today())),
-            )
-        conn.commit()
-    return dict(ok=True, msg='Solicitacao enviada ao administrador')
-
-def aprovar_acesso_vet(vet_id, owner_id, admin_id, aprovar=True):
-    p = _ph()
-    from datetime import date as _d
-    status = 'aprovado' if aprovar else 'rejeitado'
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"UPDATE vet_fazenda_acesso SET status={p}, aprovado_por={p},"
-            f" data_aprovacao={p} WHERE vet_id={p} AND owner_id={p}",
-            (status, admin_id, str(_d.today()), vet_id, owner_id),
-        )
-        conn.commit()
-    registrar_auditoria(admin_id, f'acesso_vet_{status}', 'vet_fazenda_acesso', vet_id,
-                        f'owner_id={owner_id}')
-    return dict(ok=True, msg=f'Acesso {status}')
-
-def revogar_acesso_vet(vet_id, owner_id, admin_id):
-    return aprovar_acesso_vet(vet_id, owner_id, admin_id, aprovar=False)
-
-def listar_acessos_vet(vet_id=None, owner_id=None, status=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        sql = (
-            "SELECT v.id, v.vet_id, uv.nome as vet_nome, uv.email as vet_email,"
-            " v.owner_id, uf.nome as fazenda_nome, uf.email as fazenda_email,"
-            " v.status, v.data_request, v.data_aprovacao"
-            " FROM vet_fazenda_acesso v"
-            " JOIN usuarios uv ON uv.id=v.vet_id"
-            " JOIN usuarios uf ON uf.id=v.owner_id"
-            " WHERE 1=1"
-        )
-        params = []
-        if vet_id:   sql += f" AND v.vet_id={p}";   params.append(vet_id)
-        if owner_id: sql += f" AND v.owner_id={p}"; params.append(owner_id)
-        if status:   sql += f" AND v.status={p}";   params.append(status)
-        sql += " ORDER BY v.data_request DESC"
-        cur.execute(sql, params)
-        rows = _fetch(cur)
-        return [tuple(r.values()) for r in rows]
-
-def listar_fazendas_do_vet(vet_id):
-    # Retorna owner_ids das fazendas aprovadas para o veterinario
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT owner_id FROM vet_fazenda_acesso WHERE vet_id={p} AND status='aprovado'",
-            (vet_id,),
-        )
-        rows = cur.fetchall()
-        return [r[0] for r in rows]
-
-def listar_lotes_vet(vet_id):
-    # Lotes de todas as fazendas aprovadas para o veterinario
-    fazendas = listar_fazendas_do_vet(vet_id)
-    if not fazendas:
-        return []
-    todos = []
-    for fid in fazendas:
-        todos.extend(listar_lotes(owner_id=fid))
-    return todos
-
-def listar_solicitacoes_pendentes():
-    return listar_acessos_vet(status='pendente')
-
-def aprovar_conta_usuario(usuario_id, admin_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"UPDATE usuarios SET status_conta='ativo' WHERE id={p}",
-            (usuario_id,),
-        )
-        conn.commit()
-    registrar_auditoria(admin_id, 'aprovar_conta', 'usuarios', usuario_id, 'aprovado')
-
-
-# ── FAZENDAS ──────────────────────────────────────────────────────────────────
-def adicionar_fazenda(nome, cidade="", estado=""):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO fazendas (nome,cidade,estado) VALUES({p},{p},{p}) RETURNING id", (nome, cidade, estado))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO fazendas (nome,cidade,estado) VALUES({p},{p},{p})", (nome, cidade, estado))
-            return cur.lastrowid
-
-def listar_fazendas():
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT id,nome,cidade,estado FROM fazendas ORDER BY nome")
-        rows = _fetch(cur)
-        return [(r["id"],r["nome"],r["cidade"],r["estado"]) for r in rows]
-
-
-# ── VACINAS ───────────────────────────────────────────────────────────────────
-def adicionar_vacina_agenda(lote_id, nome_vacina, data_prevista, observacao=""):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO vacinas_agenda (lote_id,nome_vacina,data_prevista,observacao) VALUES({p},{p},{p},{p}) RETURNING id", (lote_id, nome_vacina, data_prevista, observacao))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO vacinas_agenda (lote_id,nome_vacina,data_prevista,observacao) VALUES({p},{p},{p},{p})", (lote_id, nome_vacina, data_prevista, observacao))
-            return cur.lastrowid
-
-def registrar_vacina_realizada(vacina_id, data_realizada):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE vacinas_agenda SET data_realizada={p},status='realizado' WHERE id={p}", (data_realizada, vacina_id))
-
-def listar_vacinas_agenda(lote_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if lote_id:
-            cur.execute(f"SELECT id,lote_id,nome_vacina,data_prevista,data_realizada,status,observacao FROM vacinas_agenda WHERE lote_id={p} ORDER BY data_prevista", (lote_id,))
-        else:
-            cur.execute("SELECT id,lote_id,nome_vacina,data_prevista,data_realizada,status,observacao FROM vacinas_agenda ORDER BY data_prevista")
-        rows = _fetch(cur)
-        return [(r["id"],r["lote_id"],r["nome_vacina"],r["data_prevista"],r["data_realizada"],r["status"],r["observacao"]) for r in rows]
-
-def listar_vacinas_pendentes(owner_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if owner_id is not None:
-            cur.execute(
-                f"SELECT v.id,v.lote_id,l.nome,v.nome_vacina,v.data_prevista,v.status,v.observacao"
-                f" FROM vacinas_agenda v JOIN lotes l ON l.id=v.lote_id"
-                f" WHERE v.status='pendente' AND l.owner_id={p} ORDER BY v.data_prevista",
-                (owner_id,),
-            )
-        else:
-            cur.execute(
-                "SELECT v.id,v.lote_id,l.nome,v.nome_vacina,v.data_prevista,v.status,v.observacao"
-                " FROM vacinas_agenda v JOIN lotes l ON l.id=v.lote_id"
-                " WHERE v.status='pendente' ORDER BY v.data_prevista"
-            )
-        rows = _fetch(cur)
-        return [(r["id"],r["lote_id"],r["nome"],r["nome_vacina"],r["data_prevista"],r["status"],r["observacao"]) for r in rows]
-
-def adicionar_medicamento(nome, unidade, estoque_atual, estoque_minimo, validade, custo_unitario, owner_id=None):
-    if owner_id is None:
-        return None
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO medicamentos (nome,unidade,estoque_atual,estoque_minimo,validade,custo_unitario,owner_id)"
-                f" VALUES({p},{p},{p},{p},{p},{p},{p}) RETURNING id",
-                (nome, unidade, estoque_atual, estoque_minimo, validade, custo_unitario, owner_id),
-            )
-            return cur.fetchone()[0]
-        else:
-            cur.execute(
-                f"INSERT INTO medicamentos (nome,unidade,estoque_atual,estoque_minimo,validade,custo_unitario,owner_id)"
-                f" VALUES({p},{p},{p},{p},{p},{p},{p})",
-                (nome, unidade, estoque_atual, estoque_minimo, validade, custo_unitario, owner_id),
-            )
-            return cur.lastrowid
-
-def listar_medicamentos(owner_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if owner_id is not None:
-            cur.execute(
-                f"SELECT id,nome,unidade,estoque_atual,estoque_minimo,validade,custo_unitario"
-                f" FROM medicamentos WHERE owner_id={p} ORDER BY nome",
-                (owner_id,),
-            )
-        else:
-            cur.execute(
-                "SELECT id,nome,unidade,estoque_atual,estoque_minimo,validade,custo_unitario"
-                " FROM medicamentos ORDER BY nome"
-            )
-        rows = _fetch(cur)
-        return [(r["id"],r["nome"],r["unidade"],r["estoque_atual"],r["estoque_minimo"],r["validade"],r["custo_unitario"]) for r in rows]
-
-def atualizar_estoque(medicamento_id, quantidade):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE medicamentos SET estoque_atual=GREATEST(0,estoque_atual-{p}) WHERE id={p}" if _usar_postgres() else f"UPDATE medicamentos SET estoque_atual=MAX(0,estoque_atual-{p}) WHERE id={p}", (quantidade, medicamento_id))
-
-def registrar_uso_medicamento(medicamento_id, animal_id, data_uso, quantidade, ocorrencia_id=None):
-    p = _ph()
-    atualizar_estoque(medicamento_id, quantidade)
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO medicamentos_uso (medicamento_id,animal_id,ocorrencia_id,data_uso,quantidade) VALUES({p},{p},{p},{p},{p}) RETURNING id", (medicamento_id, animal_id, ocorrencia_id, data_uso, quantidade))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO medicamentos_uso (medicamento_id,animal_id,ocorrencia_id,data_uso,quantidade) VALUES({p},{p},{p},{p},{p})", (medicamento_id, animal_id, ocorrencia_id, data_uso, quantidade))
-            return cur.lastrowid
-
-def listar_medicamentos_criticos(owner_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        filtro = f" AND owner_id={p}" if owner_id is not None else ""
-        params = (owner_id,) if owner_id is not None else ()
-        try:
-            # IMPORTANTE: parenteses para que AND owner_id se aplique a toda a condicao
-            cur.execute(
-                f"SELECT id,nome,unidade,estoque_atual,estoque_minimo,validade,custo_unitario FROM medicamentos"
-                f" WHERE (estoque_atual<=estoque_minimo OR (validade IS NOT NULL AND {_cast_date('validade')}<={_date_add(30)}))"
-                f"{filtro}",
-                params,
-            )
-            rows = _fetch(cur)
-            return [(r["id"],r["nome"],r["unidade"],r["estoque_atual"],r["estoque_minimo"],r["validade"],r["custo_unitario"]) for r in rows]
-        except Exception:
-            try: conn.rollback()
-            except: pass
-            return []
-
-def verificar_carencia(animal_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT mu.data_uso,m.nome,m.carencia_dias FROM medicamentos_uso mu JOIN medicamentos m ON m.id=mu.medicamento_id WHERE mu.animal_id={p} AND m.carencia_dias>0",
-            (animal_id,),
-        )
-        rows = _fetch(cur)
-    if not rows:
-        return dict(em_carencia=False, medicamentos=[], liberado_em=None)
-    import datetime
-    meds = []
-    for r in rows:
-        try:
-            dt = datetime.datetime.strptime(str(r["data_uso"])[:10], "%Y-%m-%d").date()
-            libera = dt + datetime.timedelta(days=int(r["carencia_dias"]))
-            if libera >= _date.today():
-                meds.append(dict(medicamento=r["nome"], uso=r["data_uso"], carencia_dias=r["carencia_dias"], libera_em=str(libera)))
-        except Exception:
-            pass
-    if not meds:
-        return dict(em_carencia=False, medicamentos=[], liberado_em=None)
-    liberado_em = max(m["libera_em"] for m in meds)
-    return dict(em_carencia=True, medicamentos=meds, liberado_em=liberado_em)
-
-
-# ── REPRODUCAO ────────────────────────────────────────────────────────────────
-def adicionar_reproducao(animal_id, tipo_cobertura, data_cio=None, data_diagnostico=None, resultado="pendente", data_parto_previsto=None, observacao=""):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO reproducao (animal_id,data_cio,tipo_cobertura,data_diagnostico,resultado,data_parto_previsto,observacao) VALUES({p},{p},{p},{p},{p},{p},{p}) RETURNING id", (animal_id, data_cio, tipo_cobertura, data_diagnostico, resultado, data_parto_previsto, observacao))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO reproducao (animal_id,data_cio,tipo_cobertura,data_diagnostico,resultado,data_parto_previsto,observacao) VALUES({p},{p},{p},{p},{p},{p},{p})", (animal_id, data_cio, tipo_cobertura, data_diagnostico, resultado, data_parto_previsto, observacao))
-            return cur.lastrowid
-
-def atualizar_reproducao(repro_id, resultado, data_parto_real=None, data_diagnostico=None, data_parto_previsto=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"UPDATE reproducao SET resultado={p},data_parto_real=COALESCE({p},data_parto_real),data_diagnostico=COALESCE({p},data_diagnostico),data_parto_previsto=COALESCE({p},data_parto_previsto) WHERE id={p}",
-            (resultado, data_parto_real, data_diagnostico, data_parto_previsto, repro_id),
-        )
-
-def listar_reproducao(animal_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT id,animal_id,data_cio,tipo_cobertura,data_diagnostico,resultado,data_parto_previsto,data_parto_real,observacao FROM reproducao WHERE animal_id={p} ORDER BY data_cio DESC", (animal_id,))
-        rows = _fetch(cur)
-        return [(r["id"],r["animal_id"],r["data_cio"],r["tipo_cobertura"],r["data_diagnostico"],r["resultado"],r["data_parto_previsto"],r["data_parto_real"],r["observacao"]) for r in rows]
-
-def listar_partos_previstos(owner_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        filtro_owner = f" AND l.owner_id={p}" if owner_id is not None else ""
-        params = (owner_id,) if owner_id is not None else ()
-        cur.execute(
-            f"SELECT r.id,a.identificacao,l.nome,r.data_parto_previsto,r.tipo_cobertura"
-            f" FROM reproducao r JOIN animais a ON a.id=r.animal_id JOIN lotes l ON l.id=a.lote_id"
-            f" WHERE r.resultado='positivo' AND r.data_parto_real IS NULL"
-            f" AND {_cast_date('r.data_parto_previsto')}<={_date_add(30)}{filtro_owner}"
-            f" ORDER BY r.data_parto_previsto",
-            params,
-        )
-        rows = _fetch(cur)
-        return [(r["id"],r["identificacao"],r["nome"],r["data_parto_previsto"],r["tipo_cobertura"]) for r in rows]
-
-def taxa_prenhez_lote(lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(DISTINCT r.animal_id) FROM reproducao r JOIN animais a ON a.id=r.animal_id WHERE a.lote_id={p}", (lote_id,))
-        total = cur.fetchone()[0]
-        cur.execute(f"SELECT COUNT(DISTINCT r.animal_id) FROM reproducao r JOIN animais a ON a.id=r.animal_id WHERE a.lote_id={p} AND r.resultado='positivo'", (lote_id,))
-        positivas = cur.fetchone()[0]
-    return dict(total=total, positivas=positivas, taxa=(positivas/total*100) if total > 0 else 0)
-
-
-# ── PIQUETES ──────────────────────────────────────────────────────────────────
-def adicionar_piquete(nome, area_ha, capacidade_ua, fazenda_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO piquetes (nome,area_ha,capacidade_ua,fazenda_id) VALUES({p},{p},{p},{p}) RETURNING id", (nome, area_ha, capacidade_ua, fazenda_id))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO piquetes (nome,area_ha,capacidade_ua,fazenda_id) VALUES({p},{p},{p},{p})", (nome, area_ha, capacidade_ua, fazenda_id))
-            return cur.lastrowid
-
-def listar_piquetes(fazenda_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if fazenda_id:
-            cur.execute(f"SELECT id,fazenda_id,nome,area_ha,capacidade_ua FROM piquetes WHERE fazenda_id={p} ORDER BY nome", (fazenda_id,))
-        else:
-            cur.execute("SELECT id,fazenda_id,nome,area_ha,capacidade_ua FROM piquetes ORDER BY nome")
-        rows = _fetch(cur)
-        return [(r["id"],r["fazenda_id"],r["nome"],r["area_ha"],r["capacidade_ua"]) for r in rows]
-
-def alocar_lote_piquete(piquete_id, lote_id, data_entrada):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO piquetes_historico (piquete_id,lote_id,entrada) VALUES({p},{p},{p}) RETURNING id", (piquete_id, lote_id, data_entrada))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO piquetes_historico (piquete_id,lote_id,entrada) VALUES({p},{p},{p})", (piquete_id, lote_id, data_entrada))
-            return cur.lastrowid
-
-def liberar_piquete(piquete_id, data_saida):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"UPDATE piquetes_historico SET saida={p} WHERE piquete_id={p} AND saida IS NULL", (data_saida, piquete_id))
-
-def historico_piquete(piquete_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT ph.id,l.nome,ph.entrada,ph.saida FROM piquetes_historico ph JOIN lotes l ON l.id=ph.lote_id WHERE ph.piquete_id={p} ORDER BY ph.entrada DESC", (piquete_id,))
-        rows = _fetch(cur)
-        return [(r["id"],r["nome"],r["entrada"],r["saida"]) for r in rows]
-
-
-# ── MORTALIDADE ───────────────────────────────────────────────────────────────
-def registrar_morte(animal_id, data, causa, descricao="", custo_perda=0.0):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT lote_id FROM animais WHERE id={p}", (animal_id,))
-        r = cur.fetchone()
-        lote_id = r[0] if r else None
-        cur.execute(f"UPDATE animais SET ativo=0 WHERE id={p}", (animal_id,))
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO mortalidade (animal_id,data,causa,descricao,custo_perda) VALUES({p},{p},{p},{p},{p}) RETURNING id", (animal_id, data, causa, descricao, custo_perda))
-            mid = cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO mortalidade (animal_id,data,causa,descricao,custo_perda) VALUES({p},{p},{p},{p},{p})", (animal_id, data, causa, descricao, custo_perda))
-            mid = cur.lastrowid
-    if lote_id:
-        atualizar_qtd_lote(lote_id)
-    return mid
-
-def listar_mortalidade(lote_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if lote_id:
-            cur.execute(f"SELECT m.id,m.animal_id,a.identificacao,m.data,m.causa,m.descricao,m.custo_perda FROM mortalidade m JOIN animais a ON a.id=m.animal_id WHERE a.lote_id={p} ORDER BY m.data DESC", (lote_id,))
-        else:
-            cur.execute("SELECT m.id,m.animal_id,a.identificacao,m.data,m.causa,m.descricao,m.custo_perda FROM mortalidade m JOIN animais a ON a.id=m.animal_id ORDER BY m.data DESC")
-        rows = _fetch(cur)
-        return [(r["id"],r["animal_id"],r["identificacao"],r["data"],r["causa"],r["descricao"],r["custo_perda"]) for r in rows]
-
-def taxa_mortalidade_lote(lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p}", (lote_id,))
-        total = cur.fetchone()[0]
-        cur.execute(f"SELECT COUNT(*) FROM mortalidade m JOIN animais a ON a.id=m.animal_id WHERE a.lote_id={p}", (lote_id,))
-        mortos = cur.fetchone()[0]
-    return dict(total=total, mortos=mortos, taxa=round((mortos/total*100) if total > 0 else 0, 2))
-
-
-# ── AUDITORIA ─────────────────────────────────────────────────────────────────
-def registrar_auditoria(usuario_id, acao, tabela="", registro_id=None, detalhe=""):
-    p = _ph()
-    from datetime import datetime
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"INSERT INTO auditoria (usuario_id,acao,tabela,registro_id,detalhe,data_hora) VALUES({p},{p},{p},{p},{p},{p})",
-            (usuario_id, acao, tabela, registro_id, detalhe, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-        )
-
-def listar_auditoria(limite=100, usuario_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if usuario_id:
-            cur.execute(f"SELECT a.id,u.nome,a.acao,a.tabela,a.registro_id,a.detalhe,a.data_hora FROM auditoria a JOIN usuarios u ON u.id=a.usuario_id WHERE a.usuario_id={p} ORDER BY a.id DESC LIMIT {p}", (usuario_id, limite))
-        else:
-            cur.execute(f"SELECT a.id,u.nome,a.acao,a.tabela,a.registro_id,a.detalhe,a.data_hora FROM auditoria a JOIN usuarios u ON u.id=a.usuario_id ORDER BY a.id DESC LIMIT {p}", (limite,))
-        rows = _fetch(cur)
-        return [(r["id"],r["nome"],r["acao"],r["tabela"],r["registro_id"],r["detalhe"],r["data_hora"]) for r in rows]
-
-
-# ── GTA / SISBOV ──────────────────────────────────────────────────────────────
-def registrar_gta(lote_id, numero_gta, data_emissao, origem, destino, quantidade, finalidade="Abate", observacao=""):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO gta (lote_id,numero_gta,data_emissao,origem,destino,quantidade,finalidade,observacao) VALUES({p},{p},{p},{p},{p},{p},{p},{p}) RETURNING id", (lote_id, numero_gta, data_emissao, origem, destino, quantidade, finalidade, observacao))
-            gta_id = cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO gta (lote_id,numero_gta,data_emissao,origem,destino,quantidade,finalidade,observacao) VALUES({p},{p},{p},{p},{p},{p},{p},{p})", (lote_id, numero_gta, data_emissao, origem, destino, quantidade, finalidade, observacao))
-            gta_id = cur.lastrowid
-        if finalidade in ("Abate", "Venda"):
-            cur.execute(f"SELECT id FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1 ORDER BY id DESC LIMIT {p}", (lote_id, quantidade))
-            rows = cur.fetchall()
-            for row in rows:
-                aid = row[0] if _usar_postgres() else row[0]
-                cur.execute(f"UPDATE animais SET ativo=0 WHERE id={p}", (aid,))
-    atualizar_qtd_lote(lote_id)
-    return gta_id
-
-def listar_gta(lote_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if lote_id:
-            cur.execute(f"SELECT g.id,g.lote_id,l.nome,g.numero_gta,g.data_emissao,g.origem,g.destino,g.quantidade,g.finalidade,g.observacao FROM gta g JOIN lotes l ON l.id=g.lote_id WHERE g.lote_id={p} ORDER BY g.data_emissao DESC", (lote_id,))
-        else:
-            cur.execute("SELECT g.id,g.lote_id,l.nome,g.numero_gta,g.data_emissao,g.origem,g.destino,g.quantidade,g.finalidade,g.observacao FROM gta g JOIN lotes l ON l.id=g.lote_id ORDER BY g.data_emissao DESC")
-        rows = _fetch(cur)
-        return [(r["id"],r["lote_id"],r["nome"],r["numero_gta"],r["data_emissao"],r["origem"],r["destino"],r["quantidade"],r["finalidade"],r["observacao"]) for r in rows]
-
-def registrar_sisbov(animal_id, numero_sisbov, data_certificacao):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO sisbov (animal_id,numero_sisbov,data_certificacao) VALUES({p},{p},{p}) ON CONFLICT (animal_id) DO UPDATE SET numero_sisbov=EXCLUDED.numero_sisbov,data_certificacao=EXCLUDED.data_certificacao RETURNING id", (animal_id, numero_sisbov, data_certificacao))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT OR REPLACE INTO sisbov (animal_id,numero_sisbov,data_certificacao) VALUES({p},{p},{p})", (animal_id, numero_sisbov, data_certificacao))
-            return cur.lastrowid
-
-def obter_sisbov(animal_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT id,animal_id,numero_sisbov,data_certificacao FROM sisbov WHERE animal_id={p}", (animal_id,))
-        r = _fetchone(cur)
-        return (r["id"],r["animal_id"],r["numero_sisbov"],r["data_certificacao"]) if r else None
-
-
-# ── SCORE DE SAUDE ────────────────────────────────────────────────────────────
-def calcular_score_saude(animal_id):
-    import pandas as pd
-    pesagens = listar_pesagens(animal_id)
-    gmd = 0.0
-    if len(pesagens) >= 2:
-        df = pd.DataFrame(pesagens, columns=["id","aid","peso","data"])
-        df["data"] = pd.to_datetime(df["data"])
-        df = df.sort_values("data")
-        dias = (df["data"].iloc[-1] - df["data"].iloc[0]).days
-        if dias > 0:
-            gmd = (df["peso"].iloc[-1] - df["peso"].iloc[0]) / dias
-    pts_gmd = 50 if gmd>=1.2 else 45 if gmd>=1.0 else 38 if gmd>=0.8 else 30 if gmd>=0.6 else 20 if gmd>=0.4 else 10 if gmd>=0.0 else 0
-    ocs = listar_ocorrencias(animal_id)
-    pen = min(35, sum(1 for o in ocs if o[5]=="Alta")*15 + sum(1 for o in ocs if o[5]=="Media")*7 + sum(1 for o in ocs if o[5]=="Baixa")*3)
-    pts_oc = max(0, 35 - pen)
-    repros = listar_reproducao(animal_id)
-    pts_rep = 5 if repros and repros[0][5]=="negativo" else 10 if repros and repros[0][5]=="pendente" else 15
-    score = pts_gmd + pts_oc + pts_rep
-    classif = "Excelente" if score>=80 else "Bom" if score>=60 else "Regular" if score>=40 else "Critico"
-    return dict(score=score, classificacao=classif,
-                detalhes=dict(pts_gmd=pts_gmd, pts_ocorrencias=pts_oc, pts_reproducao=pts_rep, gmd=round(gmd,3), n_ocorrencias=len(ocs)))
-
-
-# ── PREVISAO DE ABATE ─────────────────────────────────────────────────────────
-def calcular_previsao_abate(animal_id):
-    import pandas as pd
-    from datetime import date as dt
-    animal = obter_animal(animal_id)
-    if not animal: return {}
-    peso_alvo = animal[7]
-    pesagens  = listar_pesagens(animal_id)
-    if len(pesagens) < 2 or peso_alvo <= 0:
-        return dict(erro="Necessario >= 2 pesagens e peso alvo definido")
-    df = pd.DataFrame(pesagens, columns=["id","aid","peso","data"])
-    df["data"] = pd.to_datetime(df["data"])
-    df = df.sort_values("data")
-    peso_atual = df["peso"].iloc[-1]
-    dias_hist  = (df["data"].iloc[-1] - df["data"].iloc[0]).days
-    if dias_hist == 0: return dict(erro="Datas de pesagem identicas")
-    gmd = (peso_atual - df["peso"].iloc[0]) / dias_hist
-    if gmd <= 0: return dict(erro="GMD negativo")
-    if peso_atual >= peso_alvo:
-        return dict(gmd=round(gmd,3), peso_atual=peso_atual, peso_alvo=peso_alvo, dias_restantes=0, data_prevista=str(dt.today()), confianca="pronto")
-    dias_rest = int((peso_alvo - peso_atual) / gmd)
-    data_prev = dt.today() + _td(days=dias_rest)
-    confianca = "alta" if len(pesagens)>=5 else "media" if len(pesagens)>=3 else "baixa"
-    return dict(gmd=round(gmd,3), peso_atual=round(peso_atual,1), peso_alvo=round(peso_alvo,1),
-                dias_restantes=dias_rest, data_prevista=str(data_prev), confianca=confianca)
-
-
-# ── VENDAS / MARGEM ───────────────────────────────────────────────────────────
-def lote_ja_vendido(lote_id):
-    """Verifica se lote ja foi vendido (sem animais ativos)."""
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        try:
-            cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND ativo=1",(lote_id,))
-            ativos = cur.fetchone()[0]
-            cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p}",(lote_id,))
-            total = cur.fetchone()[0]
-            return total > 0 and ativos == 0
-        except Exception:
-            return False
-
-
-def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg,
-                         frigorific="", observacao="", animais_vendidos=None):
-    """Registra venda e da baixa nos animais. Schema: ativo(int) status(text)"""
-    p = _ph()
-
-    # Passo 1: Registrar a venda
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,"
-                f"peso_total_kg,frigorific,observacao) "
-                f"VALUES({p},{p},{p},{p},{p},{p}) RETURNING id",
-                (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao)
-            )
-            venda_id = cur.fetchone()[0]
-        else:
-            cur.execute(
-                f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,"
-                f"peso_total_kg,frigorific,observacao) "
-                f"VALUES({p},{p},{p},{p},{p},{p})",
-                (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao)
-            )
-            venda_id = cur.lastrowid
-        conn.commit()
-
-    # Passo 2: Buscar animais para dar baixa
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if animais_vendidos is None:
-            cur.execute(f"SELECT id FROM animais WHERE lote_id={p} AND ativo=1", (lote_id,))
-            ids_baixa = [r[0] for r in cur.fetchall()]
-        else:
-            ids_baixa = list(animais_vendidos)
-
-    # Passo 3: Dar baixa em cada animal individualmente
-    for aid in ids_baixa:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"UPDATE animais SET ativo=0, status='VENDIDO' WHERE id={p}",
-                (aid,)
-            )
-            conn.commit()
-
-    # Passo 4: Contar ativos restantes
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND ativo=1", (lote_id,))
-        qtd_ativos = cur.fetchone()[0]
-
-    # Passo 5a: Atualizar qtd_recebida do lote
-    with _conexao() as conn:
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                f"UPDATE lotes SET qtd_recebida={p} WHERE id={p}",
-                (qtd_ativos, lote_id)
-            )
-            conn.commit()
-        except Exception:
-            try: conn.rollback()
-            except: pass
-
-    # Passo 5b: Marcar lote como VENDIDO (operacao separada)
-    with _conexao() as conn:
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                f"UPDATE lotes SET status='VENDIDO' WHERE id={p}",
-                (lote_id,)
-            )
-            conn.commit()
-        except Exception:
-            try: conn.rollback()
-            except: pass
-
-    return venda_id
-
-def calcular_margem_lote(lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        lote = obter_lote(lote_id)
-        if not lote: return {}
-        cur.execute(f"SELECT COALESCE(preco_por_animal,0) FROM lotes WHERE id={p}", (lote_id,))
-        preco_animal = cur.fetchone()[0]
-        custo_compra = preco_animal * lote[5]
-        cur.execute(f"SELECT preco_venda_kg,peso_total_kg,data_venda,frigorific FROM vendas_lote WHERE lote_id={p} ORDER BY id DESC LIMIT 1", (lote_id,))
-        venda = cur.fetchone()
-        receita_real = (venda[0]*venda[1]) if venda else 0.0
-        animais = listar_animais_por_lote(lote_id)
-        custo_san = sum(o[6] for a in animais for o in listar_ocorrencias(a[0]) if o[6])
-        margem = receita_real - custo_compra - custo_san
-        margem_pct = (margem/custo_compra*100) if custo_compra > 0 else 0
-    return dict(custo_compra=round(custo_compra,2), receita_real=round(receita_real,2),
-                custo_sanitario=round(custo_san,2), margem=round(margem,2), margem_pct=round(margem_pct,1),
-                data_venda=venda[2] if venda else None, frigorific=venda[3] if venda else "",
-                venda_registrada=venda is not None)
-
-def listar_vendas_lote(lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT id,lote_id,data_venda,preco_venda_kg,peso_total_kg,frigorific,observacao FROM vendas_lote WHERE lote_id={p} ORDER BY data_venda DESC", (lote_id,))
-        rows = _fetch(cur)
-        return [(r["id"],r["lote_id"],r["data_venda"],r["preco_venda_kg"],r["peso_total_kg"],r["frigorific"],r["observacao"]) for r in rows]
-
-
-# ── COTACOES ──────────────────────────────────────────────────────────────────
-def salvar_cotacao(data, preco, fonte="manual"):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO cotacoes (data,preco,fonte) VALUES({p},{p},{p}) ON CONFLICT (data) DO UPDATE SET preco=EXCLUDED.preco,fonte=EXCLUDED.fonte RETURNING id", (data, preco, fonte))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO cotacoes (data,preco,fonte) VALUES({p},{p},{p}) ON CONFLICT(data) DO UPDATE SET preco=excluded.preco,fonte=excluded.fonte", (data, preco, fonte))
-            return cur.lastrowid
-
-def listar_cotacoes(dias=30):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if dias <= 0:
-            cur.execute("SELECT id,data,preco,fonte FROM cotacoes ORDER BY data ASC")
-        else:
-            cur.execute(
-                f"SELECT id,data,preco,fonte FROM cotacoes WHERE {_cast_date('data')}>={_date_add(dias, chr(45))} ORDER BY data ASC"
-            )
-        rows = _fetch(cur)
-        return [(r["id"],r["data"],r["preco"],r["fonte"]) for r in rows]
-
-def obter_ultima_cotacao():
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT id,data,preco,fonte FROM cotacoes ORDER BY data DESC LIMIT 1")
-        r = _fetchone(cur)
-        return (r["id"],r["data"],r["preco"],r["fonte"]) if r else None
-
-
-# ── GMD TEMPORAL ──────────────────────────────────────────────────────────────
-def calcular_gmd_temporal(lote_id, janela_dias=14):
-    import pandas as pd
-    animais = listar_animais_por_lote(lote_id)
-    todos = [{"animal_id":a[0],"peso":p[2],"data":p[3]} for a in animais for p in listar_pesagens(a[0])]
-    if len(todos) < 2: return []
-    df = pd.DataFrame(todos)
-    df["data"] = pd.to_datetime(df["data"])
-    df = df.sort_values("data")
-    resultado = []
-    data_atual = df["data"].min() + pd.Timedelta(days=janela_dias)
-    while data_atual <= df["data"].max():
-        janela = df[df["data"] <= data_atual]
-        gmds = []
-        for aid in janela["animal_id"].unique():
-            sub = janela[janela["animal_id"]==aid].sort_values("data")
-            if len(sub) >= 2:
-                dias = (sub["data"].iloc[-1]-sub["data"].iloc[0]).days
-                if dias > 0:
-                    g = (sub["peso"].iloc[-1]-sub["peso"].iloc[0])/dias
-                    if 0 < g <= 2: gmds.append(g)
-        if gmds: resultado.append((str(data_atual.date()), round(sum(gmds)/len(gmds),4)))
-        data_atual += pd.Timedelta(days=janela_dias)
-    return resultado
-
-
-# ── IMPORTACAO CSV ─────────────────────────────────────────────────────────────
-def importar_pesagens_csv(linhas, lote_id):
-    ok = erros = criados = 0
-    msgs = []
-    existentes = {a[1]:a[0] for a in listar_animais_por_lote(lote_id)}
-    for i, linha in enumerate(linhas, 1):
-        try:
-            ident = str(linha.get("identificacao","")).strip()
-            peso  = float(str(linha.get("peso","0")).replace(",","."))
-            data  = str(linha.get("data","")).strip()
-            if not ident or not data or peso <= 0:
-                erros += 1; msgs.append(f"Linha {i}: invalido"); continue
-            if ident not in existentes:
-                existentes[ident] = adicionar_animal(ident, 0, lote_id); criados += 1
-            adicionar_pesagem(existentes[ident], peso, data); ok += 1
-        except Exception as e:
-            erros += 1; msgs.append(f"Linha {i}: {e}")
-    if criados > 0:
-        atualizar_qtd_lote(lote_id)
-    return dict(importados=ok, erros=erros, animais_criados=criados, mensagens=msgs)
-
-def importar_animais_csv(linhas, lote_id):
-    ok = erros = 0; msgs = []
-    existentes = {a[1] for a in listar_animais_por_lote(lote_id)}
-    for i, linha in enumerate(linhas, 1):
-        try:
-            ident = str(linha.get("identificacao","")).strip()
-            if not ident: erros+=1; msgs.append(f"Linha {i}: vazio"); continue
-            if ident in existentes: erros+=1; msgs.append(f"Linha {i}: {ident} existe"); continue
-            idade = int(float(str(linha.get("idade",0)).replace(",",".") or 0))
-            aid = adicionar_animal(ident, idade, lote_id)
-            pa = float(str(linha.get("peso_alvo",0)).replace(",",".") or 0)
-            ob = str(linha.get("observacoes",""))
-            atualizar_animal_detalhes(aid, peso_alvo=pa if pa>0 else None, observacoes=ob if ob else None)
-            existentes.add(ident); ok += 1
-        except Exception as e:
-            erros+=1; msgs.append(f"Linha {i}: {e}")
-    if ok > 0:
-        atualizar_qtd_lote(lote_id)
-    return dict(importados=ok, erros=erros, mensagens=msgs)
-
-
-# ── CONSISTENCIA DE LOTE ──────────────────────────────────────────────────────
-def atualizar_qtd_lote(lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1", (lote_id,))
-        n = cur.fetchone()[0]
-        cur.execute(f"UPDATE lotes SET qtd_recebida={p} WHERE id={p}", (n, lote_id))
-    return n
-
-def resumo_lote(lote_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1", (lote_id,))
-        ativos = cur.fetchone()[0]
-        cur.execute(f"SELECT COUNT(*) FROM mortalidade m JOIN animais a ON a.id=m.animal_id WHERE a.lote_id={p}", (lote_id,))
-        mortos = cur.fetchone()[0]
-        cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p}", (lote_id,))
-        total = cur.fetchone()[0]
-        cur.execute(f"SELECT COUNT(*),COALESCE(SUM(quantidade),0) FROM gta WHERE lote_id={p}", (lote_id,))
-        gtas = cur.fetchone()
-        cur.execute(f"SELECT COALESCE(SUM(o.custo),0) FROM ocorrencias o JOIN animais a ON a.id=o.animal_id WHERE a.lote_id={p}", (lote_id,))
-        custo = cur.fetchone()[0]
-        cur.execute(f"SELECT COUNT(*) FROM ocorrencias o JOIN animais a ON a.id=o.animal_id WHERE a.lote_id={p}", (lote_id,))
-        ocorr = cur.fetchone()[0]
-        cur.execute(f"SELECT COUNT(*) FROM vacinas_agenda WHERE lote_id={p} AND status='pendente'", (lote_id,))
-        vac_pend = cur.fetchone()[0]
-    return dict(total_animais=total, ativos=ativos, mortos=mortos,
-                gtas_emitidas=gtas[0], animais_saida_gta=int(gtas[1]),
-                ocorrencias=ocorr, custo_sanitario=round(float(custo),2), vacinas_pendentes=vac_pend)
-
-def transferir_animal(animal_id, lote_destino_id, motivo='', usuario_id=None):
-    p = _ph()
-    from datetime import date as _d
-    with _conexao() as conn:
-        cur = conn.cursor()
-        # Buscar lote atual
-        cur.execute(f"SELECT lote_id FROM animais WHERE id={p}", (animal_id,))
-        r = cur.fetchone()
-        if not r:
-            return dict(ok=False, msg='Animal nao encontrado')
-        lote_origem_id = r[0]
-        if lote_origem_id == lote_destino_id:
-            return dict(ok=False, msg='Animal ja esta neste lote')
-        # Mover o animal
-        cur.execute(
-            f"UPDATE animais SET lote_id={p}, status='ATIVO', ativo=1 WHERE id={p}",
-            (lote_destino_id, animal_id),
-        )
-        # Registrar movimentacao
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO movimentacoes_animais (animal_id,lote_origem,lote_destino,data,motivo,usuario_id)"
-                f" VALUES({p},{p},{p},{p},{p},{p}) RETURNING id",
-                (animal_id, lote_origem_id, lote_destino_id, str(_d.today()), motivo, usuario_id),
-            )
-        else:
-            cur.execute(
-                f"INSERT INTO movimentacoes_animais (animal_id,lote_origem,lote_destino,data,motivo,usuario_id)"
-                f" VALUES({p},{p},{p},{p},{p},{p})",
-                (animal_id, lote_origem_id, lote_destino_id, str(_d.today()), motivo, usuario_id),
-            )
-        conn.commit()
-    # Atualizar contagens de ambos os lotes
-    atualizar_qtd_lote(lote_origem_id)
-    atualizar_qtd_lote(lote_destino_id)
-    return dict(ok=True, msg='Animal transferido com sucesso',
-                lote_origem=lote_origem_id, lote_destino=lote_destino_id)
-
-def listar_movimentacoes(animal_id=None, lote_id=None):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if animal_id:
-            cur.execute(
-                f"SELECT m.id,m.animal_id,a.identificacao,"
-                f"lo.nome as lote_origem,ld.nome as lote_destino,m.data,m.motivo"
-                f" FROM movimentacoes_animais m"
-                f" JOIN animais a ON a.id=m.animal_id"
-                f" JOIN lotes lo ON lo.id=m.lote_origem"
-                f" JOIN lotes ld ON ld.id=m.lote_destino"
-                f" WHERE m.animal_id={p} ORDER BY m.data DESC",
-                (animal_id,),
-            )
-        elif lote_id:
-            cur.execute(
-                f"SELECT m.id,m.animal_id,a.identificacao,"
-                f"lo.nome as lote_origem,ld.nome as lote_destino,m.data,m.motivo"
-                f" FROM movimentacoes_animais m"
-                f" JOIN animais a ON a.id=m.animal_id"
-                f" JOIN lotes lo ON lo.id=m.lote_origem"
-                f" JOIN lotes ld ON ld.id=m.lote_destino"
-                f" WHERE m.lote_origem={p} OR m.lote_destino={p} ORDER BY m.data DESC",
-                (lote_id, lote_id),
-            )
-        else:
-            cur.execute(
-                "SELECT m.id,m.animal_id,a.identificacao,"
-                "lo.nome as lote_origem,ld.nome as lote_destino,m.data,m.motivo"
-                " FROM movimentacoes_animais m"
-                " JOIN animais a ON a.id=m.animal_id"
-                " JOIN lotes lo ON lo.id=m.lote_origem"
-                " JOIN lotes ld ON ld.id=m.lote_destino"
-                " ORDER BY m.data DESC LIMIT 100"
-            )
-        rows = _fetch(cur)
-        return [(r['id'],r['animal_id'],r['identificacao'],
-                 r['lote_origem'],r['lote_destino'],r['data'],r['motivo']) for r in rows]
-
-
-def gerar_insights_lote(lote_id):
-    import pandas as pd
-    from datetime import date as _d
-    insights = []
-    animais = listar_animais_por_lote(lote_id)
-    if not animais:
-        return insights
-
-    # 1. Queda de GMD
-    gmds = []
-    for a in animais:
-        ps = listar_pesagens(a[0])
-        if len(ps) >= 2:
-            df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
-            df['data'] = pd.to_datetime(df['data'])
-            df = df.sort_values('data')
-            dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
-            if dias > 0:
-                g = (df['peso'].iloc[-1] - df['peso'].iloc[0]) / dias
-                gmds.append(g)
-    if gmds:
-        gmd_medio = sum(gmds) / len(gmds)
-        if gmd_medio < 0:
-            insights.append(dict(tipo='critico', titulo='GMD negativo',
-                descricao=f'Media do lote: {gmd_medio:.3f} kg/dia. Animais perdendo peso.',
-                acao='Revisar alimentacao e saude do lote'))
-        elif gmd_medio < 0.5:
-            insights.append(dict(tipo='aviso', titulo='GMD abaixo do esperado',
-                descricao=f'Media do lote: {gmd_medio:.3f} kg/dia. Esperado acima de 0.8.',
-                acao='Avaliar dieta e condicao sanitaria'))
-
-    # 2. Mortalidade elevada
-    from database import taxa_mortalidade_lote
-    mort = taxa_mortalidade_lote(lote_id)
-    if mort['taxa'] >= 5:
-        insights.append(dict(tipo='critico', titulo='Mortalidade elevada',
-            descricao=f'{mort["mortos"]} mortes ({mort["taxa"]}% do lote).',
-            acao='Investigar causa e acionar veterinario'))
-    elif mort['taxa'] >= 2:
-        insights.append(dict(tipo='aviso', titulo='Mortalidade acima do normal',
-            descricao=f'{mort["mortos"]} mortes ({mort["taxa"]}% do lote).',
-            acao='Monitorar de perto'))
-
-    # 3. Vacinas atrasadas
-    from database import listar_vacinas_agenda
-    vacs = listar_vacinas_agenda(lote_id)
-    atrasadas = [v for v in vacs if v[5] == 'pendente' and str(v[3]) < str(_d.today())]
-    if len(atrasadas) >= 3:
-        insights.append(dict(tipo='critico', titulo='Vacinas muito atrasadas',
-            descricao=f'{len(atrasadas)} vacinas pendentes em atraso.',
-            acao='Agendar vacinacao urgente'))
-    elif len(atrasadas) > 0:
-        insights.append(dict(tipo='aviso', titulo='Vacinas em atraso',
-            descricao=f'{len(atrasadas)} vacina(s) pendente(s) atrasada(s).',
-            acao='Verificar calendario sanitario'))
-
-    # 4. Custo sanitario elevado
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT COALESCE(SUM(o.custo),0) FROM ocorrencias o"
-            f" JOIN animais a ON a.id=o.animal_id WHERE a.lote_id={p}",
-            (lote_id,),
-        )
-        custo_san = float(cur.fetchone()[0] or 0)
-    rs = resumo_lote(lote_id)
-    if rs['ativos'] > 0:
-        custo_por_animal = custo_san / rs['ativos']
-        if custo_por_animal > 500:
-            insights.append(dict(tipo='critico', titulo='Custo sanitario muito alto',
-                descricao=f'R$ {custo_por_animal:.0f}/animal. Total: R$ {custo_san:.0f}.',
-                acao='Revisar protocolo sanitario'))
-        elif custo_por_animal > 200:
-            insights.append(dict(tipo='aviso', titulo='Custo sanitario elevado',
-                descricao=f'R$ {custo_por_animal:.0f}/animal. Total: R$ {custo_san:.0f}.',
-                acao='Monitorar gastos com saude'))
-
-    # 5. Animais sem pesagem
-    sem_pesagem = sum(1 for a in animais if len(listar_pesagens(a[0])) == 0)
-    if sem_pesagem > 0:
-        insights.append(dict(tipo='info', titulo='Animais sem pesagem',
-            descricao=f'{sem_pesagem} animal(is) sem nenhuma pesagem registrada.',
-            acao='Registrar pesagem inicial'))
-
-    # 6. Lote saudavel
-    if not insights:
-        insights.append(dict(tipo='positivo', titulo='Lote saudavel',
-            descricao='Nenhum alerta identificado. Continue monitorando.',
-            acao=None))
-
-    return insights
-
-
-# ── QUERIES AGREGADAS (elimina N+1) ─────────────────────────────────────────
-
-def listar_pesagens_todos_animais(lote_id):
-    # Uma unica query retorna todas as pesagens de todos os animais do lote
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT p.id,p.animal_id,p.peso,p.data,a.identificacao"
-            f" FROM pesagens p JOIN animais a ON a.id=p.animal_id"
-            f" WHERE a.lote_id={p} AND COALESCE(a.ativo,1)=1"
-            f" ORDER BY p.animal_id,p.data ASC",
-            (lote_id,),
-        )
-        rows = _fetch(cur)
-        return [(r['id'],r['animal_id'],r['peso'],r['data'],r['identificacao']) for r in rows]
-
-def listar_ocorrencias_todos_animais(lote_id):
-    # Uma unica query retorna todas as ocorrencias de todos os animais do lote
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT o.id,o.animal_id,o.data,o.tipo,o.descricao,"
-            f"o.gravidade,o.custo,o.dias_recuperacao,o.status,a.identificacao"
-            f" FROM ocorrencias o JOIN animais a ON a.id=o.animal_id"
-            f" WHERE a.lote_id={p}"
-            f" ORDER BY o.animal_id,o.data ASC",
-            (lote_id,),
-        )
-        rows = _fetch(cur)
-        return [(r['id'],r['animal_id'],r['data'],r['tipo'],r['descricao'],
-                 r['gravidade'],r['custo'],r['dias_recuperacao'],r['status'],r['identificacao']) for r in rows]
-
-def calcular_gmds_lote(lote_id):
-    # Calcula GMD de todos os animais do lote com uma unica query
-    import pandas as pd
-    rows = listar_pesagens_todos_animais(lote_id)
-    if not rows:
-        return {}
-    df = pd.DataFrame(rows, columns=['id','animal_id','peso','data','ident'])
-    df['data'] = pd.to_datetime(df['data'])
-    resultado = {}
-    for aid, grp in df.groupby('animal_id'):
-        grp = grp.sort_values('data')
-        if len(grp) >= 2:
-            dias = (grp['data'].iloc[-1] - grp['data'].iloc[0]).days
-            if dias > 0:
-                gmd = (grp['peso'].iloc[-1] - grp['peso'].iloc[0]) / dias
-                resultado[aid] = round(gmd, 4)
-    return resultado
-
-def resumo_dashboard(owner_id=None):
-    # KPIs do Home filtrados por owner_id
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if owner_id is not None:
-            cur.execute(f"SELECT COUNT(*) FROM lotes WHERE owner_id={p}", (owner_id,))
-        else:
-            cur.execute("SELECT COUNT(*) FROM lotes")
-        n_lotes = cur.fetchone()[0]
-
-        if owner_id is not None:
-            cur.execute(
-                f"SELECT COUNT(*) FROM animais a JOIN lotes l ON l.id=a.lote_id"
-                f" WHERE l.owner_id={p} AND COALESCE(a.ativo,1)=1",
-                (owner_id,),
-            )
-        else:
-            cur.execute("SELECT COUNT(*) FROM animais WHERE COALESCE(ativo,1)=1")
-        n_animais = cur.fetchone()[0]
-
-        if owner_id is not None:
-            cur.execute(
-                f"SELECT COUNT(*) FROM mortalidade m JOIN animais a ON a.id=m.animal_id"
-                f" JOIN lotes l ON l.id=a.lote_id WHERE l.owner_id={p}",
-                (owner_id,),
-            )
-        else:
-            cur.execute("SELECT COUNT(*) FROM mortalidade")
-        n_mortes = cur.fetchone()[0]
-
-        if owner_id is not None:
-            cur.execute(
-                f"SELECT COUNT(*) FROM vacinas_agenda v"
-                f" WHERE v.lote_id IN (SELECT id FROM lotes WHERE owner_id={p})"
-                f" AND v.status='pendente'",
-                (owner_id,),
-            )
-        else:
-            cur.execute("SELECT COUNT(*) FROM vacinas_agenda WHERE status='pendente'")
-        n_vac = cur.fetchone()[0]
-
-        cur.execute("SELECT COUNT(*) FROM medicamentos WHERE estoque_atual<=estoque_minimo")
-        n_meds = cur.fetchone()[0]
-
-    return dict(lotes=n_lotes, animais=n_animais, mortes=n_mortes,
-                vacinas_pendentes=n_vac, meds_criticos=n_meds)
-
-def calcular_scores_lote(lote_id):
-    # Calcula score de todos os animais do lote de forma agregada
-    import pandas as pd
-    animais = listar_animais_por_lote(lote_id)
-    if not animais:
-        return {}
-
-    pesagens = listar_pesagens_todos_animais(lote_id)
-    ocorrencias = listar_ocorrencias_todos_animais(lote_id)
-
-    # Agrupar por animal_id
-    pes_por_animal = {}
-    for row in pesagens:
-        aid = row[1]
-        pes_por_animal.setdefault(aid, []).append(row)
-
-    oc_por_animal = {}
-    for row in ocorrencias:
-        aid = row[1]
-        oc_por_animal.setdefault(aid, []).append(row)
-
-    scores = {}
-    for a in animais:
-        aid = a[0]
-        ps = pes_por_animal.get(aid, [])
-        ocs = oc_por_animal.get(aid, [])
-
-        # GMD
-        gmd = 0.0
-        if len(ps) >= 2:
-            df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
-            df['data'] = pd.to_datetime(df['data'])
-            df = df.sort_values('data')
-            dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
-            if dias > 0:
-                gmd = (df['peso'].iloc[-1] - df['peso'].iloc[0]) / dias
-
-        pts_gmd = (50 if gmd>=1.2 else 45 if gmd>=1.0 else 38 if gmd>=0.8
-                   else 30 if gmd>=0.6 else 20 if gmd>=0.4 else 10 if gmd>=0 else 0)
-        pen = min(35, sum(15 if o[5]=='Alta' else 7 if o[5]=='Media' else 3 for o in ocs))
-        pts_oc = max(0, 35 - pen)
-        score = pts_gmd + pts_oc + 15
-        classif = ("Excelente" if score>=80 else "Bom" if score>=60
-                   else "Regular" if score>=40 else "Critico")
-        scores[aid] = dict(score=score, classificacao=classif, gmd=round(gmd,3),
-                           n_ocorrencias=len(ocs))
-    return scores
-
-
-# ── IA E PREDICAO ────────────────────────────────────────────────────────────
-
-def calcular_risco_sanitario(lote_id):
-    """
-    Calcula score de risco sanitário 0-100 do lote.
-    Fatores: mortalidade, ocorrencias graves, vacinas atrasadas, GMD negativo.
-    Retorna: dict(score, nivel, fatores, recomendacoes)
-    """
-    import pandas as pd
-    from datetime import date as _d
-
-    score = 0
-    fatores = []
-    recomendacoes = []
-
-    animais = listar_animais_por_lote(lote_id)
-    if not animais:
-        return dict(score=0, nivel='Sem dados', fatores=[], recomendacoes=[])
-
-    total = len(animais)
-
-    # ── Fator 1: Mortalidade ──────────────────────────────────────────────────
-    mort = taxa_mortalidade_lote(lote_id)
-    taxa_mort = mort['taxa']
-    if taxa_mort >= 5:
-        score += 35
-        fatores.append(f"Mortalidade critica: {taxa_mort}%")
-        recomendacoes.append("Acionar veterinario imediatamente")
-    elif taxa_mort >= 3:
-        score += 20
-        fatores.append(f"Mortalidade elevada: {taxa_mort}%")
-        recomendacoes.append("Investigar causa das mortes")
-    elif taxa_mort >= 1:
-        score += 10
-        fatores.append(f"Mortalidade acima do normal: {taxa_mort}%")
-
-    # ── Fator 2: Ocorrencias dos ultimos 60 dias ─────────────────────────────
-    ocs = listar_ocorrencias_todos_animais(lote_id)
-    from datetime import date as _dt, timedelta as _td2
-    limite_60 = str(_dt.today() - _td2(days=60))
-    # o[2] = data_ocorrencia
-    ocs_recentes = [o for o in ocs if o[2] and str(o[2]) >= limite_60]
-    graves_at  = [o for o in ocs_recentes if o[5] == 'Alta' and o[8] == 'Em tratamento']
-    graves_tot = [o for o in ocs_recentes if o[5] == 'Alta']
-    medias_at  = [o for o in ocs_recentes if o[5] == 'Media' and o[8] == 'Em tratamento']
-    medias_tot = [o for o in ocs_recentes if o[5] == 'Media']
-
-    if len(graves_at) >= 3:
-        score += 30
-        fatores.append(f"{len(graves_at)} ocorrencias graves em tratamento")
-        recomendacoes.append("Revisar protocolo sanitario urgente")
-    elif len(graves_at) > 0:
-        score += 20
-        fatores.append(f"{len(graves_at)} ocorrencia(s) grave(s) ativa(s)")
-        recomendacoes.append("Monitorar animais com ocorrencias graves")
-    elif len(graves_tot) >= 2:
-        score += 10
-        fatores.append(f"{len(graves_tot)} ocorrencias graves nos ultimos 60 dias")
-
-    if len(medias_at) >= 5:
-        score += 12
-        fatores.append(f"{len(medias_at)} ocorrencias medias em tratamento")
-    elif len(medias_at) > 0:
-        score += 6
-        fatores.append(f"{len(medias_at)} ocorrencia(s) media(s) ativa(s)")
-    elif len(medias_tot) >= 3:
-        score += 4
-        fatores.append(f"{len(medias_tot)} ocorrencias medias nos ultimos 60 dias")
-
-    # ── Fator 3: GMD negativo ou muito baixo ─────────────────────────────────
-    gmds = list(calcular_gmds_lote(lote_id).values())
-    if gmds:
-        gmd_medio = sum(gmds) / len(gmds)
-        negativos = sum(1 for g in gmds if g < 0)
-        pct_neg = negativos / len(gmds) * 100
-        if pct_neg >= 30:
-            score += 20
-            fatores.append(f"{pct_neg:.0f}% dos animais com GMD negativo")
-            recomendacoes.append("Revisar alimentacao e saude do lote")
-        elif gmd_medio < 0.3:
-            score += 10
-            fatores.append(f"GMD medio muito baixo: {gmd_medio:.3f} kg/dia")
-            recomendacoes.append("Avaliar dieta e condicao corporal")
-
-    # ── Fator 4: Vacinas atrasadas ────────────────────────────────────────────
-    vacs = listar_vacinas_agenda(lote_id)
-    hoje = str(_d.today())
-    atrasadas = [v for v in vacs if v[5] == 'pendente' and str(v[4]) < hoje]
-    if len(atrasadas) >= 5:
-        score += 15
-        fatores.append(f"{len(atrasadas)} vacinas muito atrasadas")
-        recomendacoes.append("Agendar vacinacao com urgencia")
-    elif len(atrasadas) > 0:
-        score += 7
-        fatores.append(f"{len(atrasadas)} vacina(s) em atraso")
-        recomendacoes.append("Verificar calendario sanitario")
-
-    # ── Fator 5: Animais sem pesagem ─────────────────────────────────────────
-    pes_map = {}
-    for p in listar_pesagens_todos_animais(lote_id):
-        pes_map.setdefault(p[1], []).append(p)
-    sem_peso = sum(1 for a in animais if a[0] not in pes_map)
-    pct_sem = sem_peso / total * 100
-    if pct_sem >= 50:
-        score += 5
-        fatores.append(f"{pct_sem:.0f}% dos animais sem pesagem")
-        recomendacoes.append("Registrar pesagem inicial dos animais")
-
-    # ── Nivel de risco ────────────────────────────────────────────────────────
-    score = min(100, score)
-    if score >= 70:   nivel = 'Critico'
-    elif score >= 40: nivel = 'Alto'
-    elif score >= 20: nivel = 'Medio'
-    elif score >= 5:  nivel = 'Baixo'
-    else:             nivel = 'Saudavel'
-
-    if not fatores:
-        fatores = ['Nenhum fator de risco identificado']
-    if not recomendacoes:
-        recomendacoes = ['Manter monitoramento regular']
-
-    return dict(score=score, nivel=nivel, fatores=fatores,
-                recomendacoes=recomendacoes, mortalidade=taxa_mort,
-                ocorrencias_graves=len(graves_tot), gmds=gmds)
-
-
-def prever_abate(lote_id, peso_alvo_kg=450.0, preco_kg=10.0, custo_diario=12.0):
-    """
-    Prevê data e resultado financeiro do abate para cada animal do lote.
-    Retorna lista de dicts por animal com previsao.
-    """
-    import pandas as pd
-    from datetime import date as _d, timedelta as _td
-
-    animais = listar_animais_por_lote(lote_id)
-    if not animais:
-        return []
-
-    pes_todos = listar_pesagens_todos_animais(lote_id)
-    pes_map = {}
-    for p in pes_todos:
-        pes_map.setdefault(p[1], []).append(p)
-
-    resultado = []
-    hoje = _d.today()
-
-    for a in animais:
-        aid, ident = a[0], a[1]
-        ps = sorted(pes_map.get(aid, []), key=lambda x: x[3])
-
-        if len(ps) < 2:
-            resultado.append(dict(
-                animal_id=aid, identificacao=ident,
-                peso_atual=ps[0][2] if ps else None,
-                gmd=None, dias_restantes=None,
-                data_prevista=None, receita_prevista=None,
-                custo_estimado=None, margem_estimada=None,
-                status='Sem dados suficientes'
-            ))
-            continue
-
-        df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
-        df['data'] = pd.to_datetime(df['data'])
-        df = df.sort_values('data')
-        dias_total = (df['data'].iloc[-1] - df['data'].iloc[0]).days
-        peso_atual = float(df['peso'].iloc[-1])
-
-        if dias_total <= 0:
-            gmd = 0.0
-        else:
-            gmd = (peso_atual - float(df['peso'].iloc[0])) / dias_total
-
-        if gmd <= 0:
-            resultado.append(dict(
-                animal_id=aid, identificacao=ident,
-                peso_atual=peso_atual, gmd=round(gmd, 3),
-                dias_restantes=None, data_prevista=None,
-                receita_prevista=None, custo_estimado=None,
-                margem_estimada=None, status='GMD negativo'
-            ))
-            continue
-
-        kg_faltando = max(0, peso_alvo_kg - peso_atual)
-        dias_rest = int(kg_faltando / gmd) if gmd > 0 else 9999
-        data_prev = hoje + _td(days=dias_rest)
-        receita = peso_alvo_kg * preco_kg
-        custo = custo_diario * dias_rest
-        margem = receita - custo
-
-        if dias_rest == 0:
-            status = 'Pronto para abate'
-        elif dias_rest <= 30:
-            status = 'Proximo do abate'
-        elif dias_rest <= 90:
-            status = 'Em engorda'
-        else:
-            status = 'Inicio de engorda'
-
-        resultado.append(dict(
-            animal_id=aid, identificacao=ident,
-            peso_atual=round(peso_atual, 1), gmd=round(gmd, 3),
-            dias_restantes=dias_rest,
-            data_prevista=str(data_prev),
-            receita_prevista=round(receita, 2),
-            custo_estimado=round(custo, 2),
-            margem_estimada=round(margem, 2),
-            status=status
-        ))
-
-    return sorted(resultado, key=lambda x: x['dias_restantes'] or 9999)
-
-
-def detectar_anomalias_peso(lote_id):
-    """
-    Detecta animais com comportamento anormal de peso.
-    Retorna lista de alertas com animal e descricao.
-    """
-    import pandas as pd
-
-    alertas = []
-    pes_todos = listar_pesagens_todos_animais(lote_id)
-    animais = listar_animais_por_lote(lote_id)
-    nomes = {a[0]: a[1] for a in animais}
-
-    pes_map = {}
-    for p in pes_todos:
-        pes_map.setdefault(p[1], []).append(p)
-
-    gmds_todos = []
-    for aid, ps in pes_map.items():
-        if len(ps) >= 2:
-            df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
-            df['data'] = pd.to_datetime(df['data'])
-            df = df.sort_values('data')
-            dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
-            if dias > 0:
-                gmd = (df['peso'].iloc[-1] - df['peso'].iloc[0]) / dias
-                gmds_todos.append(gmd)
-
-    if not gmds_todos:
-        return []
-
-    media_gmd = sum(gmds_todos) / len(gmds_todos)
-    desvio = (sum((g - media_gmd)**2 for g in gmds_todos) / len(gmds_todos)) ** 0.5
-
-    for aid, ps in pes_map.items():
-        if len(ps) < 2:
-            continue
-        df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
-        df['data'] = pd.to_datetime(df['data'])
-        df = df.sort_values('data')
-        dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
-        if dias <= 0:
-            continue
-        gmd = (df['peso'].iloc[-1] - df['peso'].iloc[0]) / dias
-        ident = nomes.get(aid, f'ID {aid}')
-
-        # GMD muito abaixo da media (mais de 2 desvios)
-        if desvio > 0 and gmd < media_gmd - 2 * desvio:
-            alertas.append(dict(
-                animal_id=aid, identificacao=ident,
-                tipo='GMD anomalo',
-                descricao=f'GMD {gmd:.3f} kg/d muito abaixo da media {media_gmd:.3f} kg/d do lote',
-                gravidade='Alta'
-            ))
-        # Perda de peso recente (ultima pesagem menor que penultima)
-        if len(df) >= 2:
-            if float(df['peso'].iloc[-1]) < float(df['peso'].iloc[-2]):
-                perda = float(df['peso'].iloc[-2]) - float(df['peso'].iloc[-1])
-                alertas.append(dict(
-                    animal_id=aid, identificacao=ident,
-                    tipo='Perda de peso',
-                    descricao=f'Perdeu {perda:.1f} kg na ultima pesagem',
-                    gravidade='Media' if perda < 10 else 'Alta'
-                ))
-
-    return alertas
-
-
-def resumo_ia_fazenda(owner_id=None):
-    """
-    Resumo de IA para todos os lotes da fazenda.
-    Retorna lista de lotes com score de risco e previsao de abate.
-    """
-    lotes = listar_lotes(owner_id=owner_id)
-    resultado = []
-    for l in lotes:
-        lid = l[0]
-        try:
-            risco = calcular_risco_sanitario(lid)
-            animais = listar_animais_por_lote(lid)
-            rs = resumo_lote(lid)
-            resultado.append(dict(
-                lote_id=lid, lote_nome=l[1],
-                risco_score=risco['score'],
-                risco_nivel=risco['nivel'],
-                animais_ativos=rs['ativos'],
-                principal_risco=risco['fatores'][0] if risco['fatores'] else '',
-            ))
-        except Exception:
-            pass
-    return sorted(resultado, key=lambda x: x['risco_score'], reverse=True)
-
-
-def _garantir_tabela_login_tentativas():
-    """Cria tabela de tentativas de login se nao existir."""
-    with _conexao() as conn:
-        cur = conn.cursor()
-        try:
-            if _usar_postgres():
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS login_tentativas (
-                        id SERIAL PRIMARY KEY,
-                        email TEXT NOT NULL,
-                        tentativa_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-            else:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS login_tentativas (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        email TEXT NOT NULL,
-                        tentativa_em DATETIME DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-            conn.commit()
-        except Exception:
-            pass
-
-
-def registrar_tentativa_login(email):
-    """Registra uma tentativa falha de login."""
-    _garantir_tabela_login_tentativas()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        p = _ph()
-        try:
-            cur.execute(
-                f"INSERT INTO login_tentativas (email) VALUES ({p})",
-                (email.lower().strip(),)
-            )
-            conn.commit()
-        except Exception:
-            pass
-
-
-def verificar_bloqueio_login(email):
-    """Verifica se email esta bloqueado (5+ tentativas nos ultimos 10 min).
-    Retorna (bloqueado, tentativas, segundos_restantes)"""
-    _garantir_tabela_login_tentativas()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        p = _ph()
-        try:
-            if _usar_postgres():
-                cur.execute(
-                    f"SELECT tentativa_em FROM login_tentativas "
-                    f"WHERE email={p} "
-                    f"AND tentativa_em > NOW() - INTERVAL '10 minutes' "
-                    f"ORDER BY tentativa_em ASC",
-                    (email.lower().strip(),)
-                )
-            else:
-                cur.execute(
-                    f"SELECT tentativa_em FROM login_tentativas "
-                    f"WHERE email={p} "
-                    f"AND tentativa_em > datetime('now','-10 minutes') "
-                    f"ORDER BY tentativa_em ASC",
-                    (email.lower().strip(),)
-                )
-            rows = cur.fetchall()
-            n = len(rows)
-            if n >= 5:
-                # Calcular segundos restantes ate liberar
-                from datetime import datetime as _dtm, timezone as _tz
-                try:
-                    primeira = rows[0][0]
-                    if isinstance(primeira, str):
-                        primeira = _dtm.fromisoformat(primeira.replace('Z',''))
-                    if hasattr(primeira, 'tzinfo') and primeira.tzinfo:
-                        agora = _dtm.now(_tz.utc)
-                    else:
-                        agora = _dtm.now()
-                    seg_rest = max(0, 600 - int((agora - primeira).total_seconds()))
-                except Exception:
-                    seg_rest = 300
-                return (True, n, seg_rest)
-            return (False, n, 0)
-        except Exception:
-            return (False, 0, 0)
-
-
-def limpar_tentativas_login(email):
-    """Limpa tentativas apos login bem sucedido."""
-    _garantir_tabela_login_tentativas()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        p = _ph()
-        try:
-            cur.execute(
-                f"DELETE FROM login_tentativas WHERE email={p}",
-                (email.lower().strip(),)
-            )
-            conn.commit()
-        except Exception:
-            pass
-
-
-def _garantir_status_animal_lote():
-    """Garante coluna status em animais e lotes."""
-    with _conexao() as conn:
-        cur = conn.cursor()
-        try:
-            if _usar_postgres():
-                cur.execute("ALTER TABLE animais ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Ativo'")
-                cur.execute("ALTER TABLE lotes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Ativo'")
-            else:
-                for tbl, col in [('animais','status'),('lotes','status')]:
-                    cur.execute(f"PRAGMA table_info({tbl})")
-                    cols = [r[1] for r in cur.fetchall()]
-                    if col not in cols:
-                        cur.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT DEFAULT 'Ativo'")
-            conn.commit()
-        except Exception:
-            pass
-
-
-def _garantir_owner_id_medicamentos():
-    """Garante que a tabela medicamentos tem coluna owner_id."""
-    with _conexao() as conn:
-        cur = conn.cursor()
-        try:
-            if _usar_postgres():
-                cur.execute(
-                    "ALTER TABLE medicamentos ADD COLUMN IF NOT EXISTS owner_id INTEGER"
-                )
-            else:
-                cur.execute("PRAGMA table_info(medicamentos)")
-                cols = [r[1] for r in cur.fetchall()]
-                if 'owner_id' not in cols:
-                    cur.execute("ALTER TABLE medicamentos ADD COLUMN owner_id INTEGER")
-            conn.commit()
-            return True
-        except Exception:
-            return False
-
-
-def _garantir_coluna_onboarding():
-    """Garante que a coluna onboarding_completo existe na tabela usuarios."""
-    with _conexao() as conn:
-        cur = conn.cursor()
-        try:
-            if _usar_postgres():
-                cur.execute(
-                    "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS "
-                    "onboarding_completo INTEGER DEFAULT 0"
-                )
-            else:
-                # SQLite: verificar antes de adicionar
-                cur.execute("PRAGMA table_info(usuarios)")
-                cols = [r[1] for r in cur.fetchall()]
-                if 'onboarding_completo' not in cols:
-                    cur.execute(
-                        "ALTER TABLE usuarios ADD COLUMN "
-                        "onboarding_completo INTEGER DEFAULT 0"
-                    )
-            conn.commit()
-            return True
-        except Exception:
-            return False
-
-
-def marcar_onboarding_completo(uid):
-    """Marca o onboarding como concluido para o usuario."""
-    _garantir_coluna_onboarding()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        p = _ph()
-        try:
-            cur.execute(
-                f"UPDATE usuarios SET onboarding_completo=1 WHERE id={p}",
-                (uid,)
-            )
-            conn.commit()
-            # Verificar se UPDATE afetou alguma linha
-            if hasattr(cur, 'rowcount') and cur.rowcount == 0:
-                # Usuario nao encontrado - nao e erro critico
-                pass
-            return True
-        except Exception as e:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            return False
-
-
-def onboarding_concluido(uid):
-    """Verifica se o usuario ja completou o onboarding."""
-    _garantir_coluna_onboarding()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        p = _ph()
-        try:
-            cur.execute(
-                f"SELECT onboarding_completo FROM usuarios WHERE id={p}",
-                (uid,)
-            )
-            r = cur.fetchone()
-            return bool(r and r[0])
-        except Exception:
-            return False
-
-
-def criar_dados_exemplo(uid):
-    """Cria uma fazenda demo com 1 lote e 5 animais ficticios.
-    Bloqueia se ultrapassar o limite do plano."""
-    import random
-    from datetime import date as _d, timedelta as _td
-
-    # Verificar se ja tem dados exemplo
-    lotes_user = listar_lotes(owner_id=uid)
-    if any('[DEMO]' in (l[1] or '') for l in lotes_user):
-        return dict(ja_existe=True, bloqueado=False,
-                    msg="Voce ja tem dados de exemplo cadastrados.")
-
-    # Verificar limite do plano (5 animais sao criados)
-    try:
-        lim = verificar_limite_animais(uid, 5)
-        if not lim["pode"]:
-            return dict(
-                ja_existe=False,
-                bloqueado=True,
-                msg=(f"Limite do plano atingido. Voce tem {lim['atual']} de "
-                     f"{lim['limite']} animais e os dados de exemplo criariam "
-                     f"mais 5. Disponiveis: {lim['disponiveis']}. "
-                     f"Faca upgrade ou remova animais antes de criar dados de exemplo.")
-            )
-    except Exception:
-        pass
-
-    hoje = _d.today()
-    inicio = hoje - _td(days=90)
-
-    # Criar lote demo
-    lote_id = adicionar_lote(
-        nome="[DEMO] Pasto Vitrine",
-        descricao="Lote de exemplo - pode excluir quando quiser",
-        data_entrada=str(inicio),
-        qtd_comprada=5,
-        qtd_recebida=5,
-        transporte="Demo",
-        owner_id=uid
+# pages/sistema.py -- Telas: Inicio, Buscar Animal, Notificacoes, Log Auditoria, Administracao, Gestao Usuarios
+
+import streamlit as st
+import pandas as pd
+from datetime import datetime, date
+from database import *
+from database import _conexao, _ph
+
+try:
+    from notifications import (
+        email_boas_vindas, email_trial_expirando, email_trial_expirado,
+        email_vacina_pendente, email_medicamento_critico, email_configurado
     )
+except ImportError:
+    def email_configurado(): return False
+    def email_boas_vindas(*a, **k): return False, "Email nao configurado"
+    def email_trial_expirando(*a, **k): return False, "Email nao configurado"
+    def email_trial_expirado(*a, **k): return False, "Email nao configurado"
+    def email_vacina_pendente(*a, **k): return False, "Email nao configurado"
+    def email_medicamento_critico(*a, **k): return False, "Email nao configurado"
 
-    # Criar 5 animais com pesagens
-    nomes = ["DEMO-001", "DEMO-002", "DEMO-003", "DEMO-004", "DEMO-005"]
-    pesos_iniciais = [280, 295, 310, 270, 305]
-    ganhos = [0.85, 0.75, 0.90, 0.65, 0.80]  # kg/dia
+try:
+    from cepea import cotacao_com_cache, historico_grafico
+except ImportError:
+    def cotacao_com_cache(_db): return dict(preco=0.0, data="", fonte="", sucesso=False, msg="")
+    def historico_grafico(c): return dict(datas=[], precos=[])
 
-    for i, nome in enumerate(nomes):
-        aid = adicionar_animal(nome, 24, lote_id)
-        # Pesagem inicial
-        adicionar_pesagem(aid, pesos_iniciais[i], str(inicio))
-        # Pesagem ha 30 dias
-        peso_30 = pesos_iniciais[i] + ganhos[i] * 60
-        adicionar_pesagem(aid, round(peso_30, 1), str(inicio + _td(days=60)))
-        # Pesagem atual
-        peso_hoje = pesos_iniciais[i] + ganhos[i] * 90
-        adicionar_pesagem(aid, round(peso_hoje, 1), str(hoje))
+try:
+    from exports import gerar_excel_lote, gerar_pdf_relatorio
+except ImportError:
+    def gerar_excel_lote(*a, **k): return b""
+    def gerar_pdf_relatorio(*a, **k): return b""
+from ui import (
+    card_kpi, card_kpi_row, alerta, badge,
+    badge_status_animal, badge_status_lote, badge_gravidade,
+    card_animal, insight_card,
+)
+from rules import (
+    is_admin, is_vet, is_fazendeiro, owner_id,
+    listar_lotes_usuario, listar_medicamentos_usuario,
+    sel_lote, sel_animal, limpar_cache,
+    requer_admin, requer_nao_vet, owner_id_lote_novo,
+    _listar_lotes_cache, _listar_animais_cache,
+)
 
-    # Adicionar uma ocorrencia exemplo
-    primeiro_animal = listar_animais_por_lote(lote_id)[0]
-    adicionar_ocorrencia(
-        primeiro_animal[0],
-        str(inicio + _td(days=30)),
-        "Vacina",
-        "Vacinacao contra Aftosa (exemplo)",
-        "Baixa",
-        15.0,
-        0,
-        "Resolvido"
-    )
+def hdr(titulo, sub="", desc=""):
+    st.title(titulo)
+    if sub: st.caption(f"{sub} - {desc}" if desc else sub)
+    st.divider()
 
-    return dict(ja_existe=False, bloqueado=False,
-                msg="Fazenda exemplo criada! Explore o sistema.",
-                lote_id=lote_id)
+def page_inicio(u):
+    hora = datetime.now().hour
+    sau  = "Bom dia" if hora < 12 else "Boa tarde" if hora < 18 else "Boa noite"
+
+    # ── Header ────────────────────────────────────────────────────────────────
+    st.markdown(f"## {sau}, **{u['nome']}**")
+    st.caption(datetime.now().strftime("%d/%m/%Y - %H:%M"))
+    st.divider()
+
+    lotes   = listar_lotes_usuario()
+    _oid    = owner_id()
+    _is_faz = is_fazendeiro()
+    _is_vet = is_vet()
+
+    # ── Alertas do proprio usuario ─────────────────────────────────────────────
+    # Para medicamentos: sempre usa o id do usuario (nunca None)
+    _oid_med = _oid if _oid is not None else u["id"]
+    pendo = listar_vacinas_pendentes(owner_id=_oid)
+    crit  = listar_medicamentos_criticos(owner_id=_oid_med)
+    parto = listar_partos_previstos(owner_id=_oid)
 
 
-def remover_dados_exemplo(uid):
-    """Remove os dados de exemplo do usuario - cascade manual."""
-    lotes_demo = [l for l in listar_lotes(owner_id=uid)
-                  if '[DEMO]' in (l[1] or '')]
-    n_removidos = 0
-    p = _ph()
-    for lote in lotes_demo:
-        lid = lote[0]
-        with _conexao() as conn:
-            cur = conn.cursor()
+    # ══════════════════════════════════════════════════════════════════════════
+    # DASHBOARD DO FAZENDEIRO
+    # ══════════════════════════════════════════════════════════════════════════
+    if _is_faz:
+
+        def _brl(v):
             try:
-                # 1. Buscar animais do lote
-                cur.execute(
-                    f"SELECT id FROM animais WHERE lote_id={p}", (lid,)
-                )
-                aids = [r[0] for r in cur.fetchall()]
+                i, d = f"{float(v):,.2f}".split(".")
+                return f"R$ {i.replace(',','.')},{d}"
+            except: return "R$ 0,00"
 
-                # 2. Remover registros dos animais
-                for aid in aids:
-                    for tbl in ['pesagens', 'ocorrencias', 'medicamentos_uso']:
-                        try:
-                            cur.execute(
-                                f"DELETE FROM {tbl} WHERE animal_id={p}",
-                                (aid,)
+        # ── Calcular dados de IA e metricas ──────────────────────────────────
+        import database as _dbc
+        try:
+            cot = cotacao_com_cache(_dbc)
+            _preco_kg = float(cot["preco"]) if cot.get("sucesso") else 195.0
+        except Exception:
+            _preco_kg = 195.0
+
+        _todos_animais = []
+        _prontos_abate = 0
+        _melhor_data   = None
+        _receita_est   = 0.0
+        _margem_est    = 0.0
+        _custo_total   = 0.0
+
+        for l in lotes:
+            _anim_lote = listar_animais_por_lote(l[0])
+            _todos_animais.extend(_anim_lote)
+            try:
+                _prev = prever_abate(l[0], peso_alvo_kg=450,
+                                     preco_kg=_preco_kg, custo_diario=8.0)
+                for _p in _prev:
+                    _dr = _p.get("dias_restantes")
+                    if _dr is not None and _dr <= 30:
+                        _prontos_abate += 1
+                    _receita_est += float(_p.get("receita_prevista") or 0)
+                    _margem_est  += float(_p.get("margem_estimada") or 0)
+                    _custo_total += float(_p.get("custo_estimado") or 0)
+                    _dp = _p.get("data_prevista")
+                    if _dp and (_melhor_data is None or _dp < _melhor_data):
+                        _melhor_data = _dp
+            except Exception:
+                pass
+
+        _n_animais = len(_todos_animais)
+        _n_partos  = len(parto)
+
+        # ── Formatar melhor data ──────────────────────────────────────────────
+        def _fmt_dt(ds):
+            if not ds: return "—"
+            try:
+                from datetime import datetime as _dtm
+                meses = {1:"Jan",2:"Fev",3:"Mar",4:"Abr",5:"Mai",6:"Jun",
+                         7:"Jul",8:"Ago",9:"Set",10:"Out",11:"Nov",12:"Dez"}
+                dt = _dtm.strptime(str(ds)[:10], "%Y-%m-%d").date()
+                return f"{dt.day:02d} {meses[dt.month]} {dt.year}"
+            except: return str(ds)
+
+        # ══ BLOCO 1: PREVISAO DE ABATE IA ════════════════════════════════════
+        st.subheader("Previsao de Abate IA")
+        st.caption(f"Cotacao: R$ {_preco_kg:.2f}/@ — baseada nos dados de pesagem")
+
+        ia_c1, ia_c2, ia_c3, ia_c4 = st.columns(4)
+        ia_c1.metric("Total de animais",      _n_animais)
+        ia_c2.metric("Prontos p/ abate",      _prontos_abate,
+                     delta="prontos" if _prontos_abate else None,
+                     delta_color="normal" if _prontos_abate else "off")
+        ia_c3.metric("Receita total estimada", _brl(_receita_est))
+        ia_c4.metric("Margem total estimada",  _brl(_margem_est))
+
+        ia_c5, ia_c6, ia_c7, ia_c8 = st.columns(4)
+        ia_c5.metric("Custo total estimado",   _brl(_custo_total))
+        ia_c6.metric("Proxima data de abate",  _fmt_dt(_melhor_data))
+        ia_c7.metric("Partos proximos 30d",    _n_partos)
+        ia_c8.metric("Meds. em alerta",        len(crit),
+                     delta="atencao" if crit else None,
+                     delta_color="inverse" if crit else "off")
+
+        if st.button("Ver analise completa de abate", key="btn_ver_abate"):
+            st.session_state.menu = "Previsao de Abate IA"; st.rerun()
+
+        st.divider()
+
+        # ══ BLOCO 2: ALERTAS ═════════════════════════════════════════════════
+        if pendo or crit or parto:
+            st.subheader("Alertas")
+            al1, al2, al3 = st.columns(3)
+            with al1:
+                if pendo:
+                    with st.expander(f"💉 Vacinas ({len(pendo)})", expanded=True):
+                        for v in pendo[:4]:
+                            st.caption(f"- {v[3]} | {v[4]}")
+            with al2:
+                if crit:
+                    with st.expander(f"⚠ Medicamentos ({len(crit)})", expanded=True):
+                        for m in crit[:4]:
+                            mot = "baixo" if (m[3] or 0)<=(m[4] or 0) else f"vence {m[5]}"
+                            st.caption(f"- {m[1]}: {m[3]:.0f} {m[2]} ({mot})")
+            with al3:
+                if parto:
+                    with st.expander(f"🐄 Partos ({len(parto)})", expanded=True):
+                        for p in parto[:4]:
+                            st.caption(f"- {p[1]} | {p[3]}")
+            st.divider()
+
+        # ══ BLOCO 3: LOTES ═══════════════════════════════════════════════════
+        st.subheader("Seus lotes")
+        if not lotes:
+            st.info("Nenhum lote. Va em Lote > Cadastrar Lote.")
+        else:
+            ncols = min(3, len(lotes))
+            cols  = st.columns(ncols)
+            for i, l in enumerate(lotes[:6]):
+                try: rs = resumo_lote(l[0])
+                except: rs = dict(ativos=0, mortos=0,
+                                  vacinas_pendentes=0, ocorrencias=0)
+                _tags = []
+                if rs.get("mortos"):            _tags.append(f"Mortes: {rs['mortos']}")
+                if rs.get("vacinas_pendentes"): _tags.append(f"Vac.: {rs['vacinas_pendentes']}")
+                if rs.get("ocorrencias"):       _tags.append(f"Ocorr.: {rs['ocorrencias']}")
+                _ico = "🔴" if _tags else "🟢"
+                with cols[i % ncols]:
+                    st.markdown(f"**{_ico} {l[1]}**")
+                    st.caption(f"Animais: {rs.get('ativos',0)} | "
+                               f"Entrada: {l[3] or '—'}")
+                    if _tags: st.warning(" | ".join(_tags))
+                    else:     st.caption("Sem alertas")
+                    if st.button("Ver lote", key=f"btn_lote_{l[0]}",
+                                 use_container_width=True):
+                        st.session_state.menu = "Workspace do Lote"
+                        st.session_state["ws_lote_id"] = l[0]
+                        st.rerun()
+
+        st.divider()
+
+        # ══ BLOCO 4: BOTOES GRADE 2x3 ════════════════════════════════════════
+        _BTNS = [
+            ("📝", "Registrar Pesagem",   "Registrar Pesagem"),
+            ("🚨", "Nova Ocorrencia",     "Registrar Ocorrencia"),
+            ("🐄", "Novo Lote",           "Cadastrar Lote"),
+            ("🤖", "Risco Sanitario IA",  "Risco Sanitario IA"),
+            ("📈", "Previsao de Abate",   "Previsao de Abate IA"),
+            ("📊", "Anomalias de Peso",   "Anomalias de Peso"),
+        ]
+        _bcols = st.columns(3)
+        for _bi, (_ico, _label, _menu) in enumerate(_BTNS):
+            with _bcols[_bi % 3]:
+                st.markdown(
+                    f"<div style='text-align:center;font-size:28px'>{_ico}</div>",
+                    unsafe_allow_html=True
+                )
+                if st.button(_label, key=f"grid_btn_{_bi}",
+                             use_container_width=True):
+                    st.session_state.menu = _menu; st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # DASHBOARD DO VETERINARIO
+    # ══════════════════════════════════════════════════════════════════════════
+    elif _is_vet:
+        # ── Agrupar lotes por fazenda (owner_id) ──────────────────────────────
+        _faz_map = {}
+        for _l in lotes:
+            _foid = _l[-1] if len(_l) > 4 else _l[0]
+            _faz_map.setdefault(_foid, []).append(_l)
+
+        _n_fazendas = len(_faz_map)
+        _n_animais  = sum(len(listar_animais_por_lote(l[0])) for l in lotes)
+
+        # ── Cards globais ─────────────────────────────────────────────────────
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Fazendas vinculadas",  _n_fazendas)
+        c2.metric("Total animais",        _n_animais)
+        c3.metric("Vacinas pendentes",    len(pendo),
+                  delta="atencao" if pendo else None,
+                  delta_color="inverse" if pendo else "off")
+        c4.metric("Meds. em alerta",      len(crit),
+                  delta="atencao" if crit else None,
+                  delta_color="inverse" if crit else "off")
+
+        st.divider()
+
+        # ── Seletor de fazenda ────────────────────────────────────────────────
+        if _n_fazendas == 0:
+            st.info("Nenhuma fazenda aprovada. Solicite acesso a um fazendeiro.")
+        elif _n_fazendas == 1:
+            # So uma fazenda - abrir direto
+            _foid_sel = list(_faz_map.keys())[0]
+            _lotes_sel = _faz_map[_foid_sel]
+            st.subheader(f"Fazenda vinculada")
+        else:
+            # Multiplas fazendas - mostrar seletor
+            st.subheader("Selecione a fazenda")
+            _faz_opcoes = {}
+            for _foid, _flotes in _faz_map.items():
+                _n_an = sum(len(listar_animais_por_lote(_fl[0])) for _fl in _flotes)
+                _label = f"Fazenda {_foid} — {len(_flotes)} lote(s), {_n_an} animais"
+                _faz_opcoes[_label] = _foid
+
+            _sel_label = st.selectbox(
+                "Fazenda",
+                list(_faz_opcoes.keys()),
+                key="vet_faz_sel",
+                label_visibility="collapsed"
+            )
+            _foid_sel  = _faz_opcoes[_sel_label]
+            _lotes_sel = _faz_map[_foid_sel]
+            st.divider()
+
+        if _n_fazendas > 0:
+            _lotes_sel = _faz_map.get(
+                st.session_state.get("vet_faz_sel_id", list(_faz_map.keys())[0]),
+                list(_faz_map.values())[0]
+            ) if _n_fazendas > 1 else list(_faz_map.values())[0]
+
+            # Guardar fazenda selecionada na sessao
+            if _n_fazendas > 1:
+                st.session_state["vet_faz_sel_id"] = _foid_sel
+
+            # ── Alertas da fazenda selecionada ────────────────────────────────
+            _ids_lotes_sel = [_fl[0] for _fl in _lotes_sel]
+            _pendo_faz = [v for v in pendo if v[1] in _ids_lotes_sel]
+            _parto_faz = [p for p in parto if p[2] in [_fl[1] for _fl in _lotes_sel]]
+
+            al1, al2 = st.columns(2)
+            with al1:
+                st.subheader("Alertas sanitarios")
+                if not _pendo_faz and not crit:
+                    st.success("Nenhum alerta critico.")
+                if _pendo_faz:
+                    with st.expander(
+                        f"💉 Vacinas pendentes ({len(_pendo_faz)})",
+                        expanded=True
+                    ):
+                        for v in _pendo_faz[:5]:
+                            st.caption(f"- {v[3]} | Lote: {v[2]} | {v[4]}")
+                if crit:
+                    with st.expander(
+                        f"⚠ Meds. proprios em alerta ({len(crit)})",
+                        expanded=True
+                    ):
+                        for m in crit[:5]:
+                            mot = "baixo" if (m[3] or 0)<=(m[4] or 0)                                   else f"vence {m[5]}"
+                            st.caption(f"- {m[1]}: {m[3]:.0f} {m[2]} ({mot})")
+
+            with al2:
+                st.subheader("Lotes desta fazenda")
+                for _fl in _lotes_sel:
+                    try: _rs = resumo_lote(_fl[0])
+                    except: _rs = dict(ativos=0, ocorrencias=0)
+                    _ico2 = "🔴" if _rs.get("ocorrencias") else "🟢"
+                    _n_at = _rs.get("ativos", 0)
+                    _n_oc = _rs.get("ocorrencias", 0)
+                    with st.container():
+                        cc1, cc2 = st.columns([3, 1])
+                        with cc1:
+                            st.markdown(
+                                f"**{_ico2} {_fl[1]}** — "
+                                f"{_n_at} animais"
+                                + (f" | {_n_oc} ocorr." if _n_oc else "")
                             )
-                        except Exception:
-                            pass
+                        with cc2:
+                            if st.button(
+                                "Abrir", key=f"vet_lote_{_fl[0]}",
+                                use_container_width=True
+                            ):
+                                st.session_state.menu = "Workspace do Lote"
+                                st.session_state["ws_lote_id"] = _fl[0]
+                                st.rerun()
 
-                # 3. Marcar animais como inativos E excluir
-                if aids:
-                    cur.execute(
-                        f"UPDATE animais SET ativo=0 WHERE lote_id={p}",
-                        (lid,)
-                    )
-                    cur.execute(
-                        f"DELETE FROM animais WHERE lote_id={p}",
-                        (lid,)
-                    )
+        st.divider()
+        st.subheader("Acoes rapidas")
+        qa1, qa2, qa3 = st.columns(3)
+        if qa1.button("Registrar Ocorrencia", use_container_width=True):
+            st.session_state.menu = "Registrar Ocorrencia"; st.rerun()
+        if qa2.button("Registrar Pesagem",    use_container_width=True):
+            st.session_state.menu = "Registrar Pesagem";    st.rerun()
+        if qa3.button("Prontuario Animal",    use_container_width=True):
+            st.session_state.menu = "Prontuario Animal";    st.rerun()
 
-                # 4. Remover vacinas e outros do lote
-                for tbl in ['vacinas_agenda', 'reproducao',
-                            'piquetes_historico', 'vendas_lote']:
-                    try:
-                        cur.execute(
-                            f"DELETE FROM {tbl} WHERE lote_id={p}", (lid,)
-                        )
-                    except Exception:
-                        pass
-
-                # 5. Excluir o lote
-                cur.execute(f"DELETE FROM lotes WHERE id={p}", (lid,))
-                conn.commit()
-                n_removidos += 1
-            except Exception as e:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-    return n_removidos
-
-
-def kpis_executivos(owner_id=None, lote_ids=None):
-    """
-    KPIs consolidados para o Dashboard Executivo.
-    Retorna metricas financeiras, sanitarias e produtivas da fazenda.
-    lote_ids: lista de IDs especifica (para vet com fazendas aprovadas)
-    """
-    import pandas as pd
-    from datetime import date as _d, timedelta as _td
-
-    if lote_ids is not None:
-        # Buscar lotes pelo ID diretamente
-        lotes = [l for l in listar_lotes(owner_id=None) if l[0] in lote_ids]
+    # ══════════════════════════════════════════════════════════════════════════
+    # DASHBOARD DO ADMIN
+    # ══════════════════════════════════════════════════════════════════════════
     else:
-        lotes = listar_lotes(owner_id=owner_id)
-    if not lotes:
-        return {}
+        _dash = resumo_dashboard(owner_id=None)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total lotes",   _dash.get("lotes", 0))
+        c2.metric("Total animais", _dash.get("animais", 0))
+        c3.metric("Usuarios",      len(listar_usuarios()))
+        c4.metric("Vacinas pend.", _dash.get("vacinas_pendentes", 0))
+        st.divider()
+        st.subheader("Acoes rapidas")
+        qa1, qa2, qa3 = st.columns(3)
+        if qa1.button("Gestao Usuarios",  use_container_width=True):
+            st.session_state.menu = "Gestao Usuarios";  st.rerun()
+        if qa2.button("Log Auditoria",    use_container_width=True):
+            st.session_state.menu = "Log Auditoria";    st.rerun()
+        if qa3.button("Administracao",    use_container_width=True):
+            st.session_state.menu = "Administracao";    st.rerun()
 
-    ids_lotes = [l[0] for l in lotes]
+    # ============================================================
+    # BUSCAR ANIMAL
+    # ============================================================
 
-    # ── Contagens basicas ─────────────────────────────────────────────────────
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        placeholders = ','.join([str(p)] * len(ids_lotes)) if _usar_postgres() else ','.join(['?'] * len(ids_lotes))
 
-        cur.execute(f"SELECT COUNT(*) FROM animais a JOIN lotes l ON l.id=a.lote_id WHERE l.id IN ({placeholders}) AND COALESCE(a.ativo,1)=1", ids_lotes)
-        total_animais = cur.fetchone()[0]
+def page_buscar_animal(u):
+    lotes = listar_lotes_usuario()
+    hdr("Buscar Animal", "Busca Global", "Encontre qualquer animal pelo brinco ou identificacao")
+    termo = st.text_input("Identificacao / brinco", placeholder="Ex: BOI-001")
+    if termo:
+        # Buscar apenas nos lotes do usuario logado
+        _lotes_busca = listar_lotes_usuario()
+        _lids_busca  = {l[0] for l in _lotes_busca}
+        encontrados  = [
+            a
+            for lid in _lids_busca
+            for a in listar_animais_por_lote(lid)
+            if termo.lower() in a[1].lower()
+        ]
+        if encontrados:
+            st.success(f"{len(encontrados)} animal(is) encontrado(s)")
+            for a in encontrados:
+                lote = obter_lote(a[3])
+                nome_lote = lote[1] if lote else "?"
+                with st.expander(f"{a[1]} -- Lote: {nome_lote}"):
+                    det = obter_animal(a[0])
+                    c1,c2 = st.columns(2)
+                    with c1:
+                        st.write(f"ID: {a[0]} | Idade: {a[2]} meses")
+                        if det: st.write(f"Raca: {det[5]} | Peso alvo: {det[7]} kg")
+                    with c2:
+                        ps = listar_pesagens(a[0])
+                        ocs = listar_ocorrencias(a[0])
+                        sc  = calcular_score_saude(a[0])
+                        st.write(f"Pesagens: {len(ps)} | Ocorrencias: {len(ocs)}")
+                        st.write(f"Score saude: {sc['score']}/100 ({sc['classificacao']})")
+                        car = verificar_carencia(a[0])
+                        if car["em_carencia"]:
+                            st.warning(f"Em carencia ate {car['liberado_em']}")
+        else:
+            st.warning(f"Nenhum animal encontrado para '{termo}'")
 
-        cur.execute(f"SELECT COUNT(*) FROM mortalidade m JOIN animais a ON a.id=m.animal_id JOIN lotes l ON l.id=a.lote_id WHERE l.id IN ({placeholders})", ids_lotes)
-        total_mortes = cur.fetchone()[0]
+    # ============================================================
+    # CADASTRAR LOTE
+    # ============================================================
 
-        cur.execute(f"SELECT COALESCE(SUM(o.custo),0) FROM ocorrencias o JOIN animais a ON a.id=o.animal_id JOIN lotes l ON l.id=a.lote_id WHERE l.id IN ({placeholders})", ids_lotes)
-        custo_sanitario = float(cur.fetchone()[0] or 0)
 
-        cur.execute(f"SELECT COUNT(*) FROM vacinas_agenda v WHERE v.lote_id IN ({placeholders}) AND v.status='pendente'", ids_lotes)
-        vacinas_pend = cur.fetchone()[0]
+def page_notificacoes(u):
+    lotes = listar_lotes_usuario()
+    parto = listar_partos_previstos(owner_id=owner_id())
+    pend  = listar_vacinas_pendentes(owner_id=owner_id())
+    _oid_notif_med = owner_id() if owner_id() is not None else u["id"]
+    crit  = listar_medicamentos_criticos(owner_id=_oid_notif_med)
+    hdr("Notificacoes", "Central de Notificacoes", "Alertas automaticos e manuais por e-mail")
 
-        cur.execute(f"SELECT COUNT(*) FROM ocorrencias o JOIN animais a ON a.id=o.animal_id JOIN lotes l ON l.id=a.lote_id WHERE l.id IN ({placeholders}) AND o.status='Em tratamento'", ids_lotes)
-        em_tratamento = cur.fetchone()[0]
+    if not email_configurado():
+        st.warning("E-mail nao configurado. Configure em .streamlit/secrets.toml:")
+        st.code("""[email]
+    smtp_host     = smtp.gmail.com
+    smtp_port     = 587
+    smtp_user     = seu@gmail.com
+    smtp_password = senha_app_google
+    remetente     = Gestao Pecuaria <seu@gmail.com>""", language="toml")
+        st.info("Use Senha de App do Google - nao a senha da conta. Veja: myaccount.google.com/apppasswords")
+    else:
+        st.success("E-mail configurado e pronto para envio.")
 
-    # ── GMD medio geral ───────────────────────────────────────────────────────
-    todos_gmds = []
-    for lid in ids_lotes:
-        gmds = calcular_gmds_lote(lid)
-        todos_gmds.extend(g for g in gmds.values() if g > 0)
+    st.divider()
+    tab_alertas, tab_risco, tab_abate, tab_config = st.tabs([
+        "Alertas do Sistema", "Alerta de Risco IA", "Alerta de Abate IA", "Historico"
+    ])
 
-    gmd_geral = sum(todos_gmds) / len(todos_gmds) if todos_gmds else 0
+    with tab_alertas:
+        st.subheader("Alertas manuais")
+        col_a1, col_a2, col_a3 = st.columns(3)
 
-    # ── Taxa de mortalidade geral ─────────────────────────────────────────────
-    total_cabecas = sum(listar_lotes(owner_id=owner_id)[i][4] or 0 for i in range(len(lotes)))
-    taxa_mort_geral = round(total_mortes / max(total_cabecas, 1) * 100, 2)
+        with col_a1:
+            st.metric("Vacinas pendentes", len(pend),
+                     delta="atencao" if pend else None, delta_color="inverse")
+            if pend:
+                destino_v = st.text_input("Email destino", value=u["email"], key="dest_vac")
+                if st.button("Enviar alerta vacinas", type="primary", key="btn_vac"):
+                    if email_configurado():
+                        vs = [{"lote":v[2],"vacina":v[3],"data_prevista":v[4]} for v in pend]
+                        ok, msg = email_vacina_pendente(destino_v, u["nome"], vs)
+                        st.success(msg) if ok else st.error(msg)
+                    else:
+                        st.error("Configure o e-mail primeiro")
+            else:
+                st.success("Nenhuma vacina pendente")
 
-    # ── Risco medio dos lotes ─────────────────────────────────────────────────
-    riscos = []
-    for lid in ids_lotes:
-        try:
-            r = calcular_risco_sanitario(lid)
-            riscos.append(r['score'])
-        except Exception:
-            pass
-    risco_medio = round(sum(riscos) / len(riscos), 1) if riscos else 0
+        with col_a2:
+            st.metric("Medicamentos criticos", len(crit),
+                     delta="atencao" if crit else None, delta_color="inverse")
+            if crit:
+                destino_m = st.text_input("Email destino", value=u["email"], key="dest_med")
+                if st.button("Enviar alerta meds", type="primary", key="btn_med"):
+                    if email_configurado():
+                        meds = [{"nome":m[1],"estoque_atual":m[3],"unidade":m[2],"validade":m[5] or ""} for m in crit]
+                        ok, msg = email_medicamento_critico(destino_m, u["nome"], meds)
+                        st.success(msg) if ok else st.error(msg)
+                    else:
+                        st.error("Configure o e-mail primeiro")
+            else:
+                st.success("Estoque OK")
 
-    # ── Lote mais critico ─────────────────────────────────────────────────────
-    resumo_r = resumo_ia_fazenda(owner_id=owner_id)
-    lote_critico = resumo_r[0] if resumo_r else None
+        with col_a3:
+            st.metric("Partos previstos 30d", len(parto))
+            if parto:
+                destino_p = st.text_input("Email destino", value=u["email"], key="dest_par")
+                if st.button("Enviar alerta partos", type="primary", key="btn_par"):
+                    if email_configurado():
+                        pts = [{"animal":p[1],"lote":p[2],"data_parto_previsto":p[3]} for p in parto]
+                        ok, msg = email_parto_previsto(destino_p, u["nome"], pts)
+                        st.success(msg) if ok else st.error(msg)
+                    else:
+                        st.error("Configure o e-mail primeiro")
+            else:
+                st.info("Nenhum parto previsto")
 
-    # ── Evolucao de animais (ultimos 6 meses) ────────────────────────────────
-    evolucao = []
-    hoje = _d.today()
-    for m in range(5, -1, -1):
-        mes_ref = hoje.replace(day=1) - _td(days=m*30)
-        mes_str = mes_ref.strftime('%b/%y')
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"SELECT COUNT(*) FROM animais a JOIN lotes l ON l.id=a.lote_id"
-                f" WHERE l.id IN ({placeholders})"
-                f" AND COALESCE(a.ativo,1)=1",
-                ids_lotes,
+    with tab_risco:
+        st.subheader("Alerta de Risco Sanitario por IA")
+        st.caption("Envia analise de risco de todos os lotes para um email")
+        lotes_risco = listar_lotes_usuario()
+        if not lotes_risco:
+            st.info("Nenhum lote cadastrado.")
+        else:
+            with st.spinner("Calculando riscos..."):
+                resumo_r = resumo_ia_fazenda(owner_id=owner_id())
+
+            # Mostrar resumo
+            criticos_ia = [r for r in resumo_r if r['risco_nivel'] in ['Critico','Alto']]
+            if criticos_ia:
+                st.error(f"{len(criticos_ia)} lote(s) com risco Alto ou Critico!")
+                for r in criticos_ia:
+                    st.warning(f"**{r['lote_nome']}** - {r['risco_nivel']} ({r['risco_score']}pts) - {r['principal_risco']}")
+            else:
+                st.success("Nenhum lote em situacao critica.")
+
+            destino_r = st.text_input("Enviar relatorio para", value=u["email"], key="dest_risco")
+            if st.button("Enviar relatorio de risco por email", type="primary", key="btn_risco"):
+                if email_configurado():
+                    # Montar lista de vacinas pendentes como proxy de risco
+                    vs_r = [{"lote":r['lote_nome'],
+                             "vacina":f"Risco {r['risco_nivel']} ({r['risco_score']}pts)",
+                             "data_prevista":r['principal_risco']} for r in resumo_r]
+                    ok, msg = email_vacina_pendente(destino_r, u["nome"], vs_r)
+                    st.success("Relatorio enviado!") if ok else st.error(msg)
+                else:
+                    st.error("Configure o e-mail primeiro")
+
+    with tab_abate:
+        st.subheader("Alerta de Animais Proximos do Abate")
+        lote_id_ab, _ = sel_lote("notif_abate_lote")
+        if lote_id_ab:
+            col_ab1, col_ab2, col_ab3 = st.columns(3)
+            with col_ab1: peso_ab = st.number_input("Peso alvo (kg)", 300.0, 600.0, 450.0, key="notif_pa")
+            with col_ab2: preco_ab = st.number_input("Preco/kg (R$)", 1.0, 50.0, 10.0, key="notif_pp")
+            with col_ab3: custo_ab = st.number_input("Custo diario (R$)", 1.0, 100.0, 12.0, key="notif_cd")
+
+            with st.spinner("Calculando previsoes..."):
+                prev_ab = prever_abate(lote_id_ab, peso_ab, preco_ab, custo_ab)
+
+            prontos_ab = [p for p in prev_ab
+                         if p['status'] in ['Pronto para abate','Proximo do abate']]
+            st.metric("Animais prontos ou proximos", len(prontos_ab))
+
+            if prontos_ab:
+                destino_ab = st.text_input("Enviar para", value=u["email"], key="dest_abate")
+                if st.button("Enviar alerta de abate", type="primary", key="btn_abate"):
+                    if email_configurado():
+                        lista_ab = [{"animal":p['identificacao'],
+                                    "lote": lote_id_ab,
+                                    "peso_atual":p['peso_atual'],
+                                    "peso_alvo":peso_ab,
+                                    "data_prevista":p['data_prevista'] or "Pronto"} for p in prontos_ab]
+                        ok, msg = email_abate_previsto(destino_ab, u["nome"], lista_ab)
+                        st.success(msg) if ok else st.error(msg)
+                    else:
+                        st.error("Configure o e-mail primeiro")
+            else:
+                st.info("Nenhum animal proximo do peso de abate com os parametros atuais.")
+
+    with tab_config:
+        st.info("Historico de notificacoes enviadas em breve.")
+
+    if u["perfil"] == "admin":
+        st.divider()
+        st.subheader("Gestao de Planos")
+        usuarios = listar_usuarios()
+        if usuarios:
+            df_u = pd.DataFrame(usuarios, columns=["ID","Nome","Email","Perfil","Fazenda"])
+            st.dataframe(df_u, width='stretch')
+        with st.form("form_conv"):
+            uid_c = st.number_input("ID usuario para converter para PAGO", 1, step=1)
+            if st.form_submit_button("Converter para pago"):
+                converter_para_pago(int(uid_c))
+                st.success(f"Usuario {uid_c} convertido!"); st.rerun()
+
+    # ============================================================
+    # LOG AUDITORIA
+    # ============================================================
+
+
+def page_log_auditoria(u):
+    hdr("Log Auditoria", "Log de Auditoria", "Historico de acoes por usuario")
+    if u["perfil"] != "admin":
+        st.warning("Acesso restrito a administradores.")
+    else:
+        c1,c2 = st.columns(2)
+        lim   = c1.slider("Ultimos registros", 10, 500, 100)
+        usuarios = listar_usuarios()
+        dict_us  = {"Todos": None, **{f"{x[1]} (ID {x[0]})": x[0] for x in usuarios}}
+        uf       = c2.selectbox("Filtrar usuario", list(dict_us.keys()))
+        logs = listar_auditoria(lim, dict_us[uf])
+        if logs:
+            df_log = pd.DataFrame(logs, columns=["ID","Usuario","Acao","Tabela","Reg ID","Detalhe","Data/Hora"])
+            st.dataframe(df_log, width='stretch')
+            st.metric("Total registros", len(logs))
+        else: st.info("Nenhum registro.")
+
+    # ============================================================
+    # ADMINISTRACAO
+    # ============================================================
+
+
+def page_administracao(u):
+    hdr("Administracao", "Administracao", "Usuarios, planos e configuracoes")
+    is_admin_local = u["perfil"] == "admin"
+    t1, t2, t_em = st.tabs(["Usuarios", "Alterar Senha", "Disparar Emails Trial"])
+
+    with t_em:
+        if not is_admin_local:
+            st.warning("Acesso restrito a administradores.")
+        else:
+            st.subheader("Emails automaticos de trial")
+            st.caption("Envia emails para usuarios com trial expirando ou expirado.")
+            try:
+                from notifications import (
+                    email_trial_expirando, email_trial_expirado, email_configurado
+                )
+                _has_email = True
+            except ImportError:
+                _has_email = False
+
+            if not _has_email or not email_configurado():
+                st.warning("E-mail nao configurado. Configure SMTP em .streamlit/secrets.toml.")
+            else:
+                try:
+                    usuarios_trial = listar_usuarios_trial_expirando(dias_limite=7)
+                except Exception:
+                    usuarios_trial = []
+
+                if not usuarios_trial:
+                    st.success("Nenhum usuario com trial expirando nos proximos 7 dias.")
+                else:
+                    st.info(f"**{len(usuarios_trial)} usuario(s) em situacao de trial:**")
+                    for usr in usuarios_trial:
+                        uid_t, nome_t, email_t = usr[0], usr[1], usr[2]
+                        dias_rest = usr[3] if len(usr) > 3 else 0
+                        status = "Expirado" if dias_rest <= 0 else f"{dias_rest} dia(s) restantes"
+                        with st.expander(f"{nome_t} - {email_t} - {status}"):
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if 0 < dias_rest <= 7:
+                                    if st.button("Enviar 'expirando'", key=f"em_e_{uid_t}"):
+                                        ok, msg = email_trial_expirando(email_t, nome_t, dias_rest)
+                                        st.success(msg) if ok else st.error(msg)
+                            with c2:
+                                if dias_rest <= 0:
+                                    if st.button("Enviar 'expirado'", key=f"em_x_{uid_t}"):
+                                        ok, msg = email_trial_expirado(email_t, nome_t)
+                                        st.success(msg) if ok else st.error(msg)
+
+                    st.divider()
+                    if st.button("Disparar TODOS os emails", type="primary", key="em_all"):
+                        ok_n, err_n = 0, 0
+                        for usr in usuarios_trial:
+                            uid_t, nome_t, email_t = usr[0], usr[1], usr[2]
+                            dias_rest = usr[3] if len(usr) > 3 else 0
+                            try:
+                                if 0 < dias_rest <= 7:
+                                    ok, _ = email_trial_expirando(email_t, nome_t, dias_rest)
+                                elif dias_rest <= 0:
+                                    ok, _ = email_trial_expirado(email_t, nome_t)
+                                else:
+                                    continue
+                                if ok: ok_n += 1
+                                else:  err_n += 1
+                            except Exception:
+                                err_n += 1
+                        st.success(f"Sucesso: {ok_n} | Erros: {err_n}")
+
+    with t1:
+        if not is_admin_local: st.warning("Acesso restrito a administradores.")
+        else:
+            usuarios = listar_usuarios()
+            if usuarios:
+                df_u = pd.DataFrame(usuarios, columns=["ID","Nome","Email","Perfil","Fazenda"])
+                st.dataframe(df_u, width='stretch')
+            st.subheader("Criar usuario")
+            with st.form("form_user"):
+                au1,au2 = st.columns(2)
+                with au1:
+                    n_nome  = st.text_input("Nome")
+                    n_email = st.text_input("Email")
+                with au2:
+                    n_senha = st.text_input("Senha", type="password")
+                    n_perf  = st.selectbox("Perfil", ["fazendeiro","veterinario","admin"])
+                if st.form_submit_button("Criar", type="primary"):
+                    if n_nome and n_email and n_senha:
+                        try:
+                            uid_n = criar_usuario(n_nome, n_email, n_senha, n_perf)
+                            ativar_trial(uid_n)
+                            st.success("Usuario criado!"); st.rerun()
+                        except Exception: st.error("Email ja cadastrado.")
+                    else: st.error("Preencha todos os campos.")
+    with t2:
+        with st.form("form_senha"):
+            senha_a = st.text_input("Senha atual", type="password")
+            nova_s  = st.text_input("Nova senha", type="password")
+            conf_s  = st.text_input("Confirmar", type="password")
+            if st.form_submit_button("Alterar", type="primary"):
+                if not autenticar_usuario(u["email"], senha_a): st.error("Senha atual incorreta.")
+                elif nova_s != conf_s:                          st.error("Senhas nao coincidem.")
+                elif len(nova_s) < 6:                          st.error("Minimo 6 caracteres.")
+                else:
+                    alterar_senha(u["id"], nova_s)
+                    st.success("Senha alterada!")
+
+    # ============================================================
+    # EDITAR LOTE
+    # ============================================================
+
+
+def page_gestao_usuarios(u):
+    hdr("Gestao Usuarios", "Planos e Acessos", "Gerencie planos e acessos de veterinarios")
+
+    if not is_admin():
+        st.error("Acesso restrito ao administrador.")
+        st.stop()
+
+    tab_pend, tab_usuarios, tab_acessos, tab_faz = st.tabs([
+        "Solicitacoes Pendentes",
+        "Gerenciar Planos",
+        "Acessos Veterinarios",
+        "Acesso Fazendeiros",
+    ])
+
+    # ── ABA 1: Solicitacoes pendentes ────────────────────────────────────────
+    with tab_pend:
+        st.subheader("Solicitacoes de acesso pendentes")
+        pendentes = listar_solicitacoes_pendentes()
+        if not pendentes:
+            st.success("Nenhuma solicitacao pendente.")
+        else:
+            st.warning(f"{len(pendentes)} solicitacao(oes) aguardando aprovacao")
+            for req in pendentes:
+                vet_id, vet_nome, vet_email = req[1], req[2], req[3]
+                owner_id, faz_nome = req[4], req[5]
+                data_req = req[8]
+                with st.expander(f"Vet: {vet_nome} -> Fazenda: {faz_nome} | {data_req}"):
+                    st.write(f"**Veterinario:** {vet_nome} ({vet_email})")
+                    st.write(f"**Fazenda:** {faz_nome}")
+                    st.write(f"**Solicitado em:** {data_req}")
+                    lim_vet = verificar_limite_fazendas(vet_id)
+                    st.caption(f"Fazendas do vet: {lim_vet['msg']}")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("Aprovar", key=f"apr_{vet_id}_{owner_id}", type="primary"):
+                            r = aprovar_acesso_vet(vet_id, owner_id, u["id"], True)
+                            st.success(r["msg"]); st.rerun()
+                    with c2:
+                        if st.button("Rejeitar", key=f"rej_{vet_id}_{owner_id}"):
+                            r = aprovar_acesso_vet(vet_id, owner_id, u["id"], False)
+                            st.error(r["msg"]); st.rerun()
+
+    # ── ABA 2: Gerenciar Planos ──────────────────────────────────────────────
+    with tab_usuarios:
+        st.subheader("Gerenciar planos dos usuarios")
+        usuarios_todos = listar_usuarios()
+        if not usuarios_todos:
+            st.info("Nenhum usuario cadastrado.")
+        else:
+            for usr in usuarios_todos:
+                uid_u, nome_u, email_u, perfil_u = usr[0], usr[1], usr[2], usr[3]
+                limites = obter_limites_usuario(uid_u)
+                plano_atual = limites["plano_nome"] if limites else "trial"
+                status_conta = limites["status_conta"] if limites else "pendente"
+
+                with st.expander(f"{nome_u} | {perfil_u} | Plano: {plano_atual} | Status: {status_conta}"):
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.write(f"**Email:** {email_u}")
+                        st.write(f"**Perfil:** {perfil_u}")
+                    with c2:
+                        if limites:
+                            if perfil_u == "veterinario":
+                                lim = verificar_limite_fazendas(uid_u)
+                            else:
+                                lim = verificar_limite_animais(uid_u)
+                            st.write(f"**Uso:** {lim['msg']}")
+                    with c3:
+                        if status_conta == "pendente" and perfil_u != "admin":
+                            if st.button("Aprovar conta", key=f"aprc_{uid_u}"):
+                                aprovar_conta_usuario(uid_u, u["id"])
+                                st.success("Conta aprovada!"); st.rerun()
+
+                    if perfil_u != "admin":
+                        st.divider()
+                        if perfil_u == "veterinario":
+                            opcoes_plano = list(PLANOS_VETERINARIO.keys())
+                            planos_info  = PLANOS_VETERINARIO
+                        else:
+                            opcoes_plano = list(PLANOS_FAZENDEIRO.keys())
+                            planos_info  = PLANOS_FAZENDEIRO
+
+                        idx_atual = opcoes_plano.index(plano_atual) if plano_atual in opcoes_plano else 0
+                        novo_plano = st.selectbox(
+                            "Alterar plano", opcoes_plano,
+                            index=idx_atual, key=f"plano_{uid_u}",
+                            format_func=lambda x: f"{planos_info[x]['nome']} - R$ {planos_info[x]['preco']}/mes"
+                        )
+
+                        col_btn, col_exp = st.columns(2)
+                        with col_btn:
+                            if st.button("Salvar plano", key=f"sv_plano_{uid_u}", type="primary"):
+                                definir_plano_usuario(uid_u, perfil_u, novo_plano, u["id"])
+                                st.success(f"Plano atualizado para {planos_info[novo_plano]['nome']}")
+                                st.rerun()
+                        with col_exp:
+                            sp_u = obter_status_plano(uid_u)
+                            st.caption(f"Expira: {sp_u.get('plano_expira','N/A')}")
+
+    # ── ABA 3: Acessos Veterinarios ─────────────────────────────────────────
+    with tab_faz:
+        st.subheader("Gerenciar acesso de fazendeiros")
+        st.caption("Suspenda ou reative o acesso de fazendeiros ao sistema.")
+        fazendeiros = [u2 for u2 in listar_usuarios()
+                       if u2[3] == "fazendeiro"]
+        if not fazendeiros:
+            st.info("Nenhum fazendeiro cadastrado.")
+        else:
+            for faz in fazendeiros:
+                fid, fnome, femail = faz[0], faz[1], faz[2]
+                lim_faz = obter_limites_usuario(fid)
+                status_faz = lim_faz["status_conta"] if lim_faz else "pendente"
+                plano_faz  = lim_faz["plano_nome"]   if lim_faz else "trial"
+                with st.expander(f"{fnome} | {femail} | {plano_faz} | Status: {status_faz}"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write(f"**Email:** {femail}")
+                        st.write(f"**Plano:** {plano_faz}")
+                        lim_a = verificar_limite_animais(fid)
+                        st.write(f"**Uso:** {lim_a['msg']}")
+                    with c2:
+                        if status_faz == "ativo":
+                            if st.button("Suspender acesso", key=f"susp_{fid}",
+                                         type="primary"):
+                                with _conexao() as conn:
+                                    cur = conn.cursor()
+                                    p = _ph()
+                                    cur.execute(
+                                        f"UPDATE usuarios SET status_conta={p} WHERE id={p}",
+                                        ("suspenso", fid)
+                                    )
+                                    conn.commit()
+                                registrar_auditoria(u["id"], "suspender_fazendeiro",
+                                                    "usuarios", fid, fnome)
+                                st.warning(f"Acesso de {fnome} suspenso.")
+                                st.rerun()
+                        elif status_faz in ("suspenso", "pendente"):
+                            if st.button("Reativar acesso", key=f"reativ_{fid}"):
+                                with _conexao() as conn:
+                                    cur = conn.cursor()
+                                    p = _ph()
+                                    cur.execute(
+                                        f"UPDATE usuarios SET status_conta={p} WHERE id={p}",
+                                        ("ativo", fid)
+                                    )
+                                    conn.commit()
+                                registrar_auditoria(u["id"], "reativar_fazendeiro",
+                                                    "usuarios", fid, fnome)
+                                st.success(f"Acesso de {fnome} reativado.")
+                                st.rerun()
+                        else:
+                            st.caption(f"Status: {status_faz}")
+
+    with tab_acessos:
+        st.subheader("Acessos veterinario-fazenda")
+
+        todos_acessos = listar_acessos_vet()
+        if not todos_acessos:
+            st.info("Nenhum acesso configurado.")
+        else:
+            df_ac = pd.DataFrame(todos_acessos, columns=[
+                "ID","Vet ID","Veterinario","Email Vet",
+                "Fazenda ID","Fazenda","Email Faz",
+                "Status","Data Solicitacao","Data Aprovacao"
+            ])
+            st.dataframe(
+                df_ac[["Veterinario","Fazenda","Status","Data Solicitacao","Data Aprovacao"]],
+                width='stretch'
             )
-            n = cur.fetchone()[0]
-        evolucao.append({'mes': mes_str, 'animais': n})
+            st.divider()
+            st.subheader("Revogar acesso")
+            aprovados = [a for a in todos_acessos if a[7] == "aprovado"]
+            if aprovados:
+                opts = {f"{a[2]} -> {a[5]}": (a[1], a[4]) for a in aprovados}
+                sel_rev = st.selectbox("Selecionar acesso aprovado", list(opts.keys()), key="rev_sel")
+                if st.button("Revogar acesso", type="primary", key="rev_btn"):
+                    vet_r, own_r = opts[sel_rev]
+                    r = revogar_acesso_vet(vet_r, own_r, u["id"])
+                    st.success(r["msg"]); st.rerun()
+            else:
+                st.info("Nenhum acesso aprovado para revogar.")
 
-    return dict(
-        total_lotes=len(lotes),
-        total_animais=total_animais,
-        total_mortes=total_mortes,
-        taxa_mortalidade=taxa_mort_geral,
-        custo_sanitario=custo_sanitario,
-        custo_por_animal=round(custo_sanitario / max(total_animais, 1), 2),
-        vacinas_pendentes=vacinas_pend,
-        em_tratamento=em_tratamento,
-        gmd_geral=round(gmd_geral, 3),
-        risco_medio=risco_medio,
-        lote_critico=lote_critico,
-        evolucao_animais=evolucao,
-        n_lotes_alto_risco=sum(1 for r in riscos if r >= 40),
-    )
+        st.divider()
+        st.subheader("Conceder acesso manualmente")
+        st.caption("Adicione acesso de veterinario a uma fazenda sem solicitacao")
+        usuarios_vet = [usr for usr in listar_usuarios() if usr[3] == "veterinario"]
+        usuarios_faz = [usr for usr in listar_usuarios() if usr[3] == "fazendeiro"]
+        if usuarios_vet and usuarios_faz:
+            cv1, cv2 = st.columns(2)
+            with cv1:
+                dict_vet_m = {f"{v[1]} ({v[2]})": v[0] for v in usuarios_vet}
+                vet_man = st.selectbox("Veterinario", list(dict_vet_m.keys()), key="man_vet")
+            with cv2:
+                dict_faz_m = {f"{f[1]} ({f[2]})": f[0] for f in usuarios_faz}
+                faz_man = st.selectbox("Fazenda", list(dict_faz_m.keys()), key="man_faz")
+            if st.button("Conceder acesso", type="primary", key="man_btn"):
+                vet_id_m = dict_vet_m[vet_man]
+                faz_id_m = dict_faz_m[faz_man]
+                r = solicitar_acesso_vet(vet_id_m, faz_id_m)
+                if r["ok"] or "ja existe" in r["msg"]:
+                    aprovar_acesso_vet(vet_id_m, faz_id_m, u["id"], True)
+                    st.success("Acesso concedido!"); st.rerun()
+                else:
+                    st.error(r["msg"])
 
-
-def sincronizar_todos_lotes():
-    lotes = listar_lotes()
-    resultados = []
-    for l in lotes:
-        n = atualizar_qtd_lote(l[0])
-        resultados.append((l[0], l[1], n))
-    return resultados
+    # ============================================================
+    # RISCO SANITARIO IA
+    # ============================================================
