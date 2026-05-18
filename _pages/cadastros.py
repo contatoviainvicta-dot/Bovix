@@ -16,6 +16,7 @@ from rules import (
     requer_admin, requer_nao_vet, owner_id_lote_novo,
     _listar_lotes_cache, _listar_animais_cache,
     sel_fazenda_vet,
+    listar_lotes_vet_filtrado,
 )
 
 def hdr(titulo, sub="", desc=""):
@@ -69,14 +70,10 @@ def page_cadastrar_lote(u):
 
 
 def page_cadastrar_animal(u):
-    # Seletor de fazenda para veterinario
+    # Seletor de fazenda para veterinario (aparece antes de tudo)
     if is_vet():
-        from database import listar_lotes as _ll_vet
-        _foid_vet = sel_fazenda_vet(key="vet_faz_cad_anim")
-        if _foid_vet:
-            st.session_state["_vet_lotes_faz"] = [
-                l[0] for l in _ll_vet(owner_id=_foid_vet)
-            ]
+        sel_fazenda_vet(key="vet_faz_cad_anim")
+        st.divider()
 
     hdr("Cadastrar Animal", "Novo Animal", "Vincule um animal a um lote")
     lotes = listar_lotes_usuario()
@@ -130,14 +127,10 @@ def page_cadastrar_animal(u):
 
 
 def page_registrar_pesagem(u):
-    # Seletor de fazenda para veterinario
+    # Seletor de fazenda para veterinario (aparece antes de tudo)
     if is_vet():
-        from database import listar_lotes as _ll_vet
-        _foid_vet = sel_fazenda_vet(key="vet_faz_reg_pes")
-        if _foid_vet:
-            st.session_state["_vet_lotes_faz"] = [
-                l[0] for l in _ll_vet(owner_id=_foid_vet)
-            ]
+        sel_fazenda_vet(key="vet_faz_reg_pes")
+        st.divider()
 
     hdr("Registrar Pesagem", "Novo Peso", "Registre o peso atual de um animal")
     lotes = listar_lotes_usuario()
@@ -193,14 +186,10 @@ def page_registrar_pesagem(u):
 
 
 def page_registrar_ocorrencia(u):
-    # Seletor de fazenda para veterinario
+    # Seletor de fazenda para veterinario (aparece antes de tudo)
     if is_vet():
-        from database import listar_lotes as _ll_vet
-        _foid_vet = sel_fazenda_vet(key="vet_faz_reg_oc")
-        if _foid_vet:
-            st.session_state["_vet_lotes_faz"] = [
-                l[0] for l in _ll_vet(owner_id=_foid_vet)
-            ]
+        sel_fazenda_vet(key="vet_faz_reg_oc")
+        st.divider()
 
     hdr("Registrar Ocorrencia", "Nova Ocorrencia", "Doencas, lesoes e medicacoes")
     lotes = listar_lotes_usuario()
