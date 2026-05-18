@@ -45,14 +45,12 @@ def owner_id():
     return u.get("owner_id", u["id"])
 
 def owner_id_medicamentos():
-    """owner_id para filtrar medicamentos. Vet usa primeira fazenda aprovada."""
+    """owner_id para filtrar medicamentos.
+    Cada usuario ve SOMENTE os medicamentos que ele proprio cadastrou."""
     u = usuario_atual()
     if not u: return None
     if is_admin(): return None
-    if is_vet():
-        from database import listar_fazendas_do_vet
-        fazendas = listar_fazendas_do_vet(u["id"])
-        return fazendas[0] if fazendas else None
+    # Vet e fazendeiro: usa o proprio id como dono dos medicamentos
     return u.get("owner_id", u["id"])
 
 # ── Listas filtradas por perfil ───────────────────────────────────────────────
