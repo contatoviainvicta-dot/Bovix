@@ -1727,22 +1727,31 @@ def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg,
         cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND ativo=1", (lote_id,))
         qtd_ativos = cur.fetchone()[0]
 
-    # Passo 5: Atualizar o lote
+    # Passo 5a: Atualizar qtd_recebida do lote
     with _conexao() as conn:
         cur = conn.cursor()
         try:
             cur.execute(
-                f"UPDATE lotes SET qtd_recebida={p}, status='VENDIDO' WHERE id={p}",
+                f"UPDATE lotes SET qtd_recebida={p} WHERE id={p}",
                 (qtd_ativos, lote_id)
             )
             conn.commit()
         except Exception:
-            conn.rollback()
-            try:
-                cur.execute(f"UPDATE lotes SET status='VENDIDO' WHERE id={p}", (lote_id,))
-                conn.commit()
-            except Exception:
-                pass
+            try: conn.rollback()
+            except: pass
+
+    # Passo 5b: Marcar lote como VENDIDO (operacao separada)
+    with _conexao() as conn:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                f"UPDATE lotes SET status='VENDIDO' WHERE id={p}",
+                (lote_id,)
+            )
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except: pass
 
     return venda_id
 
