@@ -72,6 +72,9 @@ def page_cadastrar_lote(u):
 def page_cadastrar_animal(u):
     # Seletor de fazenda para veterinario (aparece antes de tudo)
     hdr("Cadastrar Animal", "Novo Animal", "Vincule um animal a um lote")
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_cad_anim")
+
     lotes = listar_lotes_usuario()
     if not lotes:
         st.warning("Cadastre um lote primeiro.")
@@ -79,9 +82,6 @@ def page_cadastrar_animal(u):
         dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
         c_sel,c_info = st.columns([2,1])
         with c_sel: lote_sel = st.selectbox("Lote", list(dict_l.keys()))
-
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_cad_anim")
 
         lote_id = dict_l[lote_sel]
         lote    = obter_lote(lote_id)
@@ -127,8 +127,9 @@ def page_cadastrar_animal(u):
 
 
 def page_registrar_pesagem(u):
-    # Seletor de fazenda para veterinario (aparece antes de tudo)
     hdr("Registrar Pesagem", "Novo Peso", "Registre o peso atual de um animal")
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_reg_pes")
     lotes = listar_lotes_usuario()
     if not lotes:
         st.warning("Cadastre um lote primeiro.")
@@ -136,9 +137,6 @@ def page_registrar_pesagem(u):
         dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
         c1,c2 = st.columns(2)
         with c1: lote_sel = st.selectbox("Lote", list(dict_l.keys()), key="pes_lote")
-
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_reg_pes")
 
         lote_id = dict_l[lote_sel]
         animais = listar_animais_por_lote(lote_id)
@@ -186,8 +184,9 @@ def page_registrar_pesagem(u):
 
 
 def page_registrar_ocorrencia(u):
-    # Seletor de fazenda para veterinario (aparece antes de tudo)
     hdr("Registrar Ocorrencia", "Nova Ocorrencia", "Doencas, lesoes e medicacoes")
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_reg_oc")
     lotes = listar_lotes_usuario()
     if not lotes:
         st.warning("Cadastre um lote primeiro.")
@@ -195,9 +194,6 @@ def page_registrar_ocorrencia(u):
         dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
         o1,o2 = st.columns(2)
         with o1: lote_sel = st.selectbox("Lote", list(dict_l.keys()), key="oc_lote")
-
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_reg_oc")
 
         lote_id = dict_l[lote_sel]
         animais = listar_animais_por_lote(lote_id)
