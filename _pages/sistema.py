@@ -62,9 +62,11 @@ def page_inicio(u):
     _is_faz = is_fazendeiro()
     _is_vet = is_vet()
 
-    # ── Alertas do proprio usuario ────────────────────────────────────────────
+    # ── Alertas do proprio usuario ─────────────────────────────────────────────
+    # Para medicamentos: sempre usa o id do usuario (nunca None)
+    _oid_med = _oid if _oid is not None else u["id"]
     pendo = listar_vacinas_pendentes(owner_id=_oid)
-    crit  = listar_medicamentos_criticos(owner_id=_oid)
+    crit  = listar_medicamentos_criticos(owner_id=_oid_med)
     parto = listar_partos_previstos(owner_id=_oid)
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -373,7 +375,8 @@ def page_notificacoes(u):
     lotes = listar_lotes_usuario()
     parto = listar_partos_previstos(owner_id=owner_id())
     pend  = listar_vacinas_pendentes(owner_id=owner_id())
-    crit  = listar_medicamentos_criticos(owner_id=owner_id())
+    _oid_notif_med = owner_id() if owner_id() is not None else u["id"]
+    crit  = listar_medicamentos_criticos(owner_id=_oid_notif_med)
     hdr("Notificacoes", "Central de Notificacoes", "Alertas automaticos e manuais por e-mail")
 
     if not email_configurado():
