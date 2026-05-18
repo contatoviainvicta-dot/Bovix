@@ -56,12 +56,19 @@ def owner_id_medicamentos():
 # ── Listas filtradas por perfil ───────────────────────────────────────────────
 
 def listar_lotes_usuario():
-    """Retorna lotes do usuario logado respeitando o perfil."""
+    """Retorna lotes do usuario logado respeitando o perfil.
+    Para vet: filtra pela fazenda selecionada no seletor (se houver)."""
+    import streamlit as st
     u = usuario_atual()
     if not u: return []
     if is_admin():
         return _listar_lotes_cache(owner_id=None)
     if is_vet():
+        # Se o vet selecionou uma fazenda, retornar só os lotes dela
+        foid = st.session_state.get("_vet_foid")
+        if foid:
+            from database import listar_lotes
+            return listar_lotes(owner_id=foid)
         from database import listar_lotes_vet
         return listar_lotes_vet(u["id"])
     return _listar_lotes_cache(owner_id=owner_id())
