@@ -102,11 +102,10 @@ def page_dashboard_sanitario(u):
 
 
 def page_analisar_por_lote(u):
-    lotes = listar_lotes_usuario()
-    pend  = listar_vacinas_pendentes(owner_id=owner_id())
     if is_vet():
         sel_fazenda_vet(key="vet_faz_anal_lote")
-        st.divider()
+    lotes = listar_lotes_usuario()
+    pend  = listar_vacinas_pendentes(owner_id=owner_id())
 
     hdr("Analisar por Lote", "Analise do Lote", "Desempenho economico e zootecnico")
     lote_id, lotes = sel_lote("analise_lote")
