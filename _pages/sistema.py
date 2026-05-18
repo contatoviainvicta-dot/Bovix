@@ -69,6 +69,7 @@ def page_inicio(u):
     crit  = listar_medicamentos_criticos(owner_id=_oid_med)
     parto = listar_partos_previstos(owner_id=_oid)
 
+
     # ══════════════════════════════════════════════════════════════════════════
     # DASHBOARD DO FAZENDEIRO
     # ══════════════════════════════════════════════════════════════════════════
