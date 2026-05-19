@@ -1328,7 +1328,8 @@ def adicionar_vacina_agenda(lote_id, nome_vacina, data_prevista, observacao="",
             return cur.lastrowid
 
 def registrar_vacina_realizada(vacina_id, data_realizada,
-                               confirmado_por=None, obs_extra=""):
+                               confirmado_por=None, obs_extra="",
+                               animal_id_override=None):
     """Confirma vacina: atualiza agenda, baixa no estoque de quem agendou,
     e registra ocorrencia Vacinacao nos animais do lote."""
     p = _ph()
@@ -1402,8 +1403,10 @@ def registrar_vacina_realizada(vacina_id, data_realizada,
     if obs_extra:
         obs_ocorr += f" | {obs_extra}"
 
+    # animal_id_override permite redefinir o alvo na confirmacao
+    _animal_alvo = animal_id_override if animal_id_override is not None else animal_id
     animais_lote = listar_animais_por_lote(lote_id)
-    alvos = [animal_id] if animal_id else [a[0] for a in animais_lote]
+    alvos = [_animal_alvo] if _animal_alvo else [a[0] for a in animais_lote]
     for aid in alvos:
         try:
             adicionar_ocorrencia(
