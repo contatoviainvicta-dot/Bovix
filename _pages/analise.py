@@ -102,12 +102,13 @@ def page_dashboard_sanitario(u):
 
 
 def page_analisar_por_lote(u):
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_anal_lote")
     lotes = listar_lotes_usuario()
     pend  = listar_vacinas_pendentes(owner_id=owner_id())
 
     hdr("Analisar por Lote", "Analise do Lote", "Desempenho economico e zootecnico")
+    if is_vet():
+        sel_fazenda_vet(key="anal_lote")
+
     lote_id, lotes = sel_lote("analise_lote")
     if lote_id:
         lote   = obter_lote(lote_id)
@@ -189,6 +190,9 @@ def page_analisar_por_lote(u):
 
 def page_analisar_animal(u):
     hdr("Analisar Animal", "Analise Individual", "Historico de peso, ocorrencias e alertas")
+    if is_vet():
+        sel_fazenda_vet(key="anal_anim")
+
     lotes = listar_lotes_usuario()
     if not lotes:
         st.warning("Nenhum lote cadastrado")
@@ -272,11 +276,13 @@ def page_analisar_animal(u):
 
 
 def page_score_de_saude(u):
+    hdr("Score de Saude", "Ranking de Saude", "Nota 0-100 por animal (GMD + ocorrencias + reproducao)")
     if is_vet():
         sel_fazenda_vet(key="vet_faz_score")
-        st.divider()
 
-    hdr("Score de Saude", "Ranking de Saude", "Nota 0-100 por animal (GMD + ocorrencias + reproducao)")
+    if is_vet():
+        sel_fazenda_vet(key="score")
+
     lote_id, _ = sel_lote("score_lote")
     if lote_id:
         animais = listar_animais_por_lote(lote_id)
@@ -311,11 +317,13 @@ def page_score_de_saude(u):
 
 
 def page_gmd_temporal(u):
+    hdr("GMD Temporal", "Evolucao do GMD", "Evolucao do ganho de peso ao longo do tempo")
     if is_vet():
         sel_fazenda_vet(key="vet_faz_gmd")
-        st.divider()
 
-    hdr("GMD Temporal", "Evolucao do GMD", "Evolucao do ganho de peso ao longo do tempo")
+    if is_vet():
+        sel_fazenda_vet(key="gmd")
+
     lote_id, _ = sel_lote("gmd_lote")
     if lote_id:
         janela = st.slider("Janela de calculo (dias)", 7, 60, 14)
@@ -338,11 +346,13 @@ def page_gmd_temporal(u):
 
 
 def page_comparativo_lotes(u):
+    hdr("Comparativo Lotes", "Comparativo entre Lotes", "Side-by-side de GMD, custos e resultados")
     if is_vet():
         sel_fazenda_vet(key="vet_faz_comp")
-        st.divider()
 
-    hdr("Comparativo Lotes", "Comparativo entre Lotes", "Side-by-side de GMD, custos e resultados")
+    if is_vet():
+        sel_fazenda_vet(key="comp")
+
     lotes = listar_lotes_usuario()
     if len(lotes) < 2:
         st.warning("Cadastre pelo menos 2 lotes.")
@@ -397,6 +407,9 @@ def page_comparativo_lotes(u):
 
 def page_pesquisar_ocorrencias(u):
     hdr("Pesquisar Ocorrencias", "Busca de Ocorrencias", "Filtros por lote, tipo e gravidade")
+    if is_vet():
+        sel_fazenda_vet(key="pesq_oc")
+
     lotes = listar_lotes_usuario()
     dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
     f1,f2,f3 = st.columns(3)
@@ -440,11 +453,10 @@ def page_pesquisar_ocorrencias(u):
 
 def page_risco_sanitario_ia(u):
     import pandas as pd
+    hdr("Risco Sanitario IA", "Score de Risco", "Analise inteligente de risco sanitario do lote")
     if is_vet():
         sel_fazenda_vet(key="vet_faz_risco")
-        st.divider()
 
-    hdr("Risco Sanitario IA", "Score de Risco", "Analise inteligente de risco sanitario do lote")
 
     # Visao geral da fazenda (independente de lote selecionado)
     st.subheader("Visao geral da fazenda")
@@ -460,6 +472,9 @@ def page_risco_sanitario_ia(u):
 
     st.divider()
     st.subheader("Analise detalhada por lote")
+    if is_vet():
+        sel_fazenda_vet(key="risco")
+
     lote_id, _ = sel_lote("risco_lote")
     if lote_id:
         with st.spinner("Calculando risco sanitario..."):
@@ -522,6 +537,9 @@ def page_risco_sanitario_ia(u):
 
 def page_previsao_de_abate_ia(u):
     hdr("Previsao de Abate IA", "Predicao de Abate", "Estimativa de data e resultado financeiro por animal")
+
+    if is_vet():
+        sel_fazenda_vet(key="abate")
 
     lote_id, _ = sel_lote("prev_lote")
     if lote_id:
