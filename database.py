@@ -919,6 +919,16 @@ def criar_usuario(nome, email, senha, perfil="fazendeiro", fazenda_id=None, owne
             cur.execute(f"UPDATE usuarios SET owner_id={p} WHERE id={p}", (uid, uid))
         return uid
 
+def obter_nome_usuario(user_id):
+    """Retorna o nome do usuario pelo id."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(f"SELECT nome FROM usuarios WHERE id={p}", (user_id,))
+        r = cur.fetchone()
+        return r[0] if r else f"Fazenda {user_id}"
+
+
 def autenticar_usuario(email, senha):
     p = _ph()
     with _conexao() as conn:
