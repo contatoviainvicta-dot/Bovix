@@ -71,7 +71,7 @@ def page_dashboard_executivo(u):
     hdr("Dashboard Executivo", "Visao Executiva", "KPIs consolidados da fazenda com analise de IA")
 
     if is_vet():
-        sel_fazenda_vet(key="dash_exec")
+        sel_fazenda_vet(key="vet_faz_dash_exec")
 
     with st.spinner("Carregando dados da fazenda..."):
         if is_vet():
@@ -367,8 +367,6 @@ def page_cotacao_cepea(u):
     # RASTREABILIDADE GTA
     # ============================================================
 
-    if is_vet():
-        sel_fazenda_vet(key="cotacao")
 
 
 def page_rastreabilidade_gta(u):
