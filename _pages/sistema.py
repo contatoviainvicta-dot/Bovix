@@ -378,6 +378,9 @@ def page_inicio(u):
 def page_buscar_animal(u):
     lotes = listar_lotes_usuario()
     hdr("Buscar Animal", "Busca Global", "Encontre qualquer animal pelo brinco ou identificacao")
+    if is_vet():
+        sel_fazenda_vet(key="buscar")
+
     termo = st.text_input("Identificacao / brinco", placeholder="Ex: BOI-001")
     if termo:
         # Buscar apenas nos lotes do usuario logado
@@ -424,6 +427,9 @@ def page_notificacoes(u):
     _oid_notif_med = owner_id() if owner_id() is not None else u["id"]
     crit  = listar_medicamentos_criticos(owner_id=_oid_notif_med)
     hdr("Notificacoes", "Central de Notificacoes", "Alertas automaticos e manuais por e-mail")
+    if is_vet():
+        sel_fazenda_vet(key="notif")
+
 
     if not email_configurado():
         st.warning("E-mail nao configurado. Configure em .streamlit/secrets.toml:")
