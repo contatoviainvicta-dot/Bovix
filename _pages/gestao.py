@@ -45,8 +45,10 @@ def page_calendario_sanitario(u):
 
     # ── ABA 1: Agenda ─────────────────────────────────────────────────────────
     with t1:
+        st.caption("Vacinas agendadas por fazendeiro e veterinario aparecem aqui.")
         d = {"Todos": None, **{f"{l[1]} (ID {l[0]})": l[0] for l in lotes}}
         f_sel = st.selectbox("Filtrar por lote", list(d.keys()), key="cal_f")
+
         if d[f_sel] is None:
             vs = []
             for lote in lotes:
@@ -56,44 +58,82 @@ def page_calendario_sanitario(u):
 
         if vs:
             import pandas as pd
-            df_v = pd.DataFrame(vs, columns=["ID","Lote","Vacina","Previsto","Realizado","Status","Obs"])
-            # Formatar datas
+            df_v = pd.DataFrame(vs, columns=[
+                "ID","Lote","Vacina","Previsto","Realizado","Status","Obs"
+            ])
             for col in ["Previsto","Realizado"]:
-                if col in df_v.columns:
-                    df_v[col] = df_v[col].apply(lambda x:
-                        "/".join(reversed(str(x)[:10].split("-"))) if x and str(x) != "None" else ""
-                    )
-            st.dataframe(df_v.drop(columns=["ID"]), use_container_width=True)
+                df_v[col] = df_v[col].apply(lambda x:
+                    "/".join(reversed(str(x)[:10].split("-")))
+                    if x and str(x) not in ("None","") else ""
+                )
+            # Cor por status
+            def _cor(s):
+                if s == "realizado": return "✅"
+                return "⏳"
+            df_v[""] = df_v["Status"].apply(_cor)
+            st.dataframe(
+                df_v[["","Lote","Vacina","Previsto","Realizado","Status","Obs"]],
+                use_container_width=True, hide_index=True
+            )
         else:
             st.info("Nenhuma vacina agendada para este lote.")
 
     # ── ABA 2: Agendar ────────────────────────────────────────────────────────
     with t2:
-        dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
-        lote_ag = st.selectbox("Lote", list(dict_l.keys()), key="cal_ag_lote")
-        lote_id_ag = dict_l[lote_ag]
+        dict_l2 = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+        lote_ag = st.selectbox("Lote de destino", list(dict_l2.keys()), key="cal_ag_lote")
+        lote_id_ag = dict_l2[lote_ag]
+
+        # Buscar medicamentos disponiveis (do usuario logado)
+        _oid_med = (u.get("owner_id") or u["id"])
+        meds_disp = listar_medicamentos(owner_id=_oid_med)
+        dict_meds = {"-- Sem vinculo de estoque --": None}
+        dict_meds.update({f"{m[1]} ({m[3]:.0f} {m[2]})": m[0] for m in meds_disp})
 
         with st.form("form_agendar_vac"):
             c1, c2 = st.columns(2)
             with c1:
-                nome_vac  = st.text_input("Nome da vacina *", placeholder="Ex: Aftosa, Brucelose")
-                data_prev = st.date_input("Data prevista *")
+                nome_vac   = st.text_input("Nome da vacina *",
+                                           placeholder="Ex: Aftosa, Brucelose")
+                data_prev  = st.date_input("Data prevista *")
+                med_sel    = st.selectbox(
+                    "Vincular ao medicamento/estoque",
+                    list(dict_meds.keys()),
+                    help="Ao confirmar, dara baixa automatica neste estoque"
+                )
             with c2:
-                obs_vac   = st.text_area("Observacoes", height=100)
+                qtd_dose   = st.number_input(
+                    "Dose por animal (unidade/mL)",
+                    min_value=0.0, value=0.0, step=0.5,
+                    help="Quantidade que sera descontada do estoque ao confirmar"
+                )
+                obs_vac    = st.text_area("Observacoes", height=80)
 
             if st.form_submit_button("Agendar vacina", type="primary"):
                 if not nome_vac:
                     st.error("Informe o nome da vacina.")
                 else:
-                    adicionar_vacina_agenda(lote_id_ag, nome_vac, str(data_prev), obs_vac)
-                    registrar_auditoria(u["id"], "agendar_vacina", "vacinas_agenda",
-                                       lote_id_ag, nome_vac)
+                    med_id_sel = dict_meds[med_sel]
+                    adicionar_vacina_agenda(
+                        lote_id_ag, nome_vac, str(data_prev), obs_vac,
+                        medicamento_id=med_id_sel,
+                        quantidade_dose=qtd_dose,
+                        agendado_por=u["id"]
+                    )
+                    registrar_auditoria(u["id"], "agendar_vacina",
+                                       "vacinas_agenda", lote_id_ag, nome_vac)
                     limpar_cache()
-                    st.success(f"Vacina **{nome_vac}** agendada para {data_prev.strftime('%d/%m/%Y')}!")
+                    _info = f"vinculada a {med_sel}" if med_id_sel else "sem vinculo de estoque"
+                    st.success(
+                        f"Vacina **{nome_vac}** agendada para "
+                        f"{data_prev.strftime('%d/%m/%Y')} ({_info})!"
+                    )
                     st.rerun()
 
     # ── ABA 3: Confirmar ──────────────────────────────────────────────────────
     with t3:
+        st.caption("Qualquer vacina pendente do lote pode ser confirmada aqui, "
+                   "independente de quem agendou.")
         dict_l3 = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
         lote_cf = st.selectbox("Lote", list(dict_l3.keys()), key="cal_cf_lote")
         lote_id_cf = dict_l3[lote_cf]
@@ -104,25 +144,48 @@ def page_calendario_sanitario(u):
         if not pendentes:
             st.success("Nenhuma vacina pendente neste lote.")
         else:
-            st.caption(f"{len(pendentes)} vacina(s) pendente(s)")
+            st.warning(f"{len(pendentes)} vacina(s) pendente(s)")
             for vac in pendentes:
                 vid, _, nome_v, prev_v, _, _, obs_v = vac
-                with st.expander(f"💉 {nome_v} — prevista {'/'.join(reversed(str(prev_v)[:10].split('-')))}"):
+                _prev_fmt = "/".join(reversed(str(prev_v)[:10].split("-")))
+                with st.expander(f"💉 {nome_v} — prevista {_prev_fmt}"):
                     cf1, cf2 = st.columns(2)
                     with cf1:
-                        data_real = st.date_input("Data de aplicacao",
-                                                  key=f"cf_data_{vid}")
+                        from datetime import date as _date
+                        data_real = st.date_input(
+                            "Data de aplicacao",
+                            value=_date.today(),
+                            key=f"cf_data_{vid}"
+                        )
                     with cf2:
-                        obs_real  = st.text_input("Observacoes",
-                                                  value=obs_v or "",
-                                                  key=f"cf_obs_{vid}")
-                    if st.button("Confirmar aplicacao", key=f"cf_btn_{vid}",
-                                 type="primary"):
-                        registrar_vacina_realizada(vid, str(data_real))
-                        registrar_auditoria(u["id"], "confirmar_vacina",
-                                           "vacinas_agenda", vid, nome_v)
+                        obs_real = st.text_input(
+                            "Observacoes adicionais",
+                            value=obs_v or "",
+                            key=f"cf_obs_{vid}"
+                        )
+                    st.caption(
+                        "Ao confirmar: marca como realizada, da baixa no "
+                        "estoque vinculado e registra vacinacao no prontuario "
+                        "de todos os animais do lote."
+                    )
+                    if st.button(
+                        f"Confirmar aplicacao de {nome_v}",
+                        key=f"cf_btn_{vid}", type="primary"
+                    ):
+                        registrar_vacina_realizada(
+                            vid, str(data_real),
+                            confirmado_por=u["id"],
+                            obs_extra=obs_real
+                        )
+                        registrar_auditoria(
+                            u["id"], "confirmar_vacina",
+                            "vacinas_agenda", vid, nome_v
+                        )
                         limpar_cache()
-                        st.success(f"**{nome_v}** confirmada!")
+                        st.success(
+                            f"**{nome_v}** confirmada! Prontuario atualizado "
+                            f"e estoque descontado automaticamente."
+                        )
                         st.rerun()
 
 
