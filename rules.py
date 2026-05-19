@@ -128,7 +128,7 @@ def sel_fazenda_vet(key="vet_faz_global"):
     u = usuario_atual()
     if not u or not is_vet():
         return None
-    from database import listar_fazendas_do_vet, listar_lotes
+    from database import listar_fazendas_do_vet, listar_lotes, obter_nome_usuario
     faz_ids = listar_fazendas_do_vet(u["id"])
     if not faz_ids:
         st.warning("Nenhuma fazenda aprovada. Solicite acesso a um fazendeiro.")
@@ -137,13 +137,15 @@ def sel_fazenda_vet(key="vet_faz_global"):
     if len(faz_ids) == 1:
         foid = faz_ids[0]
     else:
-        # Montar opcoes legíveis
+        # Montar opcoes com nome real do fazendeiro + lotes
         opcoes = {}
         for fid in faz_ids:
+            nome_faz = obter_nome_usuario(fid)  # nome real do fazendeiro
             lts = listar_lotes(owner_id=fid)
-            nomes = ", ".join(l[1] for l in lts[:2])
-            if len(lts) > 2: nomes += f" +{len(lts)-2}"
-            opcoes[f"Fazenda {fid} | {nomes}"] = fid
+            nomes_lotes = ", ".join(l[1] for l in lts[:2])
+            if len(lts) > 2: nomes_lotes += f" +{len(lts)-2}"
+            label = f"{nome_faz} | {nomes_lotes}" if nomes_lotes else nome_faz
+            opcoes[label] = fid
         st.markdown("**Selecione a fazenda:**")
         sel = st.selectbox("Fazenda", list(opcoes.keys()),
                            key=key, label_visibility="collapsed")
