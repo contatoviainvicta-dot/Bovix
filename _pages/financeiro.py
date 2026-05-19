@@ -66,11 +66,15 @@ def page_painel_de_decisao(u):
 
 
 def page_dashboard_executivo(u):
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_dash_exec")
     lotes = listar_lotes_usuario()
 
     hdr("Dashboard Executivo", "Visao Executiva", "KPIs consolidados da fazenda com analise de IA")
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_dash_exec")
+
+
+    if is_vet():
+        sel_fazenda_vet(key="dash_exec")
 
     with st.spinner("Carregando dados da fazenda..."):
         if is_vet():
@@ -327,11 +331,10 @@ def page_margem_real(u):
 
 
 def page_cotacao_cepea(u):
+    hdr("Cotacao Cepea", "Cotacao Boi Gordo", "Preco do boi gordo ESALQ/Cepea")
     if is_vet():
         sel_fazenda_vet(key="vet_faz_cotacao")
-        st.divider()
 
-    hdr("Cotacao Cepea", "Cotacao Boi Gordo", "Preco do boi gordo ESALQ/Cepea")
     c1,c2 = st.columns([2,1])
     with c1:
         if st.button("Buscar cotacao atual"):
@@ -366,6 +369,9 @@ def page_cotacao_cepea(u):
     # ============================================================
     # RASTREABILIDADE GTA
     # ============================================================
+
+    if is_vet():
+        sel_fazenda_vet(key="cotacao")
 
 
 def page_rastreabilidade_gta(u):
