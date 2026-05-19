@@ -1273,43 +1273,91 @@ def listar_fazendas():
 def adicionar_vacina_agenda(lote_id, nome_vacina, data_prevista, observacao="",
                            medicamento_id=None, quantidade_dose=0,
                            agendado_por=None, animal_id=None):
-    """Agenda vacina vinculando ao medicamento do estoque se informado."""
+    """Agenda vacina. Verifica colunas existentes antes de inserir."""
     p = _ph()
+
+    # Descobrir colunas existentes na tabela
+    _cols_existentes = set()
+    if _usar_postgres():
+        try:
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='vacinas_agenda' AND table_schema='public'"
+                )
+                _cols_existentes = {r[0] for r in cur.fetchall()}
+        except Exception:
+            pass
+
+    # Colunas base (sempre existem)
+    cols   = ["lote_id", "nome_vacina", "data_prevista", "observacao"]
+    vals   = [lote_id, nome_vacina, str(data_prevista), observacao or ""]
+
+    # Colunas extras - incluir apenas se existirem no banco
+    extras = [
+        ("medicamento_id",  medicamento_id),
+        ("quantidade_dose", float(quantidade_dose or 0)),
+        ("agendado_por",    agendado_por),
+        ("animal_id",       animal_id),
+    ]
+    for col, val in extras:
+        if not _usar_postgres() or col in _cols_existentes:
+            cols.append(col)
+            vals.append(val)
+
+    placeholders = ",".join([p] * len(cols))
+    cols_str     = ",".join(cols)
+
     with _conexao() as conn:
         cur = conn.cursor()
         if _usar_postgres():
             cur.execute(
-                f"INSERT INTO vacinas_agenda "
-                f"(lote_id,nome_vacina,data_prevista,observacao,"
-                f"medicamento_id,quantidade_dose,agendado_por,animal_id) "
-                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p}) RETURNING id",
-                (lote_id, nome_vacina, str(data_prevista), observacao or "",
-                 medicamento_id, float(quantidade_dose or 0),
-                 agendado_por, animal_id)
+                f"INSERT INTO vacinas_agenda ({cols_str}) "
+                f"VALUES({placeholders}) RETURNING id",
+                tuple(vals)
             )
-            return cur.fetchone()[0]
+            vid = cur.fetchone()[0]
+            conn.commit()
+            return vid
         else:
             cur.execute(
-                f"INSERT INTO vacinas_agenda "
-                f"(lote_id,nome_vacina,data_prevista,observacao,"
-                f"medicamento_id,quantidade_dose,agendado_por,animal_id) "
-                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p})",
-                (lote_id, nome_vacina, str(data_prevista), observacao or "",
-                 medicamento_id, float(quantidade_dose or 0),
-                 agendado_por, animal_id)
+                f"INSERT INTO vacinas_agenda ({cols_str}) VALUES({placeholders})",
+                tuple(vals)
             )
             return cur.lastrowid
 
 def registrar_vacina_realizada(vacina_id, data_realizada,
                                confirmado_por=None, obs_extra=""):
-    """Confirma vacina: atualiza agenda, da baixa no estoque e registra ocorrencia."""
+    """Confirma vacina: atualiza agenda, baixa no estoque de quem agendou,
+    e registra ocorrencia Vacinacao nos animais do lote."""
     p = _ph()
 
+    # Descobrir colunas existentes
+    _cols = set()
+    if _usar_postgres():
+        try:
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='vacinas_agenda' AND table_schema='public'"
+                )
+                _cols = {r[0] for r in cur.fetchall()}
+        except Exception:
+            pass
+
     # Buscar dados da vacina
+    sel_extras = ""
+    if _cols:
+        for c in ["medicamento_id","quantidade_dose","agendado_por","animal_id"]:
+            if c in _cols:
+                sel_extras += f",{c}"
+
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(
-            f"SELECT lote_id,nome_vacina,medicamento_id,quantidade_dose,animal_id "
+            f"SELECT lote_id,nome_vacina{sel_extras} "
             f"FROM vacinas_agenda WHERE id={p}",
             (vacina_id,)
         )
@@ -1318,55 +1366,51 @@ def registrar_vacina_realizada(vacina_id, data_realizada,
     if not row:
         return False
 
-    lote_id   = row[0]
-    nome_vac  = row[1]
-    med_id    = row[2]
-    qtd_dose  = float(row[3] or 0)
-    animal_id = row[4]
+    lote_id  = row[0]
+    nome_vac = row[1]
+    med_id   = row[2] if len(row) > 2 and "medicamento_id" in sel_extras else None
+    qtd_dose = float(row[3] or 0) if len(row) > 3 and "quantidade_dose" in sel_extras else 0
+    # agendado_por nao usado aqui (estoque ja e do usuario que agendou via med_id)
+    animal_id = row[5] if len(row) > 5 and "animal_id" in sel_extras else None
 
     # Marcar como realizada
+    set_extra = ""
+    set_vals  = [data_realizada]
+    if "confirmado_por" in _cols and confirmado_por:
+        set_extra = f",confirmado_por={p}"
+        set_vals.append(confirmado_por)
+    set_vals.append(vacina_id)
+
     with _conexao() as conn:
         cur = conn.cursor()
-        if confirmado_por:
-            cur.execute(
-                f"UPDATE vacinas_agenda SET data_realizada={p},status='realizado',"
-                f"confirmado_por={p} WHERE id={p}",
-                (data_realizada, confirmado_por, vacina_id)
-            )
-        else:
-            cur.execute(
-                f"UPDATE vacinas_agenda SET data_realizada={p},status='realizado'"
-                f" WHERE id={p}",
-                (data_realizada, vacina_id)
-            )
+        cur.execute(
+            f"UPDATE vacinas_agenda SET data_realizada={p},"
+            f"status='realizado'{set_extra} WHERE id={p}",
+            tuple(set_vals)
+        )
         conn.commit()
 
-    # Dar baixa no estoque do medicamento (se vinculado e quantidade informada)
+    # Dar baixa no estoque do medicamento vinculado
     if med_id and qtd_dose > 0:
         try:
             atualizar_estoque(med_id, qtd_dose)
         except Exception:
             pass
 
-    # Registrar ocorrencia nos animais (vacinacao no prontuario)
+    # Registrar ocorrencia de vacinacao nos animais
     obs_ocorr = f"Vacinacao: {nome_vac}"
     if obs_extra:
         obs_ocorr += f" | {obs_extra}"
 
     animais_lote = listar_animais_por_lote(lote_id)
     alvos = [animal_id] if animal_id else [a[0] for a in animais_lote]
-
     for aid in alvos:
         try:
             adicionar_ocorrencia(
-                animal_id=aid,
-                data=data_realizada,
-                tipo="Vacinacao",
-                descricao=obs_ocorr,
-                gravidade="Baixa",
-                custo=0,
-                dias_recuperacao=0,
-                status="Resolvido"
+                animal_id=aid, data=data_realizada,
+                tipo="Vacinacao", descricao=obs_ocorr,
+                gravidade="Baixa", custo=0,
+                dias_recuperacao=0, status="Resolvido"
             )
         except Exception:
             pass
