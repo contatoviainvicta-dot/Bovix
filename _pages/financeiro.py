@@ -69,9 +69,6 @@ def page_dashboard_executivo(u):
     lotes = listar_lotes_usuario()
 
     hdr("Dashboard Executivo", "Visao Executiva", "KPIs consolidados da fazenda com analise de IA")
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_dash_exec")
-
 
     if is_vet():
         sel_fazenda_vet(key="dash_exec")
