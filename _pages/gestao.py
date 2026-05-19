@@ -66,26 +66,40 @@ def page_calendario_sanitario(u):
                     "/".join(reversed(str(x)[:10].split("-")))
                     if x and str(x) not in ("None","") else ""
                 )
-            # Cor por status
-            def _cor(s):
-                if s == "realizado": return "✅"
-                return "⏳"
-            df_v[""] = df_v["Status"].apply(_cor)
+            df_v[""] = df_v["Status"].apply(
+                lambda s: "✅" if s == "realizado" else "⏳"
+            )
             st.dataframe(
                 df_v[["","Lote","Vacina","Previsto","Realizado","Status","Obs"]],
                 use_container_width=True, hide_index=True
             )
         else:
-            st.info("Nenhuma vacina agendada para este lote.")
+            st.info("Nenhuma vacina agendada.")
 
     # ── ABA 2: Agendar ────────────────────────────────────────────────────────
     with t2:
-        dict_l2 = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
-        lote_ag = st.selectbox("Lote de destino", list(dict_l2.keys()), key="cal_ag_lote")
+        dict_l2 = {f"{l[1]}": l[0] for l in lotes}
+        lote_ag    = st.selectbox("Lote", list(dict_l2.keys()), key="cal_ag_lote")
         lote_id_ag = dict_l2[lote_ag]
 
-        # Buscar medicamentos disponiveis (do usuario logado)
-        _oid_med = (u.get("owner_id") or u["id"])
+        # Alvo: lote todo ou animal especifico
+        alvo = st.radio(
+            "Aplicar em:",
+            ["Lote inteiro", "Animal especifico"],
+            horizontal=True, key="cal_ag_alvo"
+        )
+        animal_id_ag = None
+        if alvo == "Animal especifico":
+            animais_ag = listar_animais_por_lote(lote_id_ag)
+            if not animais_ag:
+                st.warning("Nenhum animal neste lote.")
+            else:
+                dict_an = {f"{a[1]}": a[0] for a in animais_ag}
+                an_sel  = st.selectbox("Animal", list(dict_an.keys()), key="cal_ag_animal")
+                animal_id_ag = dict_an[an_sel]
+
+        # Medicamentos disponiveis do usuario logado
+        _oid_med  = u.get("owner_id") or u["id"]
         meds_disp = listar_medicamentos(owner_id=_oid_med)
         dict_meds = {"-- Sem vinculo de estoque --": None}
         dict_meds.update({f"{m[1]} ({m[3]:.0f} {m[2]})": m[0] for m in meds_disp})
@@ -93,49 +107,54 @@ def page_calendario_sanitario(u):
         with st.form("form_agendar_vac"):
             c1, c2 = st.columns(2)
             with c1:
-                nome_vac   = st.text_input("Nome da vacina *",
-                                           placeholder="Ex: Aftosa, Brucelose")
-                data_prev  = st.date_input("Data prevista *")
-                med_sel    = st.selectbox(
+                nome_vac  = st.text_input("Nome da vacina *",
+                                          placeholder="Ex: Aftosa, Brucelose")
+                data_prev = st.date_input("Data prevista *")
+                med_sel   = st.selectbox(
                     "Vincular ao medicamento/estoque",
                     list(dict_meds.keys()),
-                    help="Ao confirmar, dara baixa automatica neste estoque"
+                    help="Ao confirmar, da baixa automatica neste estoque"
                 )
             with c2:
-                qtd_dose   = st.number_input(
-                    "Dose por animal (unidade/mL)",
-                    min_value=0.0, value=0.0, step=0.5,
-                    help="Quantidade que sera descontada do estoque ao confirmar"
+                qtd_dose = st.number_input(
+                    "Dose por animal (unidade/mL)", min_value=0.0,
+                    value=0.0, step=0.5,
+                    help="Quantidade descontada do estoque ao confirmar"
                 )
-                obs_vac    = st.text_area("Observacoes", height=80)
+                obs_vac = st.text_area("Observacoes", height=80)
 
             if st.form_submit_button("Agendar vacina", type="primary"):
                 if not nome_vac:
                     st.error("Informe o nome da vacina.")
+                elif alvo == "Animal especifico" and not animal_id_ag:
+                    st.error("Selecione o animal.")
                 else:
                     med_id_sel = dict_meds[med_sel]
                     adicionar_vacina_agenda(
                         lote_id_ag, nome_vac, str(data_prev), obs_vac,
                         medicamento_id=med_id_sel,
                         quantidade_dose=qtd_dose,
-                        agendado_por=u["id"]
+                        agendado_por=u["id"],
+                        animal_id=animal_id_ag
                     )
                     registrar_auditoria(u["id"], "agendar_vacina",
                                        "vacinas_agenda", lote_id_ag, nome_vac)
                     limpar_cache()
-                    _info = f"vinculada a {med_sel}" if med_id_sel else "sem vinculo de estoque"
+                    _alvo_str = "lote inteiro" if not animal_id_ag else "animal especifico"
+                    _est_str  = f"vinculada a {med_sel}" if med_id_sel else "sem vinculo de estoque"
                     st.success(
                         f"Vacina **{nome_vac}** agendada para "
-                        f"{data_prev.strftime('%d/%m/%Y')} ({_info})!"
+                        f"{data_prev.strftime('%d/%m/%Y')} "
+                        f"({_alvo_str} | {_est_str})!"
                     )
                     st.rerun()
 
     # ── ABA 3: Confirmar ──────────────────────────────────────────────────────
     with t3:
-        st.caption("Qualquer vacina pendente do lote pode ser confirmada aqui, "
+        st.caption("Qualquer vacina pendente pode ser confirmada aqui, "
                    "independente de quem agendou.")
-        dict_l3 = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
-        lote_cf = st.selectbox("Lote", list(dict_l3.keys()), key="cal_cf_lote")
+        dict_l3    = {f"{l[1]}": l[0] for l in lotes}
+        lote_cf    = st.selectbox("Lote", list(dict_l3.keys()), key="cal_cf_lote")
         lote_id_cf = dict_l3[lote_cf]
 
         pendentes = [v for v in listar_vacinas_agenda(lote_id_cf)
@@ -148,7 +167,60 @@ def page_calendario_sanitario(u):
             for vac in pendentes:
                 vid, _, nome_v, prev_v, _, _, obs_v = vac
                 _prev_fmt = "/".join(reversed(str(prev_v)[:10].split("-")))
-                with st.expander(f"💉 {nome_v} — prevista {_prev_fmt}"):
+
+                # Descobrir se a vacina foi agendada para animal especifico
+                # (buscar animal_id da vacina, se existir a coluna)
+                _animal_orig = None
+                try:
+                    from database import _conexao as _cx, _ph as _pp, _usar_postgres as _up
+                    _p2 = _pp()
+                    with _cx() as _conn:
+                        _cur = _conn.cursor()
+                        if _up():
+                            _cur.execute(
+                                f"SELECT animal_id FROM vacinas_agenda WHERE id={_p2}",
+                                (vid,)
+                            )
+                            _row = _cur.fetchone()
+                            _animal_orig = _row[0] if _row else None
+                except Exception:
+                    _animal_orig = None
+
+                with st.expander(
+                    f"💉 {nome_v} — prevista {_prev_fmt}"
+                    + (" 🐄 animal específico" if _animal_orig else " 🐄 lote inteiro")
+                ):
+                    # Alvo da confirmacao
+                    animais_lote_cf = listar_animais_por_lote(lote_id_cf)
+
+                    if _animal_orig:
+                        # Ja tem animal definido — mostrar info
+                        _an_nome = next(
+                            (a[1] for a in animais_lote_cf if a[0] == _animal_orig),
+                            f"Animal #{_animal_orig}"
+                        )
+                        st.info(f"Agendada para: **{_an_nome}**")
+                        alvo_cf      = "Animal especifico"
+                        animal_id_cf = _animal_orig
+                    else:
+                        # Permite redefinir o alvo na confirmacao
+                        alvo_cf = st.radio(
+                            "Confirmar aplicacao em:",
+                            ["Lote inteiro", "Animal especifico"],
+                            horizontal=True, key=f"cf_alvo_{vid}"
+                        )
+                        animal_id_cf = None
+                        if alvo_cf == "Animal especifico":
+                            if not animais_lote_cf:
+                                st.warning("Nenhum animal no lote.")
+                            else:
+                                dict_an_cf = {f"{a[1]}": a[0] for a in animais_lote_cf}
+                                an_cf_sel  = st.selectbox(
+                                    "Animal", list(dict_an_cf.keys()),
+                                    key=f"cf_animal_{vid}"
+                                )
+                                animal_id_cf = dict_an_cf[an_cf_sel]
+
                     cf1, cf2 = st.columns(2)
                     with cf1:
                         from datetime import date as _date
@@ -163,30 +235,41 @@ def page_calendario_sanitario(u):
                             value=obs_v or "",
                             key=f"cf_obs_{vid}"
                         )
-                    st.caption(
-                        "Ao confirmar: marca como realizada, da baixa no "
-                        "estoque vinculado e registra vacinacao no prontuario "
-                        "de todos os animais do lote."
+
+                    _alvo_desc = (
+                        f"animal especifico" if alvo_cf == "Animal especifico"
+                        else "lote inteiro"
                     )
+                    st.caption(
+                        f"Confirmar para: **{_alvo_desc}** — "
+                        f"baixa no estoque vinculado + vacinacao no prontuario."
+                    )
+
                     if st.button(
                         f"Confirmar aplicacao de {nome_v}",
                         key=f"cf_btn_{vid}", type="primary"
                     ):
-                        registrar_vacina_realizada(
-                            vid, str(data_real),
-                            confirmado_por=u["id"],
-                            obs_extra=obs_real
-                        )
-                        registrar_auditoria(
-                            u["id"], "confirmar_vacina",
-                            "vacinas_agenda", vid, nome_v
-                        )
-                        limpar_cache()
-                        st.success(
-                            f"**{nome_v}** confirmada! Prontuario atualizado "
-                            f"e estoque descontado automaticamente."
-                        )
-                        st.rerun()
+                        if alvo_cf == "Animal especifico" and not animal_id_cf:
+                            st.error("Selecione o animal.")
+                        else:
+                            # Passar animal_id_cf para registrar_vacina_realizada
+                            # sobrescreve o animal_id original se usuario redefiniu
+                            registrar_vacina_realizada(
+                                vid, str(data_real),
+                                confirmado_por=u["id"],
+                                obs_extra=obs_real,
+                                animal_id_override=animal_id_cf
+                            )
+                            registrar_auditoria(
+                                u["id"], "confirmar_vacina",
+                                "vacinas_agenda", vid, nome_v
+                            )
+                            limpar_cache()
+                            st.success(
+                                f"**{nome_v}** confirmada para {_alvo_desc}! "
+                                f"Prontuario atualizado e estoque descontado."
+                            )
+                            st.rerun()
 
 
 def page_estoque_medicamentos(u):
