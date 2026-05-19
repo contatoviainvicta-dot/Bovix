@@ -278,9 +278,6 @@ def page_analisar_animal(u):
 def page_score_de_saude(u):
     hdr("Score de Saude", "Ranking de Saude", "Nota 0-100 por animal (GMD + ocorrencias + reproducao)")
     if is_vet():
-        sel_fazenda_vet(key="vet_faz_score")
-
-    if is_vet():
         sel_fazenda_vet(key="score")
 
     lote_id, _ = sel_lote("score_lote")
@@ -319,9 +316,6 @@ def page_score_de_saude(u):
 def page_gmd_temporal(u):
     hdr("GMD Temporal", "Evolucao do GMD", "Evolucao do ganho de peso ao longo do tempo")
     if is_vet():
-        sel_fazenda_vet(key="vet_faz_gmd")
-
-    if is_vet():
         sel_fazenda_vet(key="gmd")
 
     lote_id, _ = sel_lote("gmd_lote")
@@ -347,9 +341,6 @@ def page_gmd_temporal(u):
 
 def page_comparativo_lotes(u):
     hdr("Comparativo Lotes", "Comparativo entre Lotes", "Side-by-side de GMD, custos e resultados")
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_comp")
-
     if is_vet():
         sel_fazenda_vet(key="comp")
 
@@ -537,7 +528,6 @@ def page_risco_sanitario_ia(u):
 
 def page_previsao_de_abate_ia(u):
     hdr("Previsao de Abate IA", "Predicao de Abate", "Estimativa de data e resultado financeiro por animal")
-
     if is_vet():
         sel_fazenda_vet(key="abate")
 
@@ -636,6 +626,8 @@ def page_previsao_de_abate_ia(u):
 
 def page_anomalias_de_peso(u):
     hdr("Anomalias de Peso", "Alertas Inteligentes", "Deteccao automatica de comportamento anomalo de peso")
+    if is_vet():
+        sel_fazenda_vet(key="anom")
 
     lote_id, _ = sel_lote("anom_lote")
     if lote_id:
