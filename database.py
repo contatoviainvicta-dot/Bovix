@@ -636,6 +636,36 @@ def contar_animais_no_lote(lote_id, incluir_inativos=False):
             cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1", (lote_id,))
         return cur.fetchone()[0]
 
+def adicionar_animal(identificacao, idade, lote_id, sexo="indefinido",
+                     raca="", peso_entrada=0.0, peso_alvo=0.0, observacoes=""):
+    """Cadastra um novo animal no lote."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO animais (identificacao,idade,lote_id,sexo,raca,"
+                f"peso_entrada,peso_alvo,observacoes,ativo,status) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},1,'ATIVO') RETURNING id",
+                (str(identificacao), int(idade or 0), int(lote_id),
+                 sexo or "indefinido", raca or "",
+                 float(peso_entrada or 0), float(peso_alvo or 0),
+                 observacoes or "")
+            )
+            return cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO animais (identificacao,idade,lote_id,sexo,raca,"
+                f"peso_entrada,peso_alvo,observacoes,ativo,status) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},1,'ATIVO')",
+                (str(identificacao), int(idade or 0), int(lote_id),
+                 sexo or "indefinido", raca or "",
+                 float(peso_entrada or 0), float(peso_alvo or 0),
+                 observacoes or "")
+            )
+            return cur.lastrowid
+
+
 def atualizar_animal_detalhes(animal_id, peso_alvo=None, observacoes=None, foto_path=None):
     p = _ph()
     campos, vals = [], []
