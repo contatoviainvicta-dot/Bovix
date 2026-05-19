@@ -2788,6 +2788,30 @@ def _garantir_status_animal_lote():
             pass
 
 
+def _garantir_colunas_vacinas_agenda():
+    """Adiciona colunas novas na vacinas_agenda se nao existirem.
+    Cada coluna em conexao separada para evitar InFailedSqlTransaction."""
+    if not _usar_postgres():
+        return
+    for col, tipo in [
+        ("medicamento_id",  "INTEGER DEFAULT NULL"),
+        ("quantidade_dose", "REAL DEFAULT 0"),
+        ("agendado_por",    "INTEGER DEFAULT NULL"),
+        ("confirmado_por",  "INTEGER DEFAULT NULL"),
+        ("animal_id",       "INTEGER DEFAULT NULL"),
+    ]:
+        try:
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    f"ALTER TABLE vacinas_agenda "
+                    f"ADD COLUMN IF NOT EXISTS {col} {tipo}"
+                )
+                conn.commit()
+        except Exception:
+            pass  # Coluna ja existe ou erro ignoravel
+
+
 def _garantir_owner_id_medicamentos():
     """Garante que a tabela medicamentos tem coluna owner_id."""
     with _conexao() as conn:
