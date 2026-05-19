@@ -907,8 +907,6 @@ def page_prontuario_animal(u):
         st.markdown("".join(html_parts), unsafe_allow_html=True)
 
     # ── selecao ───────────────────────────────────────────────────────────
-    if is_vet():
-        sel_fazenda_vet(key="vet_faz_pron")
 
     lotes = listar_lotes_usuario()
     if not lotes: st.warning("Nenhum lote.")
