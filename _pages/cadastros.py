@@ -228,6 +228,9 @@ def page_registrar_ocorrencia(u):
 def page_registrar_morte(u):
     hdr("Registrar Morte", "Baixa de Animal", "Registre a morte e retire o animal do lote")
     tab1,tab2 = st.tabs(["Registrar", "Historico"])
+    if is_vet():
+        sel_fazenda_vet(key="morte")
+
     with tab1:
         lotes = listar_lotes_usuario()
         if not lotes:
@@ -276,6 +279,9 @@ def page_registrar_morte(u):
 
 def page_importar_csv(u):
     hdr("Importar CSV", "Importacao em Lote", "Importe pesagens e animais via planilha CSV")
+    if is_vet():
+        sel_fazenda_vet(key="imp_csv")
+
     lotes = listar_lotes_usuario()
     st.subheader("Lote de destino")
     opcao = st.radio("", ["Usar lote existente","Criar novo lote"], horizontal=True, key="imp_op")
@@ -368,6 +374,9 @@ def page_editar_lote(u):
             st.success("Contagens atualizadas com sucesso!")
             st.rerun()
 
+    if is_vet():
+        sel_fazenda_vet(key="edit_lote")
+
     lotes = listar_lotes_usuario()
     if not lotes:
         st.warning("Nenhum lote cadastrado.")
@@ -439,6 +448,9 @@ def page_editar_lote(u):
 
 def page_editar_animal(u):
     hdr("Editar Animal", "Editar / Excluir Animal", "Altere dados ou exclua animais em massa")
+    if is_vet():
+        sel_fazenda_vet(key="edit_anim")
+
     lotes = listar_lotes_usuario()
     if not lotes:
         st.warning("Nenhum lote cadastrado.")
@@ -603,6 +615,9 @@ def page_editar_animal(u):
 
 def page_editar_pesagens(u):
     hdr("Editar Pesagens", "Corrigir Pesagens", "Edite ou exclua pesagens incorretas")
+    if is_vet():
+        sel_fazenda_vet(key="edit_pes")
+
     lotes = listar_lotes_usuario()
     if not lotes:
         st.warning("Nenhum lote cadastrado.")
@@ -709,6 +724,9 @@ def page_gerenciar_ocorrencias(u):
     st.divider()
 
     # ── Selecao ────────────────────────────────────────────────────────
+    if is_vet():
+        sel_fazenda_vet(key="ger_oc")
+
     lotes = listar_lotes_usuario()
     if not lotes:
         st.warning("Nenhum lote cadastrado.")
@@ -848,6 +866,9 @@ def page_gerenciar_ocorrencias(u):
 def page_transferir_animal(u):
     hdr("Transferir Animal", "Transferencia entre Lotes", "Mova animais mantendo o historico completo")
 
+    if is_vet():
+        sel_fazenda_vet(key="transf")
+
     lotes = listar_lotes_usuario()
     if len(lotes) < 2:
         st.warning("Necessario ter ao menos 2 lotes cadastrados para transferir animais.")
@@ -940,6 +961,9 @@ def page_transferir_animal(u):
 
 def page_status_do_lote(u):
     hdr("Status do Lote", "Gerenciar Status", "Atualize o status dos seus lotes e animais")
+
+    if is_vet():
+        sel_fazenda_vet(key="status")
 
     lotes = listar_lotes_usuario()
     if not lotes:
