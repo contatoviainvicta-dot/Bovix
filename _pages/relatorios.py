@@ -39,6 +39,9 @@ def hdr(titulo, sub="", desc=""):
 
 def page_exportar_relatorios(u):
     hdr("Exportar Relatorios", "Relatorios", "PDF e Excel do lote, sanitario e estoque")
+    if is_vet():
+        sel_fazenda_vet(key="export")
+
     lote_id, _ = sel_lote("exp_lote")
     if lote_id:
         lote = obter_lote(lote_id)
@@ -99,6 +102,9 @@ def page_exportar_relatorios(u):
 
 def page_backup(u):
     hdr("Backup", "Backup do Sistema", "Download dos seus dados")
+    if is_vet():
+        sel_fazenda_vet(key="backup")
+
     import database as _dbm
     # Determinar caminho do banco com fallback
     db_path = getattr(_dbm, 'DB_PATH', None) or "pecuaria.db"
