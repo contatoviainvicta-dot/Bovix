@@ -229,7 +229,7 @@ def page_registrar_morte(u):
     hdr("Registrar Morte", "Baixa de Animal", "Registre a morte e retire o animal do lote")
     tab1,tab2 = st.tabs(["Registrar", "Historico"])
     if is_vet():
-        sel_fazenda_vet(key="morte")
+        sel_fazenda_vet(key="vet_faz_morte")
 
     with tab1:
         lotes = listar_lotes_usuario()
@@ -280,7 +280,7 @@ def page_registrar_morte(u):
 def page_importar_csv(u):
     hdr("Importar CSV", "Importacao em Lote", "Importe pesagens e animais via planilha CSV")
     if is_vet():
-        sel_fazenda_vet(key="imp_csv")
+        sel_fazenda_vet(key="vet_faz_imp_csv")
 
     lotes = listar_lotes_usuario()
     st.subheader("Lote de destino")
@@ -375,7 +375,7 @@ def page_editar_lote(u):
             st.rerun()
 
     if is_vet():
-        sel_fazenda_vet(key="edit_lote")
+        sel_fazenda_vet(key="vet_faz_edit_lote")
 
     lotes = listar_lotes_usuario()
     if not lotes:
@@ -449,7 +449,7 @@ def page_editar_lote(u):
 def page_editar_animal(u):
     hdr("Editar Animal", "Editar / Excluir Animal", "Altere dados ou exclua animais em massa")
     if is_vet():
-        sel_fazenda_vet(key="edit_anim")
+        sel_fazenda_vet(key="vet_faz_edit_anim")
 
     lotes = listar_lotes_usuario()
     if not lotes:
@@ -616,7 +616,7 @@ def page_editar_animal(u):
 def page_editar_pesagens(u):
     hdr("Editar Pesagens", "Corrigir Pesagens", "Edite ou exclua pesagens incorretas")
     if is_vet():
-        sel_fazenda_vet(key="edit_pes")
+        sel_fazenda_vet(key="vet_faz_edit_pes")
 
     lotes = listar_lotes_usuario()
     if not lotes:
@@ -725,7 +725,7 @@ def page_gerenciar_ocorrencias(u):
 
     # ── Selecao ────────────────────────────────────────────────────────
     if is_vet():
-        sel_fazenda_vet(key="ger_oc")
+        sel_fazenda_vet(key="vet_faz_ger_oc")
 
     lotes = listar_lotes_usuario()
     if not lotes:
@@ -867,7 +867,7 @@ def page_transferir_animal(u):
     hdr("Transferir Animal", "Transferencia entre Lotes", "Mova animais mantendo o historico completo")
 
     if is_vet():
-        sel_fazenda_vet(key="transf")
+        sel_fazenda_vet(key="vet_faz_transf")
 
     lotes = listar_lotes_usuario()
     if len(lotes) < 2:
@@ -963,7 +963,7 @@ def page_status_do_lote(u):
     hdr("Status do Lote", "Gerenciar Status", "Atualize o status dos seus lotes e animais")
 
     if is_vet():
-        sel_fazenda_vet(key="status")
+        sel_fazenda_vet(key="vet_faz_status")
 
     lotes = listar_lotes_usuario()
     if not lotes:
