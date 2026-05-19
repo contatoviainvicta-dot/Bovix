@@ -107,7 +107,7 @@ def page_analisar_por_lote(u):
 
     hdr("Analisar por Lote", "Analise do Lote", "Desempenho economico e zootecnico")
     if is_vet():
-        sel_fazenda_vet(key="anal_lote")
+        sel_fazenda_vet(key="vet_faz_anal_lote")
 
     lote_id, lotes = sel_lote("analise_lote")
     if lote_id:
@@ -191,7 +191,7 @@ def page_analisar_por_lote(u):
 def page_analisar_animal(u):
     hdr("Analisar Animal", "Analise Individual", "Historico de peso, ocorrencias e alertas")
     if is_vet():
-        sel_fazenda_vet(key="anal_anim")
+        sel_fazenda_vet(key="vet_faz_anal_anim")
 
     lotes = listar_lotes_usuario()
     if not lotes:
@@ -278,7 +278,7 @@ def page_analisar_animal(u):
 def page_score_de_saude(u):
     hdr("Score de Saude", "Ranking de Saude", "Nota 0-100 por animal (GMD + ocorrencias + reproducao)")
     if is_vet():
-        sel_fazenda_vet(key="score")
+        sel_fazenda_vet(key="vet_faz_score")
 
     lote_id, _ = sel_lote("score_lote")
     if lote_id:
@@ -316,7 +316,7 @@ def page_score_de_saude(u):
 def page_gmd_temporal(u):
     hdr("GMD Temporal", "Evolucao do GMD", "Evolucao do ganho de peso ao longo do tempo")
     if is_vet():
-        sel_fazenda_vet(key="gmd")
+        sel_fazenda_vet(key="vet_faz_gmd")
 
     lote_id, _ = sel_lote("gmd_lote")
     if lote_id:
@@ -342,7 +342,7 @@ def page_gmd_temporal(u):
 def page_comparativo_lotes(u):
     hdr("Comparativo Lotes", "Comparativo entre Lotes", "Side-by-side de GMD, custos e resultados")
     if is_vet():
-        sel_fazenda_vet(key="comp")
+        sel_fazenda_vet(key="vet_faz_comp")
 
     lotes = listar_lotes_usuario()
     if len(lotes) < 2:
@@ -399,7 +399,7 @@ def page_comparativo_lotes(u):
 def page_pesquisar_ocorrencias(u):
     hdr("Pesquisar Ocorrencias", "Busca de Ocorrencias", "Filtros por lote, tipo e gravidade")
     if is_vet():
-        sel_fazenda_vet(key="pesq_oc")
+        sel_fazenda_vet(key="vet_faz_pesq_oc")
 
     lotes = listar_lotes_usuario()
     dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
@@ -463,8 +463,6 @@ def page_risco_sanitario_ia(u):
 
     st.divider()
     st.subheader("Analise detalhada por lote")
-    if is_vet():
-        sel_fazenda_vet(key="risco")
 
     lote_id, _ = sel_lote("risco_lote")
     if lote_id:
@@ -529,7 +527,7 @@ def page_risco_sanitario_ia(u):
 def page_previsao_de_abate_ia(u):
     hdr("Previsao de Abate IA", "Predicao de Abate", "Estimativa de data e resultado financeiro por animal")
     if is_vet():
-        sel_fazenda_vet(key="abate")
+        sel_fazenda_vet(key="vet_faz_abate")
 
     lote_id, _ = sel_lote("prev_lote")
     if lote_id:
@@ -627,7 +625,7 @@ def page_previsao_de_abate_ia(u):
 def page_anomalias_de_peso(u):
     hdr("Anomalias de Peso", "Alertas Inteligentes", "Deteccao automatica de comportamento anomalo de peso")
     if is_vet():
-        sel_fazenda_vet(key="anom")
+        sel_fazenda_vet(key="vet_faz_anom")
 
     lote_id, _ = sel_lote("anom_lote")
     if lote_id:
