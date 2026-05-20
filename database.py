@@ -1348,17 +1348,16 @@ def registrar_vacina_realizada(vacina_id, data_realizada,
         except Exception:
             pass
 
-    # Buscar dados da vacina
-    sel_extras = ""
-    if _cols:
-        for c in ["medicamento_id","quantidade_dose","agendado_por","animal_id"]:
-            if c in _cols:
-                sel_extras += f",{c}"
+    # Buscar dados da vacina — sempre buscar por nome de coluna, nao por indice
+    _extras_disp = [c for c in
+                    ["medicamento_id","quantidade_dose","agendado_por","animal_id"]
+                    if not _cols or c in _cols]
+    sel_extras_str = ("," + ",".join(_extras_disp)) if _extras_disp else ""
 
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(
-            f"SELECT lote_id,nome_vacina{sel_extras} "
+            f"SELECT lote_id,nome_vacina{sel_extras_str} "
             f"FROM vacinas_agenda WHERE id={p}",
             (vacina_id,)
         )
@@ -1367,17 +1366,20 @@ def registrar_vacina_realizada(vacina_id, data_realizada,
     if not row:
         return False
 
-    lote_id  = row[0]
-    nome_vac = row[1]
-    med_id   = row[2] if len(row) > 2 and "medicamento_id" in sel_extras else None
-    qtd_dose = float(row[3] or 0) if len(row) > 3 and "quantidade_dose" in sel_extras else 0
-    # agendado_por nao usado aqui (estoque ja e do usuario que agendou via med_id)
-    animal_id = row[5] if len(row) > 5 and "animal_id" in sel_extras else None
+    # Mapear por posicao baseada nas colunas realmente buscadas
+    _row_cols = ["lote_id","nome_vacina"] + _extras_disp
+    _row_map  = {c: row[i] for i, c in enumerate(_row_cols)}
+
+    lote_id   = _row_map["lote_id"]
+    nome_vac  = _row_map["nome_vacina"]
+    med_id    = _row_map.get("medicamento_id")
+    qtd_dose  = float(_row_map.get("quantidade_dose") or 0)
+    animal_id = _row_map.get("animal_id")
 
     # Marcar como realizada
     set_extra = ""
     set_vals  = [data_realizada]
-    if "confirmado_por" in _cols and confirmado_por:
+    if ("confirmado_por" in _cols or not _cols) and confirmado_por:
         set_extra = f",confirmado_por={p}"
         set_vals.append(confirmado_por)
     set_vals.append(vacina_id)
