@@ -4,11 +4,25 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 from database import *
 from database import _conexao, _ph, _usar_postgres
-from ui import hdr, alerta, badge
+from ui import (
+    card_kpi, card_kpi_row, alerta, badge,
+    badge_status_animal, badge_status_lote, badge_gravidade,
+    card_animal, insight_card,
+)
 from rules import (
     is_admin, is_vet, is_fazendeiro, owner_id,
-    usuario_atual, sel_fazenda_vet, limpar_cache,
+    usuario_atual, sel_fazenda_vet, limpar_cache
 )
+
+
+# hdr e definida em app.py e injetada no namespace — definir localmente
+def hdr(titulo, subtitulo="", descricao=""):
+    st.markdown(f"## {titulo}")
+    if subtitulo and subtitulo != titulo:
+        st.caption(descricao or subtitulo)
+    elif descricao:
+        st.caption(descricao)
+    st.divider()
 
 
 def _requer_vet():
