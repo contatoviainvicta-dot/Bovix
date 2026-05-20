@@ -384,6 +384,8 @@ def inicializar_banco():
     print("Banco inicializado com sucesso.")
     _migrar_banco()
     _garantir_colunas_vacinas_agenda()
+    _garantir_coluna_crmv()
+    _garantir_tabelas_vet()
 
 
 def _migrar_banco():
@@ -2835,6 +2837,549 @@ def _garantir_status_animal_lote():
             conn.commit()
         except Exception:
             pass
+
+
+# ============================================================
+# MODULO VETERINARIO - Funcoes CRUD
+# ============================================================
+
+def obter_crmv_usuario(user_id):
+    """Retorna o CRMV do veterinario."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT crmv FROM usuarios WHERE id={p}", (user_id,))
+            r = cur.fetchone()
+            return (r[0] or "") if r else ""
+    except Exception:
+        return ""
+
+
+def atualizar_crmv(user_id, crmv):
+    """Atualiza o CRMV do veterinario."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(f"UPDATE usuarios SET crmv={p} WHERE id={p}",
+                       (crmv, user_id))
+            conn.commit()
+            return True
+    except Exception:
+        return False
+
+
+# ── RECEITUARIO DIGITAL ───────────────────────────────────────
+def adicionar_receita(vet_id, fazenda_owner_id, medicamento, dose, via, duracao,
+                     animal_id=None, lote_id=None, carencia_dias=0,
+                     observacoes="", crmv=""):
+    """Emite nova receita do veterinario."""
+    from datetime import date
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO receitas (vet_id,fazenda_owner_id,animal_id,lote_id,"
+                f"data_emissao,medicamento,dose,via,duracao,carencia_dias,"
+                f"observacoes,crmv_emissao) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p}) RETURNING id",
+                (vet_id, fazenda_owner_id, animal_id, lote_id,
+                 str(date.today()), medicamento, dose, via, duracao,
+                 int(carencia_dias or 0), observacoes or "", crmv or "")
+            )
+            return cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO receitas (vet_id,fazenda_owner_id,animal_id,lote_id,"
+                f"data_emissao,medicamento,dose,via,duracao,carencia_dias,"
+                f"observacoes,crmv_emissao) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})",
+                (vet_id, fazenda_owner_id, animal_id, lote_id,
+                 str(date.today()), medicamento, dose, via, duracao,
+                 int(carencia_dias or 0), observacoes or "", crmv or "")
+            )
+            return cur.lastrowid
+
+
+def listar_receitas(vet_id=None, fazenda_owner_id=None):
+    """Lista receitas. Vet ve as proprias, fazendeiro ve as recebidas."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if vet_id is not None:
+            cur.execute(
+                f"SELECT id,vet_id,fazenda_owner_id,animal_id,lote_id,"
+                f"data_emissao,medicamento,dose,via,duracao,carencia_dias,"
+                f"observacoes,crmv_emissao FROM receitas "
+                f"WHERE vet_id={p} ORDER BY data_emissao DESC",
+                (vet_id,)
+            )
+        elif fazenda_owner_id is not None:
+            cur.execute(
+                f"SELECT id,vet_id,fazenda_owner_id,animal_id,lote_id,"
+                f"data_emissao,medicamento,dose,via,duracao,carencia_dias,"
+                f"observacoes,crmv_emissao FROM receitas "
+                f"WHERE fazenda_owner_id={p} ORDER BY data_emissao DESC",
+                (fazenda_owner_id,)
+            )
+        else:
+            return []
+        return cur.fetchall()
+
+
+# ── PROTOCOLOS SANITARIOS ─────────────────────────────────────
+def adicionar_protocolo(vet_id, nome, descricao="", categoria="geral"):
+    """Cria novo protocolo sanitario."""
+    from datetime import date
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO protocolos_sanitarios (vet_id,nome,descricao,categoria,criado_em) "
+                f"VALUES({p},{p},{p},{p},{p}) RETURNING id",
+                (vet_id, nome, descricao or "", categoria, str(date.today()))
+            )
+            return cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO protocolos_sanitarios (vet_id,nome,descricao,categoria,criado_em) "
+                f"VALUES({p},{p},{p},{p},{p})",
+                (vet_id, nome, descricao or "", categoria, str(date.today()))
+            )
+            return cur.lastrowid
+
+
+def listar_protocolos(vet_id):
+    """Lista protocolos do veterinario."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT id,vet_id,nome,descricao,categoria,criado_em "
+            f"FROM protocolos_sanitarios WHERE vet_id={p} ORDER BY nome",
+            (vet_id,)
+        )
+        return cur.fetchall()
+
+
+def adicionar_item_protocolo(protocolo_id, ordem, tipo, nome, dia_offset, observacao=""):
+    """Adiciona item (vacina/medicacao) ao protocolo."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO protocolo_itens (protocolo_id,ordem,tipo,nome,dia_offset,observacao) "
+            f"VALUES({p},{p},{p},{p},{p},{p})",
+            (protocolo_id, int(ordem), tipo, nome, int(dia_offset), observacao or "")
+        )
+        conn.commit()
+        return True
+
+
+def listar_itens_protocolo(protocolo_id):
+    """Lista itens de um protocolo na ordem correta."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT id,protocolo_id,ordem,tipo,nome,dia_offset,observacao "
+            f"FROM protocolo_itens WHERE protocolo_id={p} ORDER BY dia_offset",
+            (protocolo_id,)
+        )
+        return cur.fetchall()
+
+
+def aplicar_protocolo_no_lote(protocolo_id, lote_id, data_inicio, vet_id):
+    """Aplica um protocolo ao lote criando vacinas agendadas."""
+    from datetime import datetime, timedelta
+    try:
+        dt_inicio = datetime.strptime(str(data_inicio)[:10], "%Y-%m-%d").date()
+    except Exception:
+        from datetime import date
+        dt_inicio = date.today()
+
+    itens = listar_itens_protocolo(protocolo_id)
+    n_criados = 0
+    for item in itens:
+        _, _, ordem, tipo, nome_item, dia_offset, obs_item = item
+        data_prev = dt_inicio + timedelta(days=int(dia_offset))
+        try:
+            adicionar_vacina_agenda(
+                lote_id=lote_id,
+                nome_vacina=nome_item,
+                data_prevista=str(data_prev),
+                observacao=f"Protocolo: {obs_item or 'sem obs'}",
+                agendado_por=vet_id
+            )
+            n_criados += 1
+        except Exception:
+            pass
+    return n_criados
+
+
+# ── VISITAS TECNICAS ──────────────────────────────────────────
+def adicionar_visita(vet_id, fazenda_owner_id, data_visita, objetivo,
+                    duracao_min=60, observacoes=""):
+    """Agenda nova visita tecnica."""
+    from datetime import date
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO visitas_tecnicas (vet_id,fazenda_owner_id,data_visita,"
+                f"objetivo,duracao_min,status,observacoes,criado_em) "
+                f"VALUES({p},{p},{p},{p},{p},'agendada',{p},{p}) RETURNING id",
+                (vet_id, fazenda_owner_id, str(data_visita), objetivo,
+                 int(duracao_min or 60), observacoes or "", str(date.today()))
+            )
+            return cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO visitas_tecnicas (vet_id,fazenda_owner_id,data_visita,"
+                f"objetivo,duracao_min,status,observacoes,criado_em) "
+                f"VALUES({p},{p},{p},{p},{p},'agendada',{p},{p})",
+                (vet_id, fazenda_owner_id, str(data_visita), objetivo,
+                 int(duracao_min or 60), observacoes or "", str(date.today()))
+            )
+            return cur.lastrowid
+
+
+def listar_visitas(vet_id=None, fazenda_owner_id=None):
+    """Lista visitas - vet ve as proprias, fazendeiro ve as recebidas."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if vet_id is not None:
+            cur.execute(
+                f"SELECT id,vet_id,fazenda_owner_id,data_visita,objetivo,"
+                f"duracao_min,status,observacoes FROM visitas_tecnicas "
+                f"WHERE vet_id={p} ORDER BY data_visita DESC",
+                (vet_id,)
+            )
+        elif fazenda_owner_id is not None:
+            cur.execute(
+                f"SELECT id,vet_id,fazenda_owner_id,data_visita,objetivo,"
+                f"duracao_min,status,observacoes FROM visitas_tecnicas "
+                f"WHERE fazenda_owner_id={p} ORDER BY data_visita DESC",
+                (fazenda_owner_id,)
+            )
+        else:
+            return []
+        return cur.fetchall()
+
+
+def atualizar_status_visita(visita_id, status):
+    """Atualiza status da visita (agendada/realizada/cancelada)."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE visitas_tecnicas SET status={p} WHERE id={p}",
+            (status, visita_id)
+        )
+        conn.commit()
+        return True
+
+
+# ── RELATORIOS DE VISITA ──────────────────────────────────────
+def adicionar_relatorio_visita(vet_id, fazenda_owner_id, achados, tratamentos,
+                              recomendacoes, animais_inspecionados=0,
+                              visita_id=None, proxima_visita=None, crmv=""):
+    """Cria relatorio tecnico da visita."""
+    from datetime import date
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO relatorios_visita (visita_id,vet_id,fazenda_owner_id,"
+                f"data_relatorio,animais_inspecionados,achados,tratamentos,"
+                f"recomendacoes,proxima_visita,crmv_emissao) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},{p},{p}) RETURNING id",
+                (visita_id, vet_id, fazenda_owner_id, str(date.today()),
+                 int(animais_inspecionados or 0), achados, tratamentos,
+                 recomendacoes, str(proxima_visita) if proxima_visita else None,
+                 crmv or "")
+            )
+            return cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO relatorios_visita (visita_id,vet_id,fazenda_owner_id,"
+                f"data_relatorio,animais_inspecionados,achados,tratamentos,"
+                f"recomendacoes,proxima_visita,crmv_emissao) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},{p},{p})",
+                (visita_id, vet_id, fazenda_owner_id, str(date.today()),
+                 int(animais_inspecionados or 0), achados, tratamentos,
+                 recomendacoes, str(proxima_visita) if proxima_visita else None,
+                 crmv or "")
+            )
+            return cur.lastrowid
+
+
+def listar_relatorios(vet_id=None, fazenda_owner_id=None):
+    """Lista relatorios de visita."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if vet_id is not None:
+            cur.execute(
+                f"SELECT id,visita_id,vet_id,fazenda_owner_id,data_relatorio,"
+                f"animais_inspecionados,achados,tratamentos,recomendacoes,"
+                f"proxima_visita,crmv_emissao FROM relatorios_visita "
+                f"WHERE vet_id={p} ORDER BY data_relatorio DESC",
+                (vet_id,)
+            )
+        elif fazenda_owner_id is not None:
+            cur.execute(
+                f"SELECT id,visita_id,vet_id,fazenda_owner_id,data_relatorio,"
+                f"animais_inspecionados,achados,tratamentos,recomendacoes,"
+                f"proxima_visita,crmv_emissao FROM relatorios_visita "
+                f"WHERE fazenda_owner_id={p} ORDER BY data_relatorio DESC",
+                (fazenda_owner_id,)
+            )
+        else:
+            return []
+        return cur.fetchall()
+
+
+# ── CARENCIA ──────────────────────────────────────────────────
+def adicionar_carencia(animal_id, medicamento, data_aplicacao, carencia_dias):
+    """Registra periodo de carencia para abate."""
+    from datetime import datetime, timedelta
+    try:
+        dt = datetime.strptime(str(data_aplicacao)[:10], "%Y-%m-%d").date()
+    except Exception:
+        from datetime import date
+        dt = date.today()
+    data_lib = dt + timedelta(days=int(carencia_dias))
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO carencias_ativas (animal_id,medicamento,data_aplicacao,"
+            f"carencia_dias,data_liberacao,ativo) VALUES({p},{p},{p},{p},{p},1)",
+            (animal_id, medicamento, str(dt), int(carencia_dias), str(data_lib))
+        )
+        conn.commit()
+        return str(data_lib)
+
+
+def listar_carencias_ativas(owner_id=None):
+    """Lista animais em carencia (filtrado por dono do lote)."""
+    from datetime import date
+    p = _ph()
+    hoje = str(date.today())
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if owner_id is not None:
+            cur.execute(
+                f"SELECT c.id,c.animal_id,a.identificacao,c.medicamento,"
+                f"c.data_aplicacao,c.carencia_dias,c.data_liberacao "
+                f"FROM carencias_ativas c "
+                f"JOIN animais a ON a.id=c.animal_id "
+                f"JOIN lotes l ON l.id=a.lote_id "
+                f"WHERE c.ativo=1 AND c.data_liberacao >= {p} AND l.owner_id={p} "
+                f"ORDER BY c.data_liberacao",
+                (hoje, owner_id)
+            )
+        else:
+            cur.execute(
+                f"SELECT c.id,c.animal_id,a.identificacao,c.medicamento,"
+                f"c.data_aplicacao,c.carencia_dias,c.data_liberacao "
+                f"FROM carencias_ativas c "
+                f"JOIN animais a ON a.id=c.animal_id "
+                f"WHERE c.ativo=1 AND c.data_liberacao >= {p} "
+                f"ORDER BY c.data_liberacao",
+                (hoje,)
+            )
+        return cur.fetchall()
+
+
+def animal_em_carencia(animal_id):
+    """Retorna lista de carencias ativas para o animal."""
+    from datetime import date
+    p = _ph()
+    hoje = str(date.today())
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT medicamento,data_liberacao FROM carencias_ativas "
+            f"WHERE animal_id={p} AND ativo=1 AND data_liberacao >= {p} "
+            f"ORDER BY data_liberacao DESC",
+            (animal_id, hoje)
+        )
+        return cur.fetchall()
+
+
+# ── PAINEL DE SAUDE DO REBANHO ────────────────────────────────
+def painel_saude_rebanho(owner_id):
+    """Retorna estatisticas sanitarias do rebanho."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+
+        # Total de ocorrencias por tipo
+        try:
+            cur.execute(
+                f"SELECT o.tipo, COUNT(*) FROM ocorrencias o "
+                f"JOIN animais a ON a.id=o.animal_id "
+                f"JOIN lotes l ON l.id=a.lote_id "
+                f"WHERE l.owner_id={p} GROUP BY o.tipo ORDER BY COUNT(*) DESC",
+                (owner_id,)
+            )
+            por_tipo = cur.fetchall()
+        except Exception:
+            por_tipo = []
+
+        # Total de mortes
+        try:
+            cur.execute(
+                f"SELECT COUNT(*) FROM animais a "
+                f"JOIN lotes l ON l.id=a.lote_id "
+                f"WHERE l.owner_id={p} AND COALESCE(a.status,'')='MORTO'",
+                (owner_id,)
+            )
+            n_mortes = cur.fetchone()[0]
+        except Exception:
+            n_mortes = 0
+
+        # Total de animais ativos
+        try:
+            cur.execute(
+                f"SELECT COUNT(*) FROM animais a "
+                f"JOIN lotes l ON l.id=a.lote_id "
+                f"WHERE l.owner_id={p} AND a.ativo=1",
+                (owner_id,)
+            )
+            n_ativos = cur.fetchone()[0]
+        except Exception:
+            n_ativos = 0
+
+        # Ocorrencias graves (gravidade Alta)
+        try:
+            cur.execute(
+                f"SELECT COUNT(*) FROM ocorrencias o "
+                f"JOIN animais a ON a.id=o.animal_id "
+                f"JOIN lotes l ON l.id=a.lote_id "
+                f"WHERE l.owner_id={p} AND o.gravidade='Alta'",
+                (owner_id,)
+            )
+            n_graves = cur.fetchone()[0]
+        except Exception:
+            n_graves = 0
+
+    return {
+        "por_tipo":   por_tipo,
+        "n_mortes":   n_mortes,
+        "n_ativos":   n_ativos,
+        "n_graves":   n_graves,
+        "taxa_mortalidade": round(100 * n_mortes / max(1, n_mortes + n_ativos), 2),
+    }
+
+
+def _garantir_tabelas_vet():
+    """Cria tabelas exclusivas do modulo veterinario."""
+    if not _usar_postgres():
+        # SQLite - tipos diferentes
+        pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
+    else:
+        pk_type = "SERIAL PRIMARY KEY"
+
+    tabelas = [
+        f"""CREATE TABLE IF NOT EXISTS receitas (
+            id              {pk_type},
+            vet_id          INTEGER NOT NULL,
+            fazenda_owner_id INTEGER NOT NULL,
+            animal_id       INTEGER DEFAULT NULL,
+            lote_id         INTEGER DEFAULT NULL,
+            data_emissao    TEXT NOT NULL,
+            medicamento     TEXT NOT NULL,
+            dose            TEXT NOT NULL,
+            via             TEXT NOT NULL,
+            duracao         TEXT NOT NULL,
+            carencia_dias   INTEGER DEFAULT 0,
+            observacoes     TEXT DEFAULT '',
+            crmv_emissao    TEXT DEFAULT ''
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS protocolos_sanitarios (
+            id              {pk_type},
+            vet_id          INTEGER NOT NULL,
+            nome            TEXT NOT NULL,
+            descricao       TEXT DEFAULT '',
+            categoria       TEXT DEFAULT 'geral',
+            criado_em       TEXT NOT NULL
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS protocolo_itens (
+            id              {pk_type},
+            protocolo_id    INTEGER NOT NULL,
+            ordem           INTEGER NOT NULL,
+            tipo            TEXT NOT NULL,
+            nome            TEXT NOT NULL,
+            dia_offset      INTEGER NOT NULL,
+            observacao      TEXT DEFAULT ''
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS visitas_tecnicas (
+            id              {pk_type},
+            vet_id          INTEGER NOT NULL,
+            fazenda_owner_id INTEGER NOT NULL,
+            data_visita     TEXT NOT NULL,
+            objetivo        TEXT DEFAULT '',
+            duracao_min     INTEGER DEFAULT 60,
+            status          TEXT DEFAULT 'agendada',
+            observacoes     TEXT DEFAULT '',
+            criado_em       TEXT NOT NULL
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS relatorios_visita (
+            id              {pk_type},
+            visita_id       INTEGER DEFAULT NULL,
+            vet_id          INTEGER NOT NULL,
+            fazenda_owner_id INTEGER NOT NULL,
+            data_relatorio  TEXT NOT NULL,
+            animais_inspecionados INTEGER DEFAULT 0,
+            achados         TEXT DEFAULT '',
+            tratamentos     TEXT DEFAULT '',
+            recomendacoes   TEXT DEFAULT '',
+            proxima_visita  TEXT DEFAULT NULL,
+            crmv_emissao    TEXT DEFAULT ''
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS carencias_ativas (
+            id              {pk_type},
+            animal_id       INTEGER NOT NULL,
+            medicamento     TEXT NOT NULL,
+            data_aplicacao  TEXT NOT NULL,
+            carencia_dias   INTEGER NOT NULL,
+            data_liberacao  TEXT NOT NULL,
+            ativo           INTEGER DEFAULT 1
+        )""",
+    ]
+
+    for sql in tabelas:
+        try:
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(sql)
+                conn.commit()
+        except Exception:
+            pass
+
+
+def _garantir_coluna_crmv():
+    """Adiciona coluna crmv na tabela usuarios."""
+    if not _usar_postgres():
+        return
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS crmv TEXT DEFAULT NULL"
+            )
+            conn.commit()
+    except Exception:
+        pass
 
 
 def _garantir_colunas_vacinas_agenda():
