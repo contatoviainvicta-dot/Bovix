@@ -2876,6 +2876,7 @@ def adicionar_receita(vet_id, fazenda_owner_id, medicamento, dose, via, duracao,
                      animal_id=None, lote_id=None, carencia_dias=0,
                      observacoes="", crmv=""):
     """Emite nova receita do veterinario."""
+    _garantir_tabelas_vet()
     from datetime import date
     p = _ph()
     with _conexao() as conn:
@@ -2906,6 +2907,7 @@ def adicionar_receita(vet_id, fazenda_owner_id, medicamento, dose, via, duracao,
 
 def listar_receitas(vet_id=None, fazenda_owner_id=None):
     """Lista receitas. Vet ve as proprias, fazendeiro ve as recebidas."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -2933,6 +2935,7 @@ def listar_receitas(vet_id=None, fazenda_owner_id=None):
 # ── PROTOCOLOS SANITARIOS ─────────────────────────────────────
 def adicionar_protocolo(vet_id, nome, descricao="", categoria="geral"):
     """Cria novo protocolo sanitario."""
+    _garantir_tabelas_vet()
     from datetime import date
     p = _ph()
     with _conexao() as conn:
@@ -2955,6 +2958,7 @@ def adicionar_protocolo(vet_id, nome, descricao="", categoria="geral"):
 
 def listar_protocolos(vet_id):
     """Lista protocolos do veterinario."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -2968,6 +2972,7 @@ def listar_protocolos(vet_id):
 
 def adicionar_item_protocolo(protocolo_id, ordem, tipo, nome, dia_offset, observacao=""):
     """Adiciona item (vacina/medicacao) ao protocolo."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -2982,6 +2987,7 @@ def adicionar_item_protocolo(protocolo_id, ordem, tipo, nome, dia_offset, observ
 
 def listar_itens_protocolo(protocolo_id):
     """Lista itens de um protocolo na ordem correta."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -2995,6 +3001,7 @@ def listar_itens_protocolo(protocolo_id):
 
 def aplicar_protocolo_no_lote(protocolo_id, lote_id, data_inicio, vet_id):
     """Aplica um protocolo ao lote criando vacinas agendadas."""
+    _garantir_tabelas_vet()
     from datetime import datetime, timedelta
     try:
         dt_inicio = datetime.strptime(str(data_inicio)[:10], "%Y-%m-%d").date()
@@ -3025,6 +3032,7 @@ def aplicar_protocolo_no_lote(protocolo_id, lote_id, data_inicio, vet_id):
 def adicionar_visita(vet_id, fazenda_owner_id, data_visita, objetivo,
                     duracao_min=60, observacoes=""):
     """Agenda nova visita tecnica."""
+    _garantir_tabelas_vet()
     from datetime import date
     p = _ph()
     with _conexao() as conn:
@@ -3051,6 +3059,7 @@ def adicionar_visita(vet_id, fazenda_owner_id, data_visita, objetivo,
 
 def listar_visitas(vet_id=None, fazenda_owner_id=None):
     """Lista visitas - vet ve as proprias, fazendeiro ve as recebidas."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -3075,6 +3084,7 @@ def listar_visitas(vet_id=None, fazenda_owner_id=None):
 
 def atualizar_status_visita(visita_id, status):
     """Atualiza status da visita (agendada/realizada/cancelada)."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -3091,6 +3101,7 @@ def adicionar_relatorio_visita(vet_id, fazenda_owner_id, achados, tratamentos,
                               recomendacoes, animais_inspecionados=0,
                               visita_id=None, proxima_visita=None, crmv=""):
     """Cria relatorio tecnico da visita."""
+    _garantir_tabelas_vet()
     from datetime import date
     p = _ph()
     with _conexao() as conn:
@@ -3123,6 +3134,7 @@ def adicionar_relatorio_visita(vet_id, fazenda_owner_id, achados, tratamentos,
 
 def listar_relatorios(vet_id=None, fazenda_owner_id=None):
     """Lista relatorios de visita."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -3150,6 +3162,7 @@ def listar_relatorios(vet_id=None, fazenda_owner_id=None):
 # ── CARENCIA ──────────────────────────────────────────────────
 def adicionar_carencia(animal_id, medicamento, data_aplicacao, carencia_dias):
     """Registra periodo de carencia para abate."""
+    _garantir_tabelas_vet()
     from datetime import datetime, timedelta
     try:
         dt = datetime.strptime(str(data_aplicacao)[:10], "%Y-%m-%d").date()
@@ -3171,6 +3184,7 @@ def adicionar_carencia(animal_id, medicamento, data_aplicacao, carencia_dias):
 
 def listar_carencias_ativas(owner_id=None):
     """Lista animais em carencia (filtrado por dono do lote)."""
+    _garantir_tabelas_vet()
     from datetime import date
     p = _ph()
     hoje = str(date.today())
@@ -3202,6 +3216,7 @@ def listar_carencias_ativas(owner_id=None):
 
 def animal_em_carencia(animal_id):
     """Retorna lista de carencias ativas para o animal."""
+    _garantir_tabelas_vet()
     from datetime import date
     p = _ph()
     hoje = str(date.today())
@@ -3219,6 +3234,7 @@ def animal_em_carencia(animal_id):
 # ── PAINEL DE SAUDE DO REBANHO ────────────────────────────────
 def painel_saude_rebanho(owner_id):
     """Retorna estatisticas sanitarias do rebanho."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
