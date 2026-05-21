@@ -76,11 +76,15 @@ def page_meu_crmv(u):
             help="Sera usado em todos os documentos emitidos por voce"
         )
         if st.form_submit_button("Salvar CRMV", type="primary"):
-            if atualizar_crmv(u["id"], novo_crmv):
-                st.success("CRMV atualizado!")
-                st.rerun()
-            else:
-                st.error("Erro ao atualizar CRMV.")
+                if not novo_crmv.strip():
+                    st.error("Informe o CRMV antes de salvar.")
+                else:
+                    try:
+                        atualizar_crmv(u["id"], novo_crmv.strip())
+                        st.success(f"CRMV **{novo_crmv.strip()}** salvo!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro: {e}")
 
 
 # ════════════════════════════════════════════════════════════════════════════
