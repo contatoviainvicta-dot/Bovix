@@ -1412,15 +1412,12 @@ def registrar_vacina_realizada(vacina_id, data_realizada,
     animais_lote = listar_animais_por_lote(lote_id)
     alvos = [_animal_alvo] if _animal_alvo else [a[0] for a in animais_lote]
     for aid in alvos:
-        try:
-            adicionar_ocorrencia(
-                animal_id=aid, data=data_realizada,
-                tipo="Vacinacao", descricao=obs_ocorr,
-                gravidade="Baixa", custo=0,
-                dias_recuperacao=0, status="Resolvido"
-            )
-        except Exception:
-            pass
+        adicionar_ocorrencia(
+            animal_id=aid, data=data_realizada,
+            tipo="Vacinacao", descricao=obs_ocorr,
+            gravidade="Baixa", custo=0,
+            dias_recuperacao=0, status="Resolvido"
+        )
 
     return True
 
@@ -1534,28 +1531,63 @@ def listar_medicamentos_criticos(owner_id=None):
             return []
 
 def verificar_carencia(animal_id):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT mu.data_uso,m.nome,m.carencia_dias FROM medicamentos_uso mu JOIN medicamentos m ON m.id=mu.medicamento_id WHERE mu.animal_id={p} AND m.carencia_dias>0",
-            (animal_id,),
-        )
-        rows = _fetch(cur)
-    if not rows:
-        return dict(em_carencia=False, medicamentos=[], liberado_em=None)
+    """Verifica carencia do animal em medicamentos_uso E carencias_ativas."""
     import datetime
+    p  = _ph()
+    hoje = datetime.date.today()
     meds = []
-    for r in rows:
-        try:
-            dt = datetime.datetime.strptime(str(r["data_uso"])[:10], "%Y-%m-%d").date()
-            libera = dt + datetime.timedelta(days=int(r["carencia_dias"]))
-            if libera >= _date.today():
-                meds.append(dict(medicamento=r["nome"], uso=r["data_uso"], carencia_dias=r["carencia_dias"], libera_em=str(libera)))
-        except Exception:
-            pass
+
+    # Fonte 1: medicamentos_uso (registro de uso de estoque)
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT mu.data_uso,m.nome,m.carencia_dias "
+                f"FROM medicamentos_uso mu "
+                f"JOIN medicamentos m ON m.id=mu.medicamento_id "
+                f"WHERE mu.animal_id={p} AND m.carencia_dias>0",
+                (animal_id,),
+            )
+            for r in _fetch(cur):
+                try:
+                    dt = datetime.datetime.strptime(
+                        str(r["data_uso"])[:10], "%Y-%m-%d").date()
+                    libera = dt + datetime.timedelta(days=int(r["carencia_dias"]))
+                    if libera >= hoje:
+                        meds.append(dict(
+                            medicamento=r["nome"],
+                            uso=str(r["data_uso"]),
+                            carencia_dias=r["carencia_dias"],
+                            libera_em=str(libera)
+                        ))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Fonte 2: carencias_ativas (registradas pelo vet ou receituario)
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT medicamento,data_aplicacao,carencia_dias,data_liberacao "
+                f"FROM carencias_ativas "
+                f"WHERE animal_id={p} AND ativo=1 AND data_liberacao >= {p}",
+                (animal_id, str(hoje)),
+            )
+            for r in cur.fetchall():
+                meds.append(dict(
+                    medicamento=r[0],
+                    uso=str(r[1]),
+                    carencia_dias=r[2],
+                    libera_em=str(r[3])
+                ))
+    except Exception:
+        pass  # Tabela pode nao existir ainda
+
     if not meds:
         return dict(em_carencia=False, medicamentos=[], liberado_em=None)
+
     liberado_em = max(m["libera_em"] for m in meds)
     return dict(em_carencia=True, medicamentos=meds, liberado_em=liberado_em)
 
@@ -3212,6 +3244,31 @@ def listar_carencias_ativas(owner_id=None):
                 (hoje,)
             )
         return cur.fetchall()
+
+
+def listar_animais_em_carencia_fazendeiro(owner_id):
+    """Lista todos os animais em carencia para o fazendeiro.
+    Consulta carencias_ativas vinculadas aos lotes do fazendeiro."""
+    import datetime
+    hoje = str(datetime.date.today())
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT c.animal_id, a.identificacao, c.medicamento, "
+                f"c.data_liberacao, c.carencia_dias "
+                f"FROM carencias_ativas c "
+                f"JOIN animais a ON a.id = c.animal_id "
+                f"JOIN lotes l ON l.id = a.lote_id "
+                f"WHERE l.owner_id = {p} AND c.ativo = 1 "
+                f"AND c.data_liberacao >= {p} "
+                f"ORDER BY c.data_liberacao",
+                (owner_id, hoje)
+            )
+            return cur.fetchall()
+    except Exception:
+        return []
 
 
 def animal_em_carencia(animal_id):
