@@ -2844,7 +2844,8 @@ def _garantir_status_animal_lote():
 # ============================================================
 
 def obter_crmv_usuario(user_id):
-    """Retorna o CRMV do veterinario."""
+    """Retorna o CRMV do veterinario. Cria coluna se nao existir."""
+    _garantir_coluna_crmv()
     p = _ph()
     try:
         with _conexao() as conn:
@@ -2857,17 +2858,17 @@ def obter_crmv_usuario(user_id):
 
 
 def atualizar_crmv(user_id, crmv):
-    """Atualiza o CRMV do veterinario."""
+    """Atualiza o CRMV do veterinario. Garante coluna antes de atualizar."""
+    _garantir_coluna_crmv()
     p = _ph()
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(f"UPDATE usuarios SET crmv={p} WHERE id={p}",
-                       (crmv, user_id))
-            conn.commit()
-            return True
-    except Exception:
-        return False
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE usuarios SET crmv={p} WHERE id={p}",
+            (crmv, user_id)
+        )
+        conn.commit()
+    return True
 
 
 # ── RECEITUARIO DIGITAL ───────────────────────────────────────
@@ -3368,18 +3369,19 @@ def _garantir_tabelas_vet():
 
 
 def _garantir_coluna_crmv():
-    """Adiciona coluna crmv na tabela usuarios."""
+    """Adiciona coluna crmv na tabela usuarios (migracao segura)."""
     if not _usar_postgres():
         return
     try:
         with _conexao() as conn:
             cur = conn.cursor()
             cur.execute(
-                "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS crmv TEXT DEFAULT NULL"
+                "ALTER TABLE usuarios "
+                "ADD COLUMN IF NOT EXISTS crmv TEXT DEFAULT NULL"
             )
             conn.commit()
     except Exception:
-        pass
+        pass  # Coluna ja existe
 
 
 def _garantir_colunas_vacinas_agenda():
