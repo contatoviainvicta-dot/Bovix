@@ -2907,10 +2907,13 @@ def atualizar_crmv(user_id, crmv):
 def adicionar_receita(vet_id, fazenda_owner_id, medicamento, dose, via, duracao,
                      animal_id=None, lote_id=None, carencia_dias=0,
                      observacoes="", crmv=""):
-    """Emite nova receita do veterinario."""
+    """Emite receita e registra ocorrencia Medicacao no prontuario do(s) animal(is)."""
     _garantir_tabelas_vet()
     from datetime import date
-    p = _ph()
+    p  = _ph()
+    dt = str(date.today())
+
+    # 1. Inserir receita
     with _conexao() as conn:
         cur = conn.cursor()
         if _usar_postgres():
@@ -2920,10 +2923,10 @@ def adicionar_receita(vet_id, fazenda_owner_id, medicamento, dose, via, duracao,
                 f"observacoes,crmv_emissao) "
                 f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p}) RETURNING id",
                 (vet_id, fazenda_owner_id, animal_id, lote_id,
-                 str(date.today()), medicamento, dose, via, duracao,
+                 dt, medicamento, dose, via, duracao,
                  int(carencia_dias or 0), observacoes or "", crmv or "")
             )
-            return cur.fetchone()[0]
+            rid = cur.fetchone()[0]
         else:
             cur.execute(
                 f"INSERT INTO receitas (vet_id,fazenda_owner_id,animal_id,lote_id,"
@@ -2931,10 +2934,101 @@ def adicionar_receita(vet_id, fazenda_owner_id, medicamento, dose, via, duracao,
                 f"observacoes,crmv_emissao) "
                 f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p},{p})",
                 (vet_id, fazenda_owner_id, animal_id, lote_id,
-                 str(date.today()), medicamento, dose, via, duracao,
+                 dt, medicamento, dose, via, duracao,
                  int(carencia_dias or 0), observacoes or "", crmv or "")
             )
-            return cur.lastrowid
+            rid = cur.lastrowid
+
+    # 2. Montar descricao da ocorrencia
+    desc = (
+        f"Receituario #{rid} | {medicamento} | "
+        f"Dose: {dose} | Via: {via} | Duracao: {duracao}"
+    )
+    if carencia_dias:
+        desc += f" | Carencia: {carencia_dias} dias"
+    if observacoes:
+        desc += f" | Obs: {observacoes}"
+
+    # 3. Registrar ocorrencia nos animais alvo
+    alvos = []
+    if animal_id:
+        alvos = [animal_id]
+    elif lote_id:
+        alvos = [a[0] for a in listar_animais_por_lote(lote_id)]
+
+    for aid in alvos:
+        try:
+            adicionar_ocorrencia(
+                animal_id=aid,
+                data=dt,
+                tipo="Medicacao",
+                descricao=desc,
+                gravidade="Baixa",
+                custo=0,
+                dias_recuperacao=0,
+                status="Resolvido"
+            )
+        except Exception:
+            pass
+
+    return rid
+
+
+def sincronizar_ocorrencias_receitas():
+    """Cria ocorrencias para receitas antigas que nao as geraram.
+    Chamada uma vez para sincronizar o historico."""
+    p  = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT id,vet_id,animal_id,lote_id,data_emissao,"
+                "medicamento,dose,via,duracao,carencia_dias,observacoes "
+                "FROM receitas ORDER BY id"
+            )
+            receitas = cur.fetchall()
+    except Exception:
+        return 0
+
+    ok = 0
+    for r in receitas:
+        rid, vet_id, animal_id, lote_id, dt, med, dose, via, dur, carc, obs = r
+        # Verificar se ja existe ocorrencia com essa receita
+        desc_check = f"Receituario #{rid}"
+        alvos = []
+        if animal_id:
+            alvos = [animal_id]
+        elif lote_id:
+            alvos = [a[0] for a in listar_animais_por_lote(lote_id)]
+
+        for aid in alvos:
+            try:
+                with _conexao() as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"SELECT id FROM ocorrencias "
+                        f"WHERE animal_id={p} AND descricao LIKE {p}",
+                        (aid, f"%{desc_check}%")
+                    )
+                    if cur.fetchone():
+                        continue  # Ja existe
+                # Criar ocorrencia
+                desc = (
+                    f"Receituario #{rid} | {med} | "
+                    f"Dose: {dose} | Via: {via} | Duracao: {dur}"
+                )
+                if carc:
+                    desc += f" | Carencia: {carc} dias"
+                adicionar_ocorrencia(
+                    animal_id=aid, data=str(dt),
+                    tipo="Medicacao", descricao=desc,
+                    gravidade="Baixa", custo=0,
+                    dias_recuperacao=0, status="Resolvido"
+                )
+                ok += 1
+            except Exception:
+                pass
+    return ok
 
 
 def listar_receitas(vet_id=None, fazenda_owner_id=None):
