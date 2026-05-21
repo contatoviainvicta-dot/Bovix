@@ -65,9 +65,22 @@ def page_inicio(u):
     # ── Alertas do proprio usuario ─────────────────────────────────────────────
     # Para medicamentos: sempre usa o id do usuario (nunca None)
     _oid_med = _oid if _oid is not None else u["id"]
-    pendo = listar_vacinas_pendentes(owner_id=_oid)
-    crit  = listar_medicamentos_criticos(owner_id=_oid_med)
-    parto = listar_partos_previstos(owner_id=_oid)
+    pendo    = listar_vacinas_pendentes(owner_id=_oid)
+    crit     = listar_medicamentos_criticos(owner_id=_oid_med)
+    parto    = listar_partos_previstos(owner_id=_oid)
+    try:
+        _car_alert = listar_animais_em_carencia_fazendeiro(_oid_med)
+    except Exception:
+        _car_alert = []
+    try:
+        _visitas_prox = [v for v in listar_visitas(fazenda_owner_id=_oid_med)
+                        if v[6] == 'agendada'][:3]
+    except Exception:
+        _visitas_prox = []
+    try:
+        _receitas_receb = listar_receitas(fazenda_owner_id=_oid_med)[:3]
+    except Exception:
+        _receitas_receb = []
 
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -157,7 +170,7 @@ def page_inicio(u):
         # ══ BLOCO 2: ALERTAS ═════════════════════════════════════════════════
         if pendo or crit or parto:
             st.subheader("Alertas")
-            al1, al2, al3 = st.columns(3)
+            al1, al2, al3, al4 = st.columns(4)
             with al1:
                 if pendo:
                     with st.expander(f"💉 Vacinas ({len(pendo)})", expanded=True):
@@ -175,6 +188,31 @@ def page_inicio(u):
                         for p in parto[:4]:
                             st.caption(f"- {p[1]} | {p[3]}")
             st.divider()
+
+            with al4:
+                if _car_alert:
+                    with st.expander(
+                        f"🚫 Carencia ({len(_car_alert)})", expanded=True
+                    ):
+                        for c in _car_alert[:4]:
+                            st.caption(
+                                f"- {c[1]}: {c[2]} | libera {'/'.join(reversed(str(c[3])[:10].split('-')))}"
+                            )
+
+            # Visitas agendadas pelo vet
+            if _visitas_prox:
+                st.divider()
+                with st.expander(f"📅 Visitas do veterinario ({len(_visitas_prox)})", expanded=True):
+                    for v in _visitas_prox:
+                        dt_f = "/".join(reversed(str(v[3])[:10].split("-")))
+                        st.caption(f"- {dt_f}: {v[4] or 'Visita tecnica'}")
+
+            # Receitas recebidas
+            if _receitas_receb:
+                with st.expander(f"💊 Receitas do veterinario ({len(_receitas_receb)})", expanded=False):
+                    for r in _receitas_receb:
+                        dt_f = "/".join(reversed(str(r[5])[:10].split("-")))
+                        st.caption(f"- {dt_f}: {r[6]} | {r[7]}")
 
         # ══ BLOCO 3: LOTES ═══════════════════════════════════════════════════
         st.subheader("Seus lotes")
