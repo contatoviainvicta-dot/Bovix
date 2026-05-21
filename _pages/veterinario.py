@@ -180,6 +180,16 @@ def page_receituario(u):
             st.info("Nenhuma receita emitida ainda.")
         else:
             st.caption(f"{len(receitas)} receita(s) emitida(s)")
+            if st.button("🔄 Sincronizar ocorrencias no prontuario",
+                        help="Gera ocorrencias no prontuario para receitas antigas"):
+                try:
+                    n = sincronizar_ocorrencias_receitas()
+                    if n:
+                        st.success(f"{n} ocorrencia(s) criada(s) nos prontuarios!")
+                    else:
+                        st.info("Prontuarios ja estao atualizados.")
+                except Exception as e:
+                    st.error(f"Erro: {e}")
             for r in receitas[:30]:
                 (rid, _, _, an_id, lt_id, dt_em, med, dose, via, dur,
                  carenc, obs_r, crmv_r) = r
