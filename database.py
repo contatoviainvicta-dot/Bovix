@@ -2974,6 +2974,250 @@ def adicionar_receita(vet_id, fazenda_owner_id, medicamento, dose, via, duracao,
     return rid
 
 
+# ── EXAMES LABORATORIAIS ─────────────────────────────────────
+def adicionar_exame(animal_id, vet_id, tipo_exame, data_coleta,
+                   laboratorio="", resultado="", interpretacao="",
+                   status="aguardando", alerta=0):
+    """Registra exame laboratorial. Cria ocorrencia no prontuario."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p = _ph()
+    dt = str(date.today())
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO exames_laboratoriais "
+                f"(animal_id,vet_id,data_coleta,tipo_exame,laboratorio,"
+                f"resultado,interpretacao,status,alerta,criado_em) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},{p},{p}) RETURNING id",
+                (animal_id, vet_id, str(data_coleta), tipo_exame,
+                 laboratorio or "", resultado or "", interpretacao or "",
+                 status, int(alerta), dt)
+            )
+            eid = cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO exames_laboratoriais "
+                f"(animal_id,vet_id,data_coleta,tipo_exame,laboratorio,"
+                f"resultado,interpretacao,status,alerta,criado_em) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},{p},{p},{p})",
+                (animal_id, vet_id, str(data_coleta), tipo_exame,
+                 laboratorio or "", resultado or "", interpretacao or "",
+                 status, int(alerta), dt)
+            )
+            eid = cur.lastrowid
+
+    # Registrar ocorrencia no prontuario
+    tipo_oc = "Exame"
+    desc_oc = f"Exame #{eid}: {tipo_exame}"
+    if laboratorio:
+        desc_oc += f" | Lab: {laboratorio}"
+    if resultado and status == "concluido":
+        desc_oc += f" | Resultado: {resultado[:100]}"
+    if alerta:
+        desc_oc += " | RESULTADO ALTERADO"
+    try:
+        adicionar_ocorrencia(
+            animal_id=animal_id, data=str(data_coleta),
+            tipo=tipo_oc, descricao=desc_oc,
+            gravidade="Alta" if alerta else "Baixa",
+            custo=0, dias_recuperacao=0, status="Resolvido"
+        )
+    except Exception:
+        pass
+    return eid
+
+
+def atualizar_exame(exame_id, resultado, interpretacao="", status="concluido", alerta=0):
+    """Atualiza resultado do exame e ajusta ocorrencia."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE exames_laboratoriais SET resultado={p},"
+            f"interpretacao={p},status={p},alerta={p} WHERE id={p}",
+            (resultado, interpretacao or "", status, int(alerta), exame_id)
+        )
+        conn.commit()
+    return True
+
+
+def listar_exames(animal_id=None, vet_id=None):
+    """Lista exames por animal ou por vet."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if animal_id is not None:
+            cur.execute(
+                f"SELECT id,animal_id,vet_id,data_coleta,tipo_exame,"
+                f"laboratorio,resultado,interpretacao,status,alerta "
+                f"FROM exames_laboratoriais WHERE animal_id={p} "
+                f"ORDER BY data_coleta DESC",
+                (animal_id,)
+            )
+        elif vet_id is not None:
+            cur.execute(
+                f"SELECT id,animal_id,vet_id,data_coleta,tipo_exame,"
+                f"laboratorio,resultado,interpretacao,status,alerta "
+                f"FROM exames_laboratoriais WHERE vet_id={p} "
+                f"ORDER BY data_coleta DESC",
+                (vet_id,)
+            )
+        else:
+            return []
+        return cur.fetchall()
+
+
+# ── MONITORAMENTO POS-TRATAMENTO ──────────────────────────────
+def adicionar_monitoramento(animal_id, vet_id, descricao,
+                            data_inicio, data_retorno, receita_id=None):
+    """Cria monitoramento pos-tratamento com data de retorno."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO monitoramento_pos_tratamento "
+                f"(animal_id,vet_id,receita_id,descricao,data_inicio,"
+                f"data_retorno,status,evolucoes,alerta_enviado) "
+                f"VALUES({p},{p},{p},{p},{p},{p},'ativo','[]',0) RETURNING id",
+                (animal_id, vet_id, receita_id, descricao,
+                 str(data_inicio), str(data_retorno))
+            )
+            return cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO monitoramento_pos_tratamento "
+                f"(animal_id,vet_id,receita_id,descricao,data_inicio,"
+                f"data_retorno,status,evolucoes,alerta_enviado) "
+                f"VALUES({p},{p},{p},{p},{p},{p},'ativo','[]',0)",
+                (animal_id, vet_id, receita_id, descricao,
+                 str(data_inicio), str(data_retorno))
+            )
+            return cur.lastrowid
+
+
+def registrar_evolucao(monitor_id, texto, data=None, quem="fazendeiro"):
+    """Fazendeiro ou vet registra evolucao do animal monitorado."""
+    import json
+    from datetime import date
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT evolucoes FROM monitoramento_pos_tratamento WHERE id={p}",
+            (monitor_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+        try:
+            evols = json.loads(row[0] or "[]")
+        except Exception:
+            evols = []
+        evols.append({
+            "data": str(data or date.today()),
+            "texto": texto,
+            "quem": quem
+        })
+        cur.execute(
+            f"UPDATE monitoramento_pos_tratamento SET evolucoes={p} WHERE id={p}",
+            (json.dumps(evols, ensure_ascii=False), monitor_id)
+        )
+        conn.commit()
+    return True
+
+
+def encerrar_monitoramento(monitor_id):
+    """Encerra o monitoramento."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE monitoramento_pos_tratamento SET status='encerrado' WHERE id={p}",
+            (monitor_id,)
+        )
+        conn.commit()
+    return True
+
+
+def listar_monitoramentos(animal_id=None, vet_id=None,
+                          owner_id=None, apenas_ativos=True):
+    """Lista monitoramentos por animal, vet ou fazendeiro."""
+    import json
+    from datetime import date
+    p  = _ph()
+    hoje = str(date.today())
+    with _conexao() as conn:
+        cur = conn.cursor()
+        filtro_status = "AND status='ativo'" if apenas_ativos else ""
+        if animal_id is not None:
+            cur.execute(
+                f"SELECT id,animal_id,vet_id,receita_id,descricao,"
+                f"data_inicio,data_retorno,status,evolucoes "
+                f"FROM monitoramento_pos_tratamento "
+                f"WHERE animal_id={p} {filtro_status} ORDER BY data_retorno",
+                (animal_id,)
+            )
+        elif vet_id is not None:
+            cur.execute(
+                f"SELECT id,animal_id,vet_id,receita_id,descricao,"
+                f"data_inicio,data_retorno,status,evolucoes "
+                f"FROM monitoramento_pos_tratamento "
+                f"WHERE vet_id={p} {filtro_status} ORDER BY data_retorno",
+                (vet_id,)
+            )
+        elif owner_id is not None:
+            # Fazendeiro ve monitoramentos dos seus animais
+            cur.execute(
+                f"SELECT m.id,m.animal_id,m.vet_id,m.receita_id,m.descricao,"
+                f"m.data_inicio,m.data_retorno,m.status,m.evolucoes,"
+                f"a.identificacao "
+                f"FROM monitoramento_pos_tratamento m "
+                f"JOIN animais a ON a.id=m.animal_id "
+                f"JOIN lotes l ON l.id=a.lote_id "
+                f"WHERE l.owner_id={p} {filtro_status} ORDER BY m.data_retorno",
+                (owner_id,)
+            )
+        else:
+            return []
+        rows = cur.fetchall()
+
+    result = []
+    for r in rows:
+        evols = []
+        try:
+            evols = json.loads(r[8] or "[]")
+        except Exception:
+            pass
+        result.append({
+            "id":           r[0],
+            "animal_id":    r[1],
+            "vet_id":       r[2],
+            "receita_id":   r[3],
+            "descricao":    r[4],
+            "data_inicio":  r[5],
+            "data_retorno": r[6],
+            "status":       r[7],
+            "evolucoes":    evols,
+            "brinco":       r[9] if len(r) > 9 else None,
+            "vencido":      str(r[6]) < hoje,
+        })
+    return result
+
+
+def monitoramentos_vencendo(owner_id, dias=3):
+    """Retorna monitoramentos cujo retorno esta em ate X dias."""
+    from datetime import date, timedelta
+    hoje  = date.today()
+    limite = str(hoje + timedelta(days=dias))
+    todos = listar_monitoramentos(owner_id=owner_id, apenas_ativos=True)
+    return [m for m in todos if str(m["data_retorno"]) <= limite]
+
+
 def sincronizar_ocorrencias_receitas():
     """Cria ocorrencias para receitas antigas que nao as geraram.
     Chamada uma vez para sincronizar o historico."""
@@ -3522,6 +3766,32 @@ def _garantir_tabelas_vet():
             carencia_dias   INTEGER NOT NULL,
             data_liberacao  TEXT NOT NULL,
             ativo           INTEGER DEFAULT 1
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS exames_laboratoriais (
+            id              {pk_type},
+            animal_id       INTEGER NOT NULL,
+            vet_id          INTEGER NOT NULL,
+            data_coleta     TEXT NOT NULL,
+            tipo_exame      TEXT NOT NULL,
+            laboratorio     TEXT DEFAULT '',
+            resultado       TEXT DEFAULT '',
+            interpretacao   TEXT DEFAULT '',
+            status          TEXT DEFAULT 'aguardando',
+            alerta          INTEGER DEFAULT 0,
+            anexo_url       TEXT DEFAULT NULL,
+            criado_em       TEXT NOT NULL
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS monitoramento_pos_tratamento (
+            id              {pk_type},
+            animal_id       INTEGER NOT NULL,
+            vet_id          INTEGER NOT NULL,
+            receita_id      INTEGER DEFAULT NULL,
+            descricao       TEXT NOT NULL,
+            data_inicio     TEXT NOT NULL,
+            data_retorno    TEXT NOT NULL,
+            status          TEXT DEFAULT 'ativo',
+            evolucoes       TEXT DEFAULT '[]',
+            alerta_enviado  INTEGER DEFAULT 0
         )""",
     ]
 
