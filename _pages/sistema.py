@@ -79,11 +79,8 @@ def page_inicio(u):
         _visitas_prox = []
     try:
         _monitor_alert = monitoramentos_vencendo(_oid_med, dias=3)
-    except Exception as _em:
+    except Exception:
         _monitor_alert = []
-        _monitor_debug = str(_em)
-    else:
-        _monitor_debug = f"oid={_oid_med} | total={len(_monitor_alert)}"
     try:
         _receitas_receb = listar_receitas(fazenda_owner_id=_oid_med)[:3]
     except Exception:
@@ -175,21 +172,21 @@ def page_inicio(u):
         st.divider()
 
         # ══ BLOCO 2: ALERTAS ═════════════════════════════════════════════════
-        if pendo or crit or parto:
-            st.subheader("Alertas")
-            # Monitoramentos vencendo — alerta de alta prioridade ACIMA dos demais
-            st.caption(f"[DEBUG monitor] {_monitor_debug}")
-            if _monitor_alert:
-                st.error(
-                    f"🔴 **{len(_monitor_alert)} retorno(s) veterinario(s) pendente(s)** — "
-                    + " | ".join(
-                        f"{m.get('brinco') or m['animal_id']}: "
-                        f"{'/'.join(reversed(str(m['data_retorno'])[:10].split('-')))}"
-                        + (" ⚠ ATRASADO" if m["vencido"] else "")
-                        for m in _monitor_alert[:3]
-                    )
-                )
+        st.subheader("Alertas")
 
+        # Monitoramentos vencendo — sempre visivel, independente dos outros alertas
+        if _monitor_alert:
+            st.error(
+                f"🔴 **{len(_monitor_alert)} retorno(s) veterinario(s) pendente(s)** — "
+                + " | ".join(
+                    f"{m.get('brinco') or m['animal_id']}: "
+                    f"{'/'.join(reversed(str(m['data_retorno'])[:10].split('-')))}"
+                    + (" ⚠ ATRASADO" if m["vencido"] else "")
+                    for m in _monitor_alert[:3]
+                )
+            )
+
+        if pendo or crit or parto or _car_alert:
             al1, al2, al3, al4 = st.columns(4)
             with al1:
                 if pendo:
