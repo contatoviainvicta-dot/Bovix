@@ -585,17 +585,123 @@ def page_agenda_visitas(u):
                         st.markdown(f"**Objetivo:** {obj or '-'}")
                         st.caption(f"Duracao prevista: {dur} min")
                         if obs: st.caption(f"Obs: {obs}")
-                        c1, c2 = st.columns(2)
+                        c1, c2, c3 = st.columns(3)
                         with c1:
                             if st.button("Marcar realizada",
                                        key=f"vis_real_{vid}"):
                                 atualizar_status_visita(vid, "realizada")
+                                st.session_state[f"_lan_hon_{vid}"] = True
                                 st.rerun()
                         with c2:
                             if st.button("Cancelar",
                                        key=f"vis_canc_{vid}"):
                                 atualizar_status_visita(vid, "cancelada")
                                 st.rerun()
+                        with c3:
+                            if st.button("Lancar honorario",
+                                       key=f"vis_hon_{vid}"):
+                                st.session_state[f"_lan_hon_{vid}"] = True
+                                st.rerun()
+
+                        # Form de lancamento de honorario
+                        if st.session_state.get(f"_lan_hon_{vid}"):
+                            st.divider()
+                            st.markdown("**Lancar honorario desta visita:**")
+                            with st.form(f"form_hon_{vid}"):
+                                h1, h2 = st.columns(2)
+                                with h1:
+                                    desc_h = st.text_input(
+                                        "Descricao *",
+                                        value=f"Visita tecnica - {obj or ''}",
+                                        key=f"hon_desc_{vid}"
+                                    )
+                                    tipo_h = st.selectbox(
+                                        "Tipo",
+                                        ["consulta","vacinacao","cirurgia",
+                                         "exame","procedimento","outros"],
+                                        key=f"hon_tipo_{vid}"
+                                    )
+                                with h2:
+                                    val_h = st.number_input(
+                                        "Valor total (R$) *",
+                                        min_value=0.0, value=0.0,
+                                        step=50.0, format="%.2f",
+                                        key=f"hon_val_{vid}"
+                                    )
+                                    obs_h = st.text_input(
+                                        "Observacoes",
+                                        key=f"hon_obs_{vid}"
+                                    )
+
+                                # Itens detalhados (procedimentos)
+                                st.markdown("**Itens / Procedimentos** (opcional):")
+                                n_itens = st.number_input(
+                                    "Quantos itens detalhar?",
+                                    min_value=0, max_value=10,
+                                    value=0, step=1,
+                                    key=f"hon_ni_{vid}"
+                                )
+                                itens_h = []
+                                for ii in range(int(n_itens)):
+                                    ic1, ic2, ic3 = st.columns([3,1,1])
+                                    with ic1:
+                                        d_i = st.text_input(
+                                            f"Item {ii+1}",
+                                            key=f"hon_id_{vid}_{ii}"
+                                        )
+                                    with ic2:
+                                        q_i = st.number_input(
+                                            "Qtd", min_value=1,
+                                            value=1, step=1,
+                                            key=f"hon_iq_{vid}_{ii}"
+                                        )
+                                    with ic3:
+                                        v_i = st.number_input(
+                                            "R$ unit",
+                                            min_value=0.0, value=0.0,
+                                            step=10.0, format="%.2f",
+                                            key=f"hon_iv_{vid}_{ii}"
+                                        )
+                                    if d_i:
+                                        itens_h.append({
+                                            "descricao": d_i,
+                                            "quantidade": q_i,
+                                            "valor_unitario": v_i
+                                        })
+
+                                c_sub1, c_sub2 = st.columns(2)
+                                with c_sub1:
+                                    if st.form_submit_button(
+                                        "Confirmar lancamento",
+                                        type="primary"
+                                    ):
+                                        if not desc_h or val_h <= 0:
+                                            st.error("Informe descricao e valor.")
+                                        else:
+                                            lancar_honorario(
+                                                vet_id=u["id"],
+                                                fazenda_owner_id=foid_a,
+                                                descricao=desc_h,
+                                                valor=val_h,
+                                                tipo=tipo_h,
+                                                visita_id=vid,
+                                                itens=itens_h or None,
+                                                observacoes=obs_h or ""
+                                            )
+                                            st.session_state.pop(
+                                                f"_lan_hon_{vid}", None
+                                            )
+                                            st.success(
+                                                f"Honorario de R$ {val_h:.2f} "
+                                                f"lancado!"
+                                            )
+                                            st.rerun()
+                                with c_sub2:
+                                    if st.form_submit_button("Cancelar"):
+                                        st.session_state.pop(
+                                            f"_lan_hon_{vid}", None
+                                        )
+                                        st.rerun()
 
             if real:
                 st.subheader("Realizadas")
@@ -1083,3 +1189,309 @@ def page_monitoramento(u):
                             f"O fazendeiro sera alertado na data."
                         )
                         st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TELA 11: GESTAO FINANCEIRA DO VET
+# ════════════════════════════════════════════════════════════════════════════
+def page_gestao_financeira_vet(u):
+    _requer_vet()
+    hdr("Gestao Financeira", "Honorarios e Faturamento",
+        "Controle de cobranças, recebimentos e extrato por fazenda")
+
+    # ── Resumo do mes atual ───────────────────────────────────────────────
+    from datetime import date
+    hoje = date.today()
+    res  = resumo_financeiro_vet(u["id"], mes=hoje.month, ano=hoje.year)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("A receber",
+              f"R$ {res['pendente']:,.2f}",
+              delta=f"{res['n_pendente']} lançamento(s)")
+    c2.metric("Recebido no mês",
+              f"R$ {res['pago']:,.2f}",
+              delta=f"{res['n_pago']} pago(s)")
+    c3.metric("Total lançado",
+              f"R$ {res['pendente']+res['pago']:,.2f}")
+    c4.metric("Período", res["mes"])
+
+    st.divider()
+    t1, t2, t3 = st.tabs(["Honorários", "Lançar Avulso", "Faturamento"])
+
+    # ── ABA 1: Lista de honorários ────────────────────────────────────────
+    with t1:
+        # Filtros
+        fc1, fc2, fc3 = st.columns(3)
+        with fc1:
+            filtro_status = st.selectbox(
+                "Status", ["todos","pendente","pago","cancelado"],
+                key="fin_status"
+            )
+        with fc2:
+            sel_fazenda_vet(key="vet_faz_fin")
+            foid_fin = st.session_state.get("_vet_foid")
+        with fc3:
+            pass  # espaço
+
+        hons = listar_honorarios(
+            u["id"],
+            fazenda_owner_id=foid_fin if foid_fin else None,
+            status=filtro_status if filtro_status != "todos" else None
+        )
+
+        if not hons:
+            st.info("Nenhum honorário encontrado.")
+        else:
+            # Totais filtrados
+            _total_filt = sum(float(h[7]) for h in hons
+                             if h[8] != "cancelado")
+            st.caption(
+                f"{len(hons)} lançamento(s) | "
+                f"Total: R$ {_total_filt:,.2f}"
+            )
+
+            for h in hons:
+                (hid, _, foid_h, vis_id, dt_lan, desc_h,
+                 tipo_h, val_h, stat_h, dt_pag,
+                 forma_pag, obs_h) = h
+
+                nome_faz = obter_nome_usuario(foid_h) or f"#{foid_h}"
+                ic = {"pendente": "🟡", "pago": "✅", "cancelado": "❌"}.get(
+                    stat_h, "⚪"
+                )
+                dt_fmt = "/".join(reversed(str(dt_lan)[:10].split("-")))
+
+                with st.expander(
+                    f"{ic} {desc_h} | {nome_faz} | "
+                    f"R$ {float(val_h):,.2f} | {dt_fmt}"
+                ):
+                    col_i, col_d = st.columns(2)
+                    with col_i:
+                        st.markdown(f"**Tipo:** {tipo_h}")
+                        st.markdown(f"**Fazenda:** {nome_faz}")
+                        st.markdown(f"**Status:** {stat_h.upper()}")
+                        if vis_id:
+                            st.caption(f"Vinculado à visita #{vis_id}")
+                    with col_d:
+                        st.markdown(f"**Valor:** R$ {float(val_h):,.2f}")
+                        if dt_pag:
+                            dp_fmt = "/".join(reversed(str(dt_pag)[:10].split("-")))
+                            st.markdown(f"**Pago em:** {dp_fmt}")
+                        if forma_pag:
+                            st.markdown(f"**Forma:** {forma_pag}")
+                        if obs_h:
+                            st.caption(f"Obs: {obs_h}")
+
+                    # Itens detalhados
+                    itens_h = listar_itens_honorario(hid)
+                    if itens_h:
+                        st.markdown("**Itens:**")
+                        import pandas as pd
+                        df_i = pd.DataFrame(itens_h, columns=[
+                            "ID","HonID","Descricao","Qtd",
+                            "Valor Unit","Total"
+                        ])
+                        df_i["Valor Unit"] = df_i["Valor Unit"].apply(
+                            lambda x: f"R$ {float(x):,.2f}"
+                        )
+                        df_i["Total"] = df_i["Total"].apply(
+                            lambda x: f"R$ {float(x):,.2f}"
+                        )
+                        st.dataframe(
+                            df_i[["Descricao","Qtd","Valor Unit","Total"]],
+                            use_container_width=True,
+                            hide_index=True
+                        )
+
+                    # Ações
+                    if stat_h == "pendente":
+                        ac1, ac2, ac3 = st.columns(3)
+                        with ac1:
+                            forma = st.selectbox(
+                                "Forma de pagamento",
+                                ["PIX","Transferência","Dinheiro",
+                                 "Cheque","Boleto","Cartão"],
+                                key=f"fin_forma_{hid}"
+                            )
+                        with ac2:
+                            if st.button("Marcar como pago",
+                                        key=f"fin_pago_{hid}",
+                                        type="primary"):
+                                registrar_pagamento_honorario(hid, forma)
+                                limpar_cache()
+                                st.success("Pagamento registrado!")
+                                st.rerun()
+                        with ac3:
+                            if st.button("Cancelar lançamento",
+                                        key=f"fin_canc_{hid}"):
+                                cancelar_honorario(hid)
+                                limpar_cache()
+                                st.warning("Lançamento cancelado.")
+                                st.rerun()
+
+    # ── ABA 2: Lançar Avulso ──────────────────────────────────────────────
+    with t2:
+        st.caption(
+            "Lance honorários não vinculados a visitas — "
+            "teleconsultas, laudos, pareceres, etc."
+        )
+        sel_fazenda_vet(key="vet_faz_fin_av")
+        foid_av = st.session_state.get("_vet_foid")
+        if not foid_av:
+            st.warning("Selecione uma fazenda.")
+        else:
+            with st.form("form_hon_avulso"):
+                a1, a2 = st.columns(2)
+                with a1:
+                    desc_av = st.text_input(
+                        "Descricao *",
+                        placeholder="Ex: Teleconsulta, Laudo técnico"
+                    )
+                    tipo_av = st.selectbox(
+                        "Tipo",
+                        ["consulta","vacinacao","cirurgia",
+                         "exame","procedimento","laudo",
+                         "teleconsulta","outros"]
+                    )
+                with a2:
+                    val_av  = st.number_input(
+                        "Valor (R$) *",
+                        min_value=0.0, value=0.0,
+                        step=50.0, format="%.2f"
+                    )
+                    obs_av  = st.text_input("Observacoes")
+
+                # Itens
+                st.markdown("**Itens detalhados** (opcional):")
+                n_av = st.number_input(
+                    "Quantos procedimentos?",
+                    min_value=0, max_value=10, value=0, step=1
+                )
+                itens_av = []
+                for ii in range(int(n_av)):
+                    iv1, iv2, iv3 = st.columns([3,1,1])
+                    with iv1:
+                        d_av = st.text_input(
+                            f"Procedimento {ii+1}",
+                            key=f"av_d_{ii}"
+                        )
+                    with iv2:
+                        q_av = st.number_input(
+                            "Qtd", min_value=1, value=1,
+                            key=f"av_q_{ii}"
+                        )
+                    with iv3:
+                        v_av = st.number_input(
+                            "R$ unit", min_value=0.0,
+                            value=0.0, step=10.0,
+                            format="%.2f", key=f"av_v_{ii}"
+                        )
+                    if d_av:
+                        itens_av.append({
+                            "descricao": d_av,
+                            "quantidade": q_av,
+                            "valor_unitario": v_av
+                        })
+
+                if st.form_submit_button("Lançar Honorário", type="primary"):
+                    if not desc_av or val_av <= 0:
+                        st.error("Informe descrição e valor.")
+                    else:
+                        hid = lancar_honorario(
+                            vet_id=u["id"],
+                            fazenda_owner_id=foid_av,
+                            descricao=desc_av,
+                            valor=val_av,
+                            tipo=tipo_av,
+                            itens=itens_av or None,
+                            observacoes=obs_av or ""
+                        )
+                        st.success(
+                            f"Honorário #{hid} de R$ {val_av:.2f} lançado!"
+                        )
+                        st.rerun()
+
+    # ── ABA 3: Faturamento ────────────────────────────────────────────────
+    with t3:
+        st.subheader("Faturamento Mensal")
+
+        # Seletor de mês
+        m1, m2 = st.columns(2)
+        with m1:
+            mes_sel = st.selectbox(
+                "Mês",
+                list(range(1, 13)),
+                index=hoje.month - 1,
+                format_func=lambda x: [
+                    "Jan","Fev","Mar","Abr","Mai","Jun",
+                    "Jul","Ago","Set","Out","Nov","Dez"
+                ][x-1]
+            )
+        with m2:
+            ano_sel = st.selectbox(
+                "Ano",
+                list(range(hoje.year - 2, hoje.year + 1)),
+                index=2
+            )
+
+        res_sel = resumo_financeiro_vet(
+            u["id"], mes=int(mes_sel), ano=int(ano_sel)
+        )
+
+        # Cards do período
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("A receber",   f"R$ {res_sel['pendente']:,.2f}")
+        mc2.metric("Recebido",    f"R$ {res_sel['pago']:,.2f}")
+        mc3.metric("Total",
+                   f"R$ {res_sel['pendente']+res_sel['pago']:,.2f}")
+
+        # Por fazenda
+        if res_sel["por_fazenda"]:
+            st.divider()
+            st.subheader("Por Fazenda")
+            import pandas as pd
+            df_faz = pd.DataFrame(
+                [(obter_nome_usuario(r[0]) or f"#{r[0]}",
+                  r[1],
+                  f"R$ {float(r[2]):,.2f}")
+                 for r in res_sel["por_fazenda"]],
+                columns=["Fazenda","Lançamentos","Total"]
+            )
+            st.dataframe(df_faz, use_container_width=True,
+                        hide_index=True)
+
+        # Gráfico últimos 12 meses
+        if res_sel["mensal"]:
+            st.divider()
+            st.subheader("Últimos 12 meses")
+            df_mensal = pd.DataFrame(
+                res_sel["mensal"],
+                columns=["Mês","Faturado"]
+            )
+            df_mensal["Faturado"] = df_mensal["Faturado"].apply(float)
+            df_mensal = df_mensal.sort_values("Mês")
+            st.bar_chart(df_mensal.set_index("Mês"))
+
+        # Extrato detalhado
+        st.divider()
+        st.subheader("Extrato Detalhado")
+        hons_mes = listar_honorarios(u["id"])
+        prefixo_sel = f"{int(ano_sel)}-{int(mes_sel):02d}"
+        hons_filt = [
+            h for h in hons_mes
+            if str(h[4]).startswith(prefixo_sel)
+            and h[8] != "cancelado"
+        ]
+        if hons_filt:
+            df_ext = pd.DataFrame(
+                [(h[4], obter_nome_usuario(h[2]) or f"#{h[2]}",
+                  h[5], h[6],
+                  f"R$ {float(h[7]):,.2f}", h[8].upper())
+                 for h in hons_filt],
+                columns=["Data","Fazenda","Descricao",
+                         "Tipo","Valor","Status"]
+            )
+            st.dataframe(df_ext, use_container_width=True,
+                        hide_index=True)
+        else:
+            st.info("Nenhum lançamento neste período.")
