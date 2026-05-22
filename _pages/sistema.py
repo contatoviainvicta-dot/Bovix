@@ -174,6 +174,18 @@ def page_inicio(u):
         # ══ BLOCO 2: ALERTAS ═════════════════════════════════════════════════
         if pendo or crit or parto:
             st.subheader("Alertas")
+            # Monitoramentos vencendo — alerta de alta prioridade ACIMA dos demais
+            if _monitor_alert:
+                st.error(
+                    f"🔴 **{len(_monitor_alert)} retorno(s) veterinario(s) pendente(s)** — "
+                    + " | ".join(
+                        f"{m.get('brinco') or m['animal_id']}: "
+                        f"{'/'.join(reversed(str(m['data_retorno'])[:10].split('-')))}"
+                        + (" ⚠ ATRASADO" if m["vencido"] else "")
+                        for m in _monitor_alert[:3]
+                    )
+                )
+
             al1, al2, al3, al4 = st.columns(4)
             with al1:
                 if pendo:
@@ -191,8 +203,6 @@ def page_inicio(u):
                     with st.expander(f"🐄 Partos ({len(parto)})", expanded=True):
                         for p in parto[:4]:
                             st.caption(f"- {p[1]} | {p[3]}")
-            st.divider()
-
             with al4:
                 if _car_alert:
                     with st.expander(
@@ -202,19 +212,6 @@ def page_inicio(u):
                             st.caption(
                                 f"- {c[1]}: {c[2]} | libera {'/'.join(reversed(str(c[3])[:10].split('-')))}"
                             )
-
-            # Monitoramentos vencendo (alerta prioritario)
-            if _monitor_alert:
-                st.divider()
-                with st.expander(
-                    f"🔴 Retornos veterinarios pendentes ({len(_monitor_alert)})",
-                    expanded=True
-                ):
-                    for m in _monitor_alert:
-                        dt_ret = "/".join(reversed(str(m["data_retorno"])[:10].split("-")))
-                        brinco = m.get("brinco") or f"#{m['animal_id']}"
-                        venc = " (ATRASADO)" if m["vencido"] else ""
-                        st.caption(f"- {brinco}: {m['descricao'][:40]} | retorno {dt_ret}{venc}")
 
             # Visitas agendadas pelo vet
             if _visitas_prox:
