@@ -1,6 +1,8 @@
 # _pages/veterinario.py -- Telas exclusivas do perfil veterinario
 import streamlit as st
 import pandas as pd
+import json
+import io
 from datetime import datetime, date, timedelta
 from database import *
 from database import _conexao, _ph, _usar_postgres
@@ -203,6 +205,37 @@ def page_receituario(u):
                     if obs_r:
                         st.caption(f"Obs: {obs_r}")
                     st.caption(f"CRMV: {crmv_r or '-'}")
+                    # Botao PDF
+                    if st.button(f"Baixar PDF", key=f"pdf_rec_{rid}"):
+                        try:
+                            from pdf_vet import gerar_pdf_receita
+                            nome_faz = obter_nome_usuario(foid) if foid else ""
+                            nome_an  = ""
+                            if an_id:
+                                try:
+                                    an_data = obter_animal(an_id)
+                                    nome_an = an_data[1] if an_data else f"#{an_id}"
+                                except Exception:
+                                    nome_an = f"#{an_id}"
+                            pdf_bytes = gerar_pdf_receita({
+                                "id": rid, "nome_vet": u.get("nome",""),
+                                "crmv": crmv, "nome_fazenda": nome_faz,
+                                "nome_animal": nome_an or "Lote inteiro",
+                                "medicamento": med, "dose": dose,
+                                "via": via, "duracao": dur,
+                                "carencia_dias": carenc,
+                                "observacoes": obs_r or "",
+                                "data_emissao": _fmt_dt(dt_em),
+                            })
+                            st.download_button(
+                                label=f"Clique para baixar receita_{rid}.pdf",
+                                data=pdf_bytes,
+                                file_name=f"receita_{rid}.pdf",
+                                mime="application/pdf",
+                                key=f"dl_rec_{rid}"
+                            )
+                        except Exception as e:
+                            st.error(f"Erro ao gerar PDF: {e}")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -500,6 +533,29 @@ def page_relatorio_visita(u):
                     if prox:
                         st.markdown(f"**Proxima visita:** {_fmt_dt(prox)}")
                     st.caption(f"CRMV: {crmv_r or '-'}")
+                    if st.button(f"Baixar PDF", key=f"pdf_rel_{rid}"):
+                        try:
+                            from pdf_vet import gerar_pdf_relatorio_visita
+                            nome_faz_r = obter_nome_usuario(foid) if foid else ""
+                            pdf_bytes = gerar_pdf_relatorio_visita({
+                                "id": rid, "nome_vet": u.get("nome",""),
+                                "crmv": crmv_r or crmv,
+                                "nome_fazenda": nome_faz_r,
+                                "data_relatorio": _fmt_dt(dt_rel),
+                                "animais_inspecionados": n_a,
+                                "achados": ach, "tratamentos": trat,
+                                "recomendacoes": rec,
+                                "proxima_visita": _fmt_dt(prox) if prox and str(prox) != "None" else "",
+                            })
+                            st.download_button(
+                                label=f"Clique para baixar relatorio_{rid}.pdf",
+                                data=pdf_bytes,
+                                file_name=f"relatorio_visita_{rid}.pdf",
+                                mime="application/pdf",
+                                key=f"dl_rel_{rid}"
+                            )
+                        except Exception as e:
+                            st.error(f"Erro ao gerar PDF: {e}")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -730,3 +786,300 @@ def page_controle_carencia(u):
                 df_c[["Brinco","Medicamento","Data Aplicacao","Liberacao","Dias rest."]],
                 use_container_width=True, hide_index=True
             )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TELA 9: EXAMES LABORATORIAIS
+# ════════════════════════════════════════════════════════════════════════════
+def page_exames_laboratoriais(u):
+    _requer_vet()
+    hdr("Exames Laboratoriais", "Registro de Exames",
+        "Solicite e registre resultados de exames dos animais")
+
+    sel_fazenda_vet(key="vet_faz_exames")
+    foid = st.session_state.get("_vet_foid")
+    if not foid:
+        st.warning("Selecione uma fazenda.")
+        return
+
+    from database import listar_lotes
+    lotes_ex = listar_lotes(owner_id=foid)
+    if not lotes_ex:
+        st.warning("Nenhum lote nesta fazenda.")
+        return
+
+    t1, t2 = st.tabs(["Solicitar / Registrar", "Historico"])
+
+    with t1:
+        dict_l = {f"{l[1]}": l[0] for l in lotes_ex}
+        lote_sel = st.selectbox("Lote", list(dict_l.keys()), key="ex_lote")
+        animais_ex = listar_animais_por_lote(dict_l[lote_sel])
+        if not animais_ex:
+            st.warning("Nenhum animal neste lote.")
+        else:
+            dict_a = {f"{a[1]}": a[0] for a in animais_ex}
+            an_sel = st.selectbox("Animal *", list(dict_a.keys()), key="ex_animal")
+            animal_id_ex = dict_a[an_sel]
+
+            with st.form("form_exame"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    tipo_ex = st.selectbox("Tipo de exame *", [
+                        "Hemograma completo",
+                        "Bioquimica serica",
+                        "Brucelose (AAT)",
+                        "Tuberculose (IDTB)",
+                        "Parasitologico",
+                        "Cultura e antibiograma",
+                        "PCR",
+                        "Sorologico",
+                        "Urinanalise",
+                        "Outro",
+                    ])
+                    data_col = st.date_input("Data da coleta *",
+                                            value=date.today())
+                with c2:
+                    laboratorio = st.text_input("Laboratorio",
+                        placeholder="Ex: LabVet SP")
+                    status_ex = st.selectbox("Status",
+                        ["aguardando", "concluido"])
+
+                resultado = st.text_area("Resultado",
+                    height=80,
+                    placeholder="Preencha quando o resultado chegar...")
+                interpretacao = st.text_area("Interpretacao clinica",
+                    height=80,
+                    placeholder="Sua avaliacao do resultado...")
+                alerta = st.checkbox(
+                    "Resultado alterado (marcar para alertar fazendeiro)",
+                    value=False
+                )
+
+                if st.form_submit_button("Salvar Exame", type="primary"):
+                    eid = adicionar_exame(
+                        animal_id=animal_id_ex,
+                        vet_id=u["id"],
+                        tipo_exame=tipo_ex,
+                        data_coleta=str(data_col),
+                        laboratorio=laboratorio or "",
+                        resultado=resultado or "",
+                        interpretacao=interpretacao or "",
+                        status=status_ex,
+                        alerta=1 if alerta else 0,
+                    )
+                    msg = f"Exame #{eid} salvo!"
+                    if alerta:
+                        msg += " Fazendeiro sera alertado."
+                    st.success(msg)
+                    st.rerun()
+
+    with t2:
+        # Listar todos os exames do vet nesta fazenda
+        exames_vet = listar_exames(vet_id=u["id"])
+        # Filtrar pelos animais da fazenda selecionada
+        ids_anim_faz = set()
+        for l in lotes_ex:
+            for a in listar_animais_por_lote(l[0]):
+                ids_anim_faz.add(a[0])
+        exames_faz = [e for e in exames_vet if e[1] in ids_anim_faz]
+
+        if not exames_faz:
+            st.info("Nenhum exame nesta fazenda ainda.")
+        else:
+            st.caption(f"{len(exames_faz)} exame(s) registrado(s)")
+            for ex in exames_faz[:30]:
+                (eid, aid, vid, dt_col, tipo, lab,
+                 res, interp, stat, alt) = ex
+                # Buscar nome do animal
+                nome_a = next((a[1] for a in
+                    listar_animais_por_lote(dict_l[list(dict_l.keys())[0]])
+                    if a[0] == aid), f"#{aid}")
+                icone = "🔴" if alt else ("✅" if stat == "concluido" else "⏳")
+                with st.expander(
+                    f"{icone} {tipo} — {_fmt_dt(dt_col)} — {nome_a}"
+                ):
+                    c1e, c2e = st.columns(2)
+                    with c1e:
+                        st.markdown(f"**Laboratorio:** {lab or '-'}")
+                        st.markdown(f"**Status:** {stat}")
+                    with c2e:
+                        if alt:
+                            st.error("Resultado alterado!")
+                    if res:
+                        st.markdown(f"**Resultado:** {res}")
+                    if interp:
+                        st.markdown(f"**Interpretacao:** {interp}")
+
+                    # Form para atualizar resultado
+                    with st.form(f"form_upd_ex_{eid}"):
+                        novo_res   = st.text_area("Atualizar resultado",
+                            value=res or "", height=60,
+                            key=f"nres_{eid}")
+                        novo_interp = st.text_area("Atualizar interpretacao",
+                            value=interp or "", height=60,
+                            key=f"nint_{eid}")
+                        novo_alt = st.checkbox("Resultado alterado",
+                            value=bool(alt), key=f"nalt_{eid}")
+                        if st.form_submit_button("Atualizar"):
+                            atualizar_exame(
+                                eid, novo_res, novo_interp,
+                                "concluido", 1 if novo_alt else 0
+                            )
+                            st.success("Exame atualizado!")
+                            st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TELA 10: MONITORAMENTO POS-TRATAMENTO
+# ════════════════════════════════════════════════════════════════════════════
+def page_monitoramento(u):
+    _requer_vet()
+    hdr("Monitoramento Pos-Tratamento", "Follow-up Clinico",
+        "Acompanhe a evolucao dos animais apos tratamento")
+
+    sel_fazenda_vet(key="vet_faz_monitor")
+    foid = st.session_state.get("_vet_foid")
+    if not foid:
+        st.warning("Selecione uma fazenda.")
+        return
+
+    from database import listar_lotes
+    lotes_m = listar_lotes(owner_id=foid)
+    if not lotes_m:
+        st.warning("Nenhum lote nesta fazenda.")
+        return
+
+    t1, t2 = st.tabs(["Monitoramentos Ativos", "Criar Monitoramento"])
+
+    with t1:
+        mons = listar_monitoramentos(vet_id=u["id"], apenas_ativos=True)
+        # Filtrar pela fazenda
+        ids_anim_faz = set()
+        for l in lotes_m:
+            for a in listar_animais_por_lote(l[0]):
+                ids_anim_faz.add(a[0])
+        mons_faz = [m for m in mons if m["animal_id"] in ids_anim_faz]
+
+        if not mons_faz:
+            st.success("Nenhum monitoramento ativo nesta fazenda.")
+        else:
+            # Separar vencidos e em dia
+            vencidos = [m for m in mons_faz if m["vencido"]]
+            em_dia   = [m for m in mons_faz if not m["vencido"]]
+
+            if vencidos:
+                st.error(f"⚠ {len(vencidos)} retorno(s) em atraso!")
+            if em_dia:
+                st.info(f"📋 {len(em_dia)} monitoramento(s) em andamento")
+
+            for m in sorted(mons_faz,
+                           key=lambda x: x["data_retorno"]):
+                venc_icon = "🔴" if m["vencido"] else "🟢"
+                dt_ret = _fmt_dt(m["data_retorno"])
+
+                # Buscar nome do animal
+                brinco = m.get("brinco") or f"#{m['animal_id']}"
+
+                with st.expander(
+                    f"{venc_icon} {brinco} — retorno {dt_ret} — "
+                    f"{m['descricao'][:50]}"
+                ):
+                    st.markdown(f"**Descricao:** {m['descricao']}")
+                    st.markdown(
+                        f"**Inicio:** {_fmt_dt(m['data_inicio'])} | "
+                        f"**Retorno:** {_fmt_dt(m['data_retorno'])}"
+                    )
+
+                    # Evolucoes registradas
+                    if m["evolucoes"]:
+                        st.markdown("**Evolucoes registradas:**")
+                        for ev in m["evolucoes"]:
+                            quem_ic = "🩺" if ev.get("quem") == "vet" else "🌾"
+                            st.caption(
+                                f"{quem_ic} {_fmt_dt(ev.get('data',''))} — "
+                                f"{ev.get('texto','')}"
+                            )
+
+                    # Vet pode registrar evolucao
+                    with st.form(f"form_ev_{m['id']}"):
+                        nova_ev = st.text_area("Registrar evolucao",
+                            height=60,
+                            placeholder="Como o animal esta respondendo?",
+                            key=f"ev_{m['id']}")
+                        c1m, c2m = st.columns(2)
+                        with c1m:
+                            if st.form_submit_button("Salvar evolucao"):
+                                if nova_ev:
+                                    registrar_evolucao(
+                                        m["id"], nova_ev,
+                                        str(date.today()), "vet"
+                                    )
+                                    st.success("Evolucao registrada!")
+                                    st.rerun()
+                        with c2m:
+                            if st.form_submit_button(
+                                "Encerrar monitoramento",
+                                type="secondary"
+                            ):
+                                encerrar_monitoramento(m["id"])
+                                st.success("Monitoramento encerrado.")
+                                st.rerun()
+
+    with t2:
+        dict_l2 = {f"{l[1]}": l[0] for l in lotes_m}
+        lote_m = st.selectbox("Lote", list(dict_l2.keys()), key="mon_lote")
+        animais_m = listar_animais_por_lote(dict_l2[lote_m])
+
+        if not animais_m:
+            st.warning("Nenhum animal neste lote.")
+        else:
+            dict_a2 = {f"{a[1]}": a[0] for a in animais_m}
+            an_m = st.selectbox("Animal *", list(dict_a2.keys()),
+                               key="mon_animal")
+            animal_id_m = dict_a2[an_m]
+
+            # Vincular a receita existente (opcional)
+            receitas_m = listar_receitas(vet_id=u["id"])
+            dict_rec = {"-- Sem vinculo a receita --": None}
+            dict_rec.update({
+                f"#{r[0]} - {r[6]} ({_fmt_dt(r[5])})": r[0]
+                for r in receitas_m[:20]
+            })
+
+            with st.form("form_criar_monitor"):
+                descricao_m = st.text_area("Descricao do tratamento *",
+                    height=80,
+                    placeholder="Ex: Tratamento de pneumonia com Oxitetraciclina")
+                c1n, c2n = st.columns(2)
+                with c1n:
+                    data_ini_m = st.date_input("Inicio do tratamento",
+                                              value=date.today())
+                    rec_sel = st.selectbox("Vincular a receita",
+                                          list(dict_rec.keys()))
+                with c2n:
+                    dias_retorno = st.number_input(
+                        "Retorno em quantos dias?",
+                        min_value=1, value=7, step=1
+                    )
+                    data_ret = data_ini_m + timedelta(days=int(dias_retorno))
+                    st.info(f"Data de retorno: **{_fmt_dt(str(data_ret))}**")
+
+                if st.form_submit_button("Criar Monitoramento",
+                                        type="primary"):
+                    if not descricao_m:
+                        st.error("Informe a descricao.")
+                    else:
+                        mid = adicionar_monitoramento(
+                            animal_id=animal_id_m,
+                            vet_id=u["id"],
+                            descricao=descricao_m,
+                            data_inicio=str(data_ini_m),
+                            data_retorno=str(data_ret),
+                            receita_id=dict_rec[rec_sel],
+                        )
+                        st.success(
+                            f"Monitoramento #{mid} criado! "
+                            f"Retorno em {_fmt_dt(str(data_ret))}. "
+                            f"O fazendeiro sera alertado na data."
+                        )
+                        st.rerun()
