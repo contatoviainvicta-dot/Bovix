@@ -3030,8 +3030,21 @@ def adicionar_exame(animal_id, vet_id, tipo_exame, data_coleta,
 
 
 def atualizar_exame(exame_id, resultado, interpretacao="", status="concluido", alerta=0):
-    """Atualiza resultado do exame e ajusta ocorrencia."""
+    """Atualiza resultado do exame e ajusta gravidade da ocorrencia."""
+    _garantir_tabelas_vet()
     p = _ph()
+
+    # Buscar dados do exame para atualizar ocorrencia
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT animal_id,tipo_exame,data_coleta,laboratorio "
+            f"FROM exames_laboratoriais WHERE id={p}",
+            (exame_id,)
+        )
+        row = cur.fetchone()
+
+    # Atualizar registro do exame
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -3040,11 +3053,38 @@ def atualizar_exame(exame_id, resultado, interpretacao="", status="concluido", a
             (resultado, interpretacao or "", status, int(alerta), exame_id)
         )
         conn.commit()
+
+    # Atualizar gravidade da ocorrencia existente no prontuario
+    if row:
+        animal_id = row[0]
+        tipo_exame = row[1]
+        desc_check = f"Exame #{exame_id}:"
+        nova_grav  = "Alta" if alerta else "Baixa"
+        nova_desc  = f"Exame #{exame_id}: {tipo_exame}"
+        if row[3]:  # laboratorio
+            nova_desc += f" | Lab: {row[3]}"
+        if resultado:
+            nova_desc += f" | Resultado: {resultado[:100]}"
+        if alerta:
+            nova_desc += " | RESULTADO ALTERADO"
+        try:
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    f"UPDATE ocorrencias SET gravidade={p},descricao={p} "
+                    f"WHERE animal_id={p} AND descricao LIKE {p}",
+                    (nova_grav, nova_desc, animal_id, f"%{desc_check}%")
+                )
+                conn.commit()
+        except Exception:
+            pass
+
     return True
 
 
 def listar_exames(animal_id=None, vet_id=None):
     """Lista exames por animal ou por vet."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -3102,6 +3142,7 @@ def adicionar_monitoramento(animal_id, vet_id, descricao,
 
 def registrar_evolucao(monitor_id, texto, data=None, quem="fazendeiro"):
     """Fazendeiro ou vet registra evolucao do animal monitorado."""
+    _garantir_tabelas_vet()
     import json
     from datetime import date
     p = _ph()
@@ -3133,6 +3174,7 @@ def registrar_evolucao(monitor_id, texto, data=None, quem="fazendeiro"):
 
 def encerrar_monitoramento(monitor_id):
     """Encerra o monitoramento."""
+    _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
@@ -3147,6 +3189,7 @@ def encerrar_monitoramento(monitor_id):
 def listar_monitoramentos(animal_id=None, vet_id=None,
                           owner_id=None, apenas_ativos=True):
     """Lista monitoramentos por animal, vet ou fazendeiro."""
+    _garantir_tabelas_vet()
     import json
     from datetime import date
     p  = _ph()
@@ -3211,6 +3254,7 @@ def listar_monitoramentos(animal_id=None, vet_id=None,
 
 def monitoramentos_vencendo(owner_id, dias=3):
     """Retorna monitoramentos cujo retorno esta em ate X dias."""
+    _garantir_tabelas_vet()
     from datetime import date, timedelta
     hoje  = date.today()
     limite = str(hoje + timedelta(days=dias))
