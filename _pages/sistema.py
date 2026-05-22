@@ -79,8 +79,11 @@ def page_inicio(u):
         _visitas_prox = []
     try:
         _monitor_alert = monitoramentos_vencendo(_oid_med, dias=3)
-    except Exception:
+    except Exception as _em:
         _monitor_alert = []
+        _monitor_debug = str(_em)
+    else:
+        _monitor_debug = f"oid={_oid_med} | total={len(_monitor_alert)}"
     try:
         _receitas_receb = listar_receitas(fazenda_owner_id=_oid_med)[:3]
     except Exception:
@@ -175,6 +178,7 @@ def page_inicio(u):
         if pendo or crit or parto:
             st.subheader("Alertas")
             # Monitoramentos vencendo — alerta de alta prioridade ACIMA dos demais
+            st.caption(f"[DEBUG monitor] {_monitor_debug}")
             if _monitor_alert:
                 st.error(
                     f"🔴 **{len(_monitor_alert)} retorno(s) veterinario(s) pendente(s)** — "
