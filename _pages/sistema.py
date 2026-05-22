@@ -78,6 +78,10 @@ def page_inicio(u):
     except Exception:
         _visitas_prox = []
     try:
+        _monitor_alert = monitoramentos_vencendo(_oid_med, dias=3)
+    except Exception:
+        _monitor_alert = []
+    try:
         _receitas_receb = listar_receitas(fazenda_owner_id=_oid_med)[:3]
     except Exception:
         _receitas_receb = []
@@ -199,10 +203,23 @@ def page_inicio(u):
                                 f"- {c[1]}: {c[2]} | libera {'/'.join(reversed(str(c[3])[:10].split('-')))}"
                             )
 
+            # Monitoramentos vencendo (alerta prioritario)
+            if _monitor_alert:
+                st.divider()
+                with st.expander(
+                    f"🔴 Retornos veterinarios pendentes ({len(_monitor_alert)})",
+                    expanded=True
+                ):
+                    for m in _monitor_alert:
+                        dt_ret = "/".join(reversed(str(m["data_retorno"])[:10].split("-")))
+                        brinco = m.get("brinco") or f"#{m['animal_id']}"
+                        venc = " (ATRASADO)" if m["vencido"] else ""
+                        st.caption(f"- {brinco}: {m['descricao'][:40]} | retorno {dt_ret}{venc}")
+
             # Visitas agendadas pelo vet
             if _visitas_prox:
                 st.divider()
-                with st.expander(f"📅 Visitas do veterinario ({len(_visitas_prox)})", expanded=True):
+                with st.expander(f"Visitas do veterinario ({len(_visitas_prox)})", expanded=True):
                     for v in _visitas_prox:
                         dt_f = "/".join(reversed(str(v[3])[:10].split("-")))
                         st.caption(f"- {dt_f}: {v[4] or 'Visita tecnica'}")
