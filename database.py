@@ -3253,12 +3253,13 @@ def listar_monitoramentos(animal_id=None, vet_id=None,
 
 
 def monitoramentos_vencendo(owner_id, dias=3):
-    """Retorna monitoramentos cujo retorno esta em ate X dias."""
+    """Retorna monitoramentos vencidos OU com retorno em ate X dias."""
     _garantir_tabelas_vet()
     from datetime import date, timedelta
-    hoje  = date.today()
+    hoje   = date.today()
     limite = str(hoje + timedelta(days=dias))
-    todos = listar_monitoramentos(owner_id=owner_id, apenas_ativos=True)
+    todos  = listar_monitoramentos(owner_id=owner_id, apenas_ativos=True)
+    # Inclui vencidos (data_retorno < hoje) E proximos (ate X dias)
     return [m for m in todos if str(m["data_retorno"]) <= limite]
 
 
