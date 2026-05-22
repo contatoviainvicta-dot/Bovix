@@ -1222,6 +1222,37 @@ def page_prontuario_animal(u):
                     df_r = pd.DataFrame(repros, columns=["ID","Animal","Cio","Tipo","Diag","Result","Parto Prev","Parto Real","Obs"])
                     st.dataframe(df_r[["Cio","Tipo","Result","Parto Prev","Parto Real"]], width='stretch')
 
+    # ── Monitoramentos pos-tratamento ────────────────────────────────────────
+    try:
+        mons_anim = listar_monitoramentos(animal_id=animal_id, apenas_ativos=False)
+    except Exception:
+        mons_anim = []
+
+    if mons_anim:
+        st.divider()
+        st.subheader("Monitoramentos Pos-Tratamento")
+        for m in mons_anim:
+            venc_ic = "🔴" if (m["vencido"] and m["status"]=="ativo") else ("✅" if m["status"]=="encerrado" else "🟢")
+            dt_ret = "/".join(reversed(str(m["data_retorno"])[:10].split("-")))
+            with st.expander(
+                f"{venc_ic} {m['descricao'][:60]} | Retorno: {dt_ret} | {m['status'].upper()}"
+            ):
+                for ev in (m["evolucoes"] or []):
+                    quem_ic = "🩺" if ev.get("quem")=="vet" else "🌾"
+                    dt_ev = "/".join(reversed(str(ev.get("data",""))[:10].split("-")))
+                    st.caption(f"{quem_ic} {dt_ev} — {ev.get('texto','')}")
+                if m["status"] == "ativo":
+                    with st.form(f"form_ev_faz_{m['id']}"):
+                        ev_txt = st.text_area(
+                            "Registrar evolucao do animal",
+                            height=60, key=f"evfaz_{m['id']}"
+                        )
+                        if st.form_submit_button("Salvar evolucao", type="primary"):
+                            if ev_txt:
+                                registrar_evolucao(m["id"], ev_txt, str(date.today()), "fazendeiro")
+                                st.success("Evolucao registrada!")
+                                st.rerun()
+
     # ============================================================
     # MARGEM REAL
     # ============================================================
