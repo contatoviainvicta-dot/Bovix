@@ -3263,6 +3263,212 @@ def monitoramentos_vencendo(owner_id, dias=3):
     return [m for m in todos if str(m["data_retorno"]) <= limite]
 
 
+# ── HONORARIOS VETERINARIOS ──────────────────────────────────
+def lancar_honorario(vet_id, fazenda_owner_id, descricao, valor,
+                     tipo="consulta", visita_id=None,
+                     itens=None, observacoes=""):
+    """Lanca honorario do vet. itens = lista de dicts com
+    {descricao, quantidade, valor_unitario}."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p = _ph()
+    dt = str(date.today())
+
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO honorarios_vet "
+                f"(vet_id,fazenda_owner_id,visita_id,data_lancamento,"
+                f"descricao,tipo,valor,status,observacoes) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},'pendente',{p}) RETURNING id",
+                (vet_id, fazenda_owner_id, visita_id, dt,
+                 descricao, tipo, float(valor), observacoes or "")
+            )
+            hid = cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO honorarios_vet "
+                f"(vet_id,fazenda_owner_id,visita_id,data_lancamento,"
+                f"descricao,tipo,valor,status,observacoes) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},'pendente',{p})",
+                (vet_id, fazenda_owner_id, visita_id, dt,
+                 descricao, tipo, float(valor), observacoes or "")
+            )
+            hid = cur.lastrowid
+
+    # Inserir itens se fornecidos
+    if itens:
+        for item in itens:
+            qtd   = float(item.get("quantidade", 1))
+            v_un  = float(item.get("valor_unitario", 0))
+            v_tot = round(qtd * v_un, 2)
+            try:
+                with _conexao() as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"INSERT INTO honorarios_itens "
+                        f"(honorario_id,descricao,quantidade,"
+                        f"valor_unitario,valor_total) "
+                        f"VALUES({p},{p},{p},{p},{p})",
+                        (hid, item.get("descricao",""),
+                         qtd, v_un, v_tot)
+                    )
+                    conn.commit()
+            except Exception:
+                pass
+    return hid
+
+
+def listar_honorarios(vet_id, fazenda_owner_id=None, status=None):
+    """Lista honorarios do vet, opcionalmente por fazenda e status."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        sql = (
+            f"SELECT id,vet_id,fazenda_owner_id,visita_id,"
+            f"data_lancamento,descricao,tipo,valor,status,"
+            f"data_pagamento,forma_pagamento,observacoes "
+            f"FROM honorarios_vet WHERE vet_id={p}"
+        )
+        params = [vet_id]
+        if fazenda_owner_id is not None:
+            sql += f" AND fazenda_owner_id={p}"
+            params.append(fazenda_owner_id)
+        if status:
+            sql += f" AND status={p}"
+            params.append(status)
+        sql += " ORDER BY data_lancamento DESC"
+        cur.execute(sql, tuple(params))
+        return cur.fetchall()
+
+
+def listar_itens_honorario(honorario_id):
+    """Lista itens de um honorario."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT id,honorario_id,descricao,quantidade,"
+            f"valor_unitario,valor_total "
+            f"FROM honorarios_itens WHERE honorario_id={p}",
+            (honorario_id,)
+        )
+        return cur.fetchall()
+
+
+def registrar_pagamento_honorario(honorario_id, forma_pagamento,
+                                  data_pagamento=None):
+    """Marca honorario como pago."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p  = _ph()
+    dt = str(data_pagamento or date.today())
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE honorarios_vet SET status='pago',"
+            f"data_pagamento={p},forma_pagamento={p} WHERE id={p}",
+            (dt, forma_pagamento, honorario_id)
+        )
+        conn.commit()
+    return True
+
+
+def cancelar_honorario(honorario_id):
+    """Cancela um honorario pendente."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE honorarios_vet SET status='cancelado' WHERE id={p}",
+            (honorario_id,)
+        )
+        conn.commit()
+    return True
+
+
+def resumo_financeiro_vet(vet_id, mes=None, ano=None):
+    """Retorna resumo financeiro do vet por periodo."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p = _ph()
+    hoje = date.today()
+    _mes = mes or hoje.month
+    _ano = ano or hoje.year
+    prefixo = f"{_ano}-{_mes:02d}"
+
+    with _conexao() as conn:
+        cur = conn.cursor()
+
+        # Total por status
+        try:
+            cur.execute(
+                f"SELECT status, COUNT(*), COALESCE(SUM(valor),0) "
+                f"FROM honorarios_vet WHERE vet_id={p} "
+                f"AND data_lancamento LIKE {p} "
+                f"GROUP BY status",
+                (vet_id, f"{prefixo}%")
+            )
+            por_status = {r[0]: {"count": r[1], "valor": float(r[2])}
+                         for r in cur.fetchall()}
+        except Exception:
+            por_status = {}
+
+        # Total por fazenda no mes
+        try:
+            cur.execute(
+                f"SELECT fazenda_owner_id, COUNT(*), COALESCE(SUM(valor),0) "
+                f"FROM honorarios_vet WHERE vet_id={p} "
+                f"AND data_lancamento LIKE {p} "
+                f"GROUP BY fazenda_owner_id ORDER BY SUM(valor) DESC",
+                (vet_id, f"{prefixo}%")
+            )
+            por_fazenda = cur.fetchall()
+        except Exception:
+            por_fazenda = []
+
+        # Ultimos 12 meses (faturamento mensal)
+        try:
+            if _usar_postgres():
+                cur.execute(
+                    f"SELECT TO_CHAR(data_lancamento::date, 'YYYY-MM') as mes,"
+                    f"COALESCE(SUM(valor),0) "
+                    f"FROM honorarios_vet WHERE vet_id={p} AND status!='cancelado'"
+                    f"GROUP BY mes ORDER BY mes DESC LIMIT 12",
+                    (vet_id,)
+                )
+            else:
+                cur.execute(
+                    f"SELECT strftime('%Y-%m',data_lancamento) as mes,"
+                    f"COALESCE(SUM(valor),0) "
+                    f"FROM honorarios_vet WHERE vet_id={p} AND status!='cancelado'"
+                    f"GROUP BY mes ORDER BY mes DESC LIMIT 12",
+                    (vet_id,)
+                )
+            mensal = cur.fetchall()
+        except Exception:
+            mensal = []
+
+    pend  = por_status.get("pendente", {})
+    pago  = por_status.get("pago",     {})
+    canc  = por_status.get("cancelado",{})
+
+    return {
+        "mes":         f"{_mes:02d}/{_ano}",
+        "pendente":    pend.get("valor", 0),
+        "pago":        pago.get("valor", 0),
+        "cancelado":   canc.get("valor", 0),
+        "n_pendente":  pend.get("count", 0),
+        "n_pago":      pago.get("count", 0),
+        "por_fazenda": por_fazenda,
+        "mensal":      mensal,
+    }
+
+
 def sincronizar_ocorrencias_receitas():
     """Cria ocorrencias para receitas antigas que nao as geraram.
     Chamada uma vez para sincronizar o historico."""
@@ -3837,6 +4043,28 @@ def _garantir_tabelas_vet():
             status          TEXT DEFAULT 'ativo',
             evolucoes       TEXT DEFAULT '[]',
             alerta_enviado  INTEGER DEFAULT 0
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS honorarios_vet (
+            id              {pk_type},
+            vet_id          INTEGER NOT NULL,
+            fazenda_owner_id INTEGER NOT NULL,
+            visita_id       INTEGER DEFAULT NULL,
+            data_lancamento TEXT NOT NULL,
+            descricao       TEXT NOT NULL,
+            tipo            TEXT NOT NULL DEFAULT 'consulta',
+            valor           REAL NOT NULL DEFAULT 0,
+            status          TEXT NOT NULL DEFAULT 'pendente',
+            data_pagamento  TEXT DEFAULT NULL,
+            forma_pagamento TEXT DEFAULT NULL,
+            observacoes     TEXT DEFAULT ''
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS honorarios_itens (
+            id              {pk_type},
+            honorario_id    INTEGER NOT NULL,
+            descricao       TEXT NOT NULL,
+            quantidade      REAL NOT NULL DEFAULT 1,
+            valor_unitario  REAL NOT NULL DEFAULT 0,
+            valor_total     REAL NOT NULL DEFAULT 0
         )""",
     ]
 
