@@ -566,6 +566,10 @@ def page_agenda_visitas(u):
     hdr("Agenda de Visitas", "Agendamento",
         "Suas visitas tecnicas as fazendas atendidas")
 
+    # seletor de fazenda disponivel em TODAS as abas
+    sel_fazenda_vet(key="vet_faz_agenda")
+    foid_a = st.session_state.get("_vet_foid")
+
     t1, t2 = st.tabs(["Agenda", "Agendar Nova"])
 
     with t1:
@@ -585,26 +589,28 @@ def page_agenda_visitas(u):
                         st.markdown(f"**Objetivo:** {obj or '-'}")
                         st.caption(f"Duracao prevista: {dur} min")
                         if obs: st.caption(f"Obs: {obs}")
+
                         c1, c2, c3 = st.columns(3)
                         with c1:
                             if st.button("Marcar realizada",
-                                       key=f"vis_real_{vid}"):
+                                        key=f"vis_real_{vid}"):
                                 atualizar_status_visita(vid, "realizada")
                                 st.session_state[f"_lan_hon_{vid}"] = True
                                 st.rerun()
                         with c2:
                             if st.button("Cancelar",
-                                       key=f"vis_canc_{vid}"):
+                                        key=f"vis_canc_{vid}"):
                                 atualizar_status_visita(vid, "cancelada")
                                 st.rerun()
                         with c3:
                             if st.button("Lancar honorario",
-                                       key=f"vis_hon_{vid}"):
+                                        key=f"vis_hon_{vid}"):
                                 st.session_state[f"_lan_hon_{vid}"] = True
                                 st.rerun()
 
-                        # Form de lancamento de honorario
+                        # Form de honorario inline
                         if st.session_state.get(f"_lan_hon_{vid}"):
+                            _foid_hon = foid_v  # usar fazenda da visita
                             st.divider()
                             st.markdown("**Lancar honorario desta visita:**")
                             with st.form(f"form_hon_{vid}"):
@@ -633,7 +639,6 @@ def page_agenda_visitas(u):
                                         key=f"hon_obs_{vid}"
                                     )
 
-                                # Itens detalhados (procedimentos)
                                 st.markdown("**Itens / Procedimentos** (opcional):")
                                 n_itens = st.number_input(
                                     "Quantos itens detalhar?",
@@ -643,7 +648,7 @@ def page_agenda_visitas(u):
                                 )
                                 itens_h = []
                                 for ii in range(int(n_itens)):
-                                    ic1, ic2, ic3 = st.columns([3,1,1])
+                                    ic1, ic2, ic3 = st.columns([3, 1, 1])
                                     with ic1:
                                         d_i = st.text_input(
                                             f"Item {ii+1}",
@@ -651,15 +656,14 @@ def page_agenda_visitas(u):
                                         )
                                     with ic2:
                                         q_i = st.number_input(
-                                            "Qtd", min_value=1,
-                                            value=1, step=1,
+                                            "Qtd", min_value=1, value=1,
                                             key=f"hon_iq_{vid}_{ii}"
                                         )
                                     with ic3:
                                         v_i = st.number_input(
-                                            "R$ unit",
-                                            min_value=0.0, value=0.0,
-                                            step=10.0, format="%.2f",
+                                            "R$ unit", min_value=0.0,
+                                            value=0.0, step=10.0,
+                                            format="%.2f",
                                             key=f"hon_iv_{vid}_{ii}"
                                         )
                                     if d_i:
@@ -669,8 +673,8 @@ def page_agenda_visitas(u):
                                             "valor_unitario": v_i
                                         })
 
-                                c_sub1, c_sub2 = st.columns(2)
-                                with c_sub1:
+                                c_s1, c_s2 = st.columns(2)
+                                with c_s1:
                                     if st.form_submit_button(
                                         "Confirmar lancamento",
                                         type="primary"
@@ -680,7 +684,7 @@ def page_agenda_visitas(u):
                                         else:
                                             lancar_honorario(
                                                 vet_id=u["id"],
-                                                fazenda_owner_id=foid_a,
+                                                fazenda_owner_id=_foid_hon,
                                                 descricao=desc_h,
                                                 valor=val_h,
                                                 tipo=tipo_h,
@@ -692,11 +696,11 @@ def page_agenda_visitas(u):
                                                 f"_lan_hon_{vid}", None
                                             )
                                             st.success(
-                                                f"Honorario de R$ {val_h:.2f} "
-                                                f"lancado!"
+                                                f"Honorario de "
+                                                f"R$ {val_h:.2f} lancado!"
                                             )
                                             st.rerun()
-                                with c_sub2:
+                                with c_s2:
                                     if st.form_submit_button("Cancelar"):
                                         st.session_state.pop(
                                             f"_lan_hon_{vid}", None
@@ -706,42 +710,113 @@ def page_agenda_visitas(u):
             if real:
                 st.subheader("Realizadas")
                 for v in real[:10]:
-                    vid, _, foid_v, dt, obj, _, _, _ = v
+                    vid, _, foid_v, dt, obj, dur, _, obs = v
                     nome_faz = obter_nome_usuario(foid_v) if foid_v else f"Fazenda {foid_v}"
-                    st.caption(f"✅ {_fmt_dt(dt)} - {nome_faz} - {obj or '-'}")
+
+                    # Se acabou de ser marcada realizada, mostrar form
+                    if st.session_state.get(f"_lan_hon_{vid}"):
+                        with st.expander(
+                            f"✅ {_fmt_dt(dt)} - {nome_faz} — Lancar honorario",
+                            expanded=True
+                        ):
+                            _foid_hon = foid_v
+                            with st.form(f"form_hon_r_{vid}"):
+                                h1, h2 = st.columns(2)
+                                with h1:
+                                    desc_h = st.text_input(
+                                        "Descricao *",
+                                        value=f"Visita tecnica - {obj or ''}",
+                                        key=f"honr_desc_{vid}"
+                                    )
+                                    tipo_h = st.selectbox(
+                                        "Tipo",
+                                        ["consulta","vacinacao","cirurgia",
+                                         "exame","procedimento","outros"],
+                                        key=f"honr_tipo_{vid}"
+                                    )
+                                with h2:
+                                    val_h = st.number_input(
+                                        "Valor total (R$) *",
+                                        min_value=0.0, value=0.0,
+                                        step=50.0, format="%.2f",
+                                        key=f"honr_val_{vid}"
+                                    )
+                                    obs_h = st.text_input(
+                                        "Observacoes",
+                                        key=f"honr_obs_{vid}"
+                                    )
+                                c_s1, c_s2 = st.columns(2)
+                                with c_s1:
+                                    if st.form_submit_button(
+                                        "Confirmar lancamento",
+                                        type="primary"
+                                    ):
+                                        if not desc_h or val_h <= 0:
+                                            st.error("Informe descricao e valor.")
+                                        else:
+                                            lancar_honorario(
+                                                vet_id=u["id"],
+                                                fazenda_owner_id=_foid_hon,
+                                                descricao=desc_h,
+                                                valor=val_h,
+                                                tipo=tipo_h,
+                                                visita_id=vid,
+                                                observacoes=obs_h or ""
+                                            )
+                                            st.session_state.pop(
+                                                f"_lan_hon_{vid}", None
+                                            )
+                                            st.success(
+                                                f"Honorario de R$ {val_h:.2f} lancado!"
+                                            )
+                                            st.rerun()
+                                with c_s2:
+                                    if st.form_submit_button("Pular"):
+                                        st.session_state.pop(
+                                            f"_lan_hon_{vid}", None
+                                        )
+                                        st.rerun()
+                    else:
+                        st.caption(
+                            f"✅ {_fmt_dt(dt)} - {nome_faz} - {obj or '-'}"
+                        )
 
     with t2:
-        sel_fazenda_vet(key="vet_faz_agenda")
-        foid_a = st.session_state.get("_vet_foid")
         if not foid_a:
-            st.warning("Selecione uma fazenda.")
-            return
+            st.warning("Selecione uma fazenda acima.")
+        else:
+            with st.form("form_agendar_visita"):
+                data_v = st.date_input("Data da visita *",
+                                      min_value=date.today())
+                objetivo = st.text_input(
+                    "Objetivo *",
+                    placeholder="Ex: Vacinacao do lote Pasto Norte"
+                )
+                duracao = st.number_input(
+                    "Duracao prevista (minutos)",
+                    min_value=15, value=60, step=15
+                )
+                obs_v = st.text_area("Observacoes", height=80)
 
-        with st.form("form_agendar_visita"):
-            data_v = st.date_input("Data da visita *",
-                                  min_value=date.today())
-            objetivo = st.text_input("Objetivo *",
-                placeholder="Ex: Vacinacao do lote Pasto Norte")
-            duracao = st.number_input("Duracao prevista (minutos)",
-                                     min_value=15, value=60, step=15)
-            obs_v = st.text_area("Observacoes", height=80)
-
-            if st.form_submit_button("Agendar Visita", type="primary"):
-                if not objetivo:
-                    st.error("Informe o objetivo.")
-                else:
-                    vid = adicionar_visita(
-                        vet_id=u["id"], fazenda_owner_id=foid_a,
-                        data_visita=str(data_v), objetivo=objetivo,
-                        duracao_min=int(duracao), observacoes=obs_v or ""
-                    )
-                    st.success(f"Visita #{vid} agendada para {_fmt_dt(str(data_v))}!")
-                    st.rerun()
+                if st.form_submit_button("Agendar Visita", type="primary"):
+                    if not objetivo:
+                        st.error("Informe o objetivo.")
+                    else:
+                        vid = adicionar_visita(
+                            vet_id=u["id"],
+                            fazenda_owner_id=foid_a,
+                            data_visita=str(data_v),
+                            objetivo=objetivo,
+                            duracao_min=int(duracao),
+                            observacoes=obs_v or ""
+                        )
+                        st.success(
+                            f"Visita #{vid} agendada para "
+                            f"{_fmt_dt(str(data_v))}!"
+                        )
+                        st.rerun()
 
 
-# ════════════════════════════════════════════════════════════════════════════
-# TELA 7: PAINEL DE SAUDE DO REBANHO
-# ════════════════════════════════════════════════════════════════════════════
 def page_painel_saude(u):
     _requer_vet()
     hdr("Painel de Saude do Rebanho", "Visao Clinica",
