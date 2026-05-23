@@ -3215,14 +3215,17 @@ def listar_monitoramentos(animal_id=None, vet_id=None,
                 (vet_id,)
             )
         elif owner_id is not None:
+            # Usar subquery para evitar AmbiguousColumn no JOIN
+            _st_filter = "AND m.status='ativo'" if apenas_ativos else ""
             cur.execute(
                 f"SELECT m.id,m.animal_id,m.vet_id,m.receita_id,m.descricao,"
                 f"m.data_inicio,m.data_retorno,m.status,m.evolucoes,"
                 f"a.identificacao "
                 f"FROM monitoramento_pos_tratamento m "
                 f"JOIN animais a ON a.id=m.animal_id "
-                f"JOIN lotes l ON l.id=a.lote_id "
-                f"WHERE l.owner_id={p} {filtro_status} ORDER BY m.data_retorno",
+                f"WHERE a.lote_id IN ("
+                f"  SELECT id FROM lotes WHERE owner_id={p}"
+                f") {_st_filter} ORDER BY m.data_retorno",
                 (owner_id,)
             )
         else:
@@ -3817,8 +3820,8 @@ def listar_carencias_ativas(owner_id=None):
                 f"c.data_aplicacao,c.carencia_dias,c.data_liberacao "
                 f"FROM carencias_ativas c "
                 f"JOIN animais a ON a.id=c.animal_id "
-                f"JOIN lotes l ON l.id=a.lote_id "
-                f"WHERE c.ativo=1 AND c.data_liberacao >= {p} AND l.owner_id={p} "
+                f"WHERE c.ativo=1 AND c.data_liberacao >= {p} "
+                f"AND a.lote_id IN (SELECT id FROM lotes WHERE owner_id={p}) "
                 f"ORDER BY c.data_liberacao",
                 (hoje, owner_id)
             )
@@ -3849,11 +3852,10 @@ def listar_animais_em_carencia_fazendeiro(owner_id):
                 f"c.data_liberacao, c.carencia_dias "
                 f"FROM carencias_ativas c "
                 f"JOIN animais a ON a.id = c.animal_id "
-                f"JOIN lotes l ON l.id = a.lote_id "
-                f"WHERE l.owner_id = {p} AND c.ativo = 1 "
-                f"AND c.data_liberacao >= {p} "
+                f"WHERE c.ativo = 1 AND c.data_liberacao >= {p} "
+                f"AND a.lote_id IN (SELECT id FROM lotes WHERE owner_id = {p}) "
                 f"ORDER BY c.data_liberacao",
-                (owner_id, hoje)
+                (hoje, owner_id)
             )
             return cur.fetchall()
     except Exception:
