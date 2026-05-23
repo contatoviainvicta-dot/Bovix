@@ -302,3 +302,152 @@ def gerar_pdf_relatorio_visita(relat_dict):
     doc.build(story)
     buf.seek(0)
     return buf.read()
+
+
+def gerar_pdf_historico_animal(dados, nome_vet="", crmv=""):
+    """
+    Gera PDF do historico clinico completo do animal.
+    dados: resultado de historico_clinico_animal()
+    """
+    import io
+    from datetime import date
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        topMargin=1.5*cm, bottomMargin=1.5*cm,
+        leftMargin=2*cm, rightMargin=2*cm,
+        title="Historico Clinico",
+    )
+    styles  = _estilos()
+    story   = []
+    animal  = dados.get("animal", {})
+
+    _cabecalho(story, styles, nome_vet, crmv,
+               subtitulo="HISTORICO CLINICO DO ANIMAL")
+
+    # Identificacao do animal
+    story.append(Paragraph("Identificacao", styles["SecaoTitulo"]))
+    id_data = [
+        ["Brinco/ID",     animal.get("brinco", "-")],
+        ["Raca",          animal.get("raca", "-")],
+        ["Sexo",          animal.get("sexo", "-")],
+        ["Idade (meses)", str(animal.get("idade", "-"))],
+        ["Peso entrada",  f"{animal.get('peso_entrada', 0):.1f} kg"],
+        ["Peso alvo",     f"{animal.get('peso_alvo', 0):.1f} kg"],
+        ["Lote",          animal.get("lote", "-")],
+    ]
+    t_id = Table(id_data, colWidths=[5*cm, 13*cm])
+    t_id.setStyle(TableStyle([
+        ("FONTNAME",   (0,0), (0,-1), "Helvetica-Bold"),
+        ("FONTNAME",   (1,0), (1,-1), "Helvetica"),
+        ("FONTSIZE",   (0,0), (-1,-1), 9),
+        ("ROWPADDING", (0,0), (-1,-1), 5),
+        ("ROWBACKGROUNDS", (0,0), (-1,-1), [_BEGE, colors.white]),
+        ("GRID",       (0,0), (-1,-1), 0.3, _CINZA),
+    ]))
+    story.append(t_id)
+
+    # Pesagens
+    pesagens = dados.get("pesagens", [])
+    if pesagens:
+        story.append(Spacer(1, 0.4*cm))
+        story.append(Paragraph(
+            f"Pesagens ({len(pesagens)})", styles["SecaoTitulo"]
+        ))
+        pes_data = [["Data", "Peso (kg)", "GMD"]]
+        prev_p = None
+        prev_d = None
+        for pes in pesagens[-10:]:  # ultimas 10
+            dt_p = str(pes[2])[:10] if len(pes) > 2 else "-"
+            wt   = float(pes[3]) if len(pes) > 3 else 0
+            gmd  = "-"
+            if prev_p and prev_d:
+                try:
+                    from datetime import datetime
+                    d1 = datetime.strptime(prev_d, "%Y-%m-%d").date()
+                    d2 = datetime.strptime(dt_p[:10], "%Y-%m-%d").date()
+                    dias = (d2 - d1).days
+                    if dias > 0:
+                        gmd = f"{(wt - prev_p) / dias:.3f} kg/dia"
+                except Exception:
+                    pass
+            dt_fmt = "/".join(reversed(dt_p.split("-"))) if "-" in dt_p else dt_p
+            pes_data.append([dt_fmt, f"{wt:.1f}", gmd])
+            prev_p, prev_d = wt, dt_p
+
+        t_pes = Table(pes_data, colWidths=[5*cm, 5*cm, 8*cm])
+        t_pes.setStyle(TableStyle([
+            ("BACKGROUND",  (0,0), (-1,0), _VERDE),
+            ("TEXTCOLOR",   (0,0), (-1,0), colors.white),
+            ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTNAME",    (0,1), (-1,-1), "Helvetica"),
+            ("FONTSIZE",    (0,0), (-1,-1), 8),
+            ("ROWPADDING",  (0,0), (-1,-1), 4),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, _BEGE]),
+            ("GRID",        (0,0), (-1,-1), 0.3, _CINZA),
+        ]))
+        story.append(t_pes)
+
+    # Ocorrencias
+    ocorrs = dados.get("ocorrencias", [])
+    if ocorrs:
+        story.append(Spacer(1, 0.4*cm))
+        story.append(Paragraph(
+            f"Ocorrencias Clinicas ({len(ocorrs)})", styles["SecaoTitulo"]
+        ))
+        for oc in ocorrs:
+            dt_oc = "/".join(reversed(str(oc[2])[:10].split("-")))
+            grav  = oc[5] if len(oc) > 5 else ""
+            cor_g = colors.HexColor("#DC3545") if grav=="Alta"                     else colors.HexColor("#FFC107") if grav=="Media"                     else _CINZA
+            story.append(Paragraph(
+                f"<font color='#{cor_g.hexval()[2:]}'>"
+                f"[{dt_oc}] {oc[3]} — {grav}</font>",
+                styles["Campo"]
+            ))
+            story.append(Paragraph(str(oc[4])[:200], styles["Valor"]))
+
+    # Exames
+    exames = dados.get("exames", [])
+    if exames:
+        story.append(Spacer(1, 0.4*cm))
+        story.append(Paragraph(
+            f"Exames Laboratoriais ({len(exames)})", styles["SecaoTitulo"]
+        ))
+        ex_data = [["Data","Tipo","Lab","Status","Resultado"]]
+        for ex in exames:
+            dt_ex = "/".join(reversed(str(ex[3])[:10].split("-")))
+            ex_data.append([
+                dt_ex, str(ex[4])[:20], str(ex[5] or "-")[:15],
+                str(ex[8]), str(ex[6] or "-")[:40]
+            ])
+        t_ex = Table(ex_data, colWidths=[3*cm,4*cm,3*cm,2.5*cm,5.5*cm])
+        t_ex.setStyle(TableStyle([
+            ("BACKGROUND",  (0,0), (-1,0), _VERDE_CLARO),
+            ("TEXTCOLOR",   (0,0), (-1,0), colors.white),
+            ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTNAME",    (0,1), (-1,-1), "Helvetica"),
+            ("FONTSIZE",    (0,0), (-1,-1), 7),
+            ("ROWPADDING",  (0,0), (-1,-1), 3),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, _BEGE]),
+            ("GRID",        (0,0), (-1,-1), 0.3, _CINZA),
+        ]))
+        story.append(t_ex)
+
+    # Carencia
+    carencias = dados.get("carencia", [])
+    if carencias:
+        story.append(Spacer(1, 0.4*cm))
+        story.append(Paragraph("Carencias Ativas", styles["SecaoTitulo"]))
+        for car in carencias:
+            lib = "/".join(reversed(str(car[1])[:10].split("-")))
+            story.append(Paragraph(
+                f"ATENCAO: {car[0]} — liberacao em {lib}",
+                styles["Alerta"]
+            ))
+
+    _rodape(story, styles, "Historico Clinico",
+            animal.get("brinco", ""))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
