@@ -79,6 +79,10 @@ def page_inicio(u):
         _visitas_prox = []
     _monitor_alert = monitoramentos_vencendo(_oid_med, dias=3)
     try:
+        _msgs_nl = contar_mensagens_nao_lidas(u["id"])
+    except Exception:
+        _msgs_nl = 0
+    try:
         _receitas_receb = listar_receitas(fazenda_owner_id=_oid_med)[:3]
     except Exception:
         _receitas_receb = []
@@ -210,6 +214,10 @@ def page_inicio(u):
                             st.caption(
                                 f"- {c[1]}: {c[2]} | libera {'/'.join(reversed(str(c[3])[:10].split('-')))}"
                             )
+
+            # Mensagens nao lidas
+            if _msgs_nl:
+                st.info(f"📬 {_msgs_nl} mensagem(ns) nao lida(s) do veterinario. Acesse **Mensagens** no menu.")
 
             # Visitas agendadas pelo vet
             if _visitas_prox:
