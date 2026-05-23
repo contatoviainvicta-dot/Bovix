@@ -77,10 +77,7 @@ def page_inicio(u):
                         if v[6] == 'agendada'][:3]
     except Exception:
         _visitas_prox = []
-    try:
-        _monitor_alert = monitoramentos_vencendo(_oid_med, dias=3)
-    except Exception:
-        _monitor_alert = []
+    _monitor_alert = monitoramentos_vencendo(_oid_med, dias=3)
     try:
         _receitas_receb = listar_receitas(fazenda_owner_id=_oid_med)[:3]
     except Exception:
