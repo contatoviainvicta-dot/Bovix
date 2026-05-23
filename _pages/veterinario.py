@@ -1570,3 +1570,674 @@ def page_gestao_financeira_vet(u):
                         hide_index=True)
         else:
             st.info("Nenhum lançamento neste período.")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TELA 12: MAPA EPIDEMIOLOGICO
+# ════════════════════════════════════════════════════════════════════════════
+def page_mapa_epidemiologico(u):
+    _requer_vet()
+    hdr("Mapa Epidemiologico", "Visao Cruzada das Fazendas",
+        "Distribuicao de doencas e saude do rebanho em todas as fazendas atendidas")
+
+    dados_faz = epidemiologia_por_fazenda(u["id"])
+    if not dados_faz:
+        st.info("Nenhuma fazenda aprovada ainda.")
+        return
+
+    # ── Cards de resumo ───────────────────────────────────────────────────
+    n_faz     = len(dados_faz)
+    total_an  = sum(f["n_ativos"] for f in dados_faz)
+    total_mort= sum(f["n_mortos"] for f in dados_faz)
+    taxa_geral= round(100*total_mort/max(1,total_an+total_mort), 2)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Fazendas atendidas", n_faz)
+    c2.metric("Animais ativos", total_an)
+    c3.metric("Mortes acumuladas", total_mort)
+    c4.metric("Taxa mortalidade geral", f"{taxa_geral}%",
+             delta_color="inverse" if taxa_geral > 2 else "off")
+
+    st.divider()
+    t1, t2, t3 = st.tabs(["Comparativo", "Mapa", "Alertas Cruzados"])
+
+    # ── ABA 1: Comparativo entre fazendas ─────────────────────────────────
+    with t1:
+        st.subheader("Ocorrencias por Fazenda")
+
+        # Montar dataframe comparativo
+        rows_comp = []
+        for f in dados_faz:
+            top_tipo = f["por_tipo"][0][0] if f["por_tipo"] else "-"
+            n_oc     = sum(t[1] for t in f["por_tipo"])
+            rows_comp.append({
+                "Fazenda":       f["nome"],
+                "Ativos":        f["n_ativos"],
+                "Mortes":        f["n_mortos"],
+                "Taxa Mort %":   f["taxa_mort"],
+                "Ocorrencias":   n_oc,
+                "Top Doenca":    top_tipo,
+            })
+
+        if rows_comp:
+            df_comp = pd.DataFrame(rows_comp)
+            st.dataframe(df_comp, use_container_width=True, hide_index=True)
+
+            st.divider()
+            st.subheader("Distribuicao de Ocorrencias por Tipo")
+            # Grafico consolidado
+            all_tipos = {}
+            for f in dados_faz:
+                for tipo, cnt in f["por_tipo"]:
+                    all_tipos[tipo] = all_tipos.get(tipo, 0) + cnt
+            if all_tipos:
+                df_tipos = pd.DataFrame(
+                    sorted(all_tipos.items(), key=lambda x: x[1], reverse=True),
+                    columns=["Tipo", "Total"]
+                )
+                st.bar_chart(df_tipos.set_index("Tipo"))
+
+            # Detalhe por fazenda
+            st.divider()
+            st.subheader("Detalhe por Fazenda")
+            for f in dados_faz:
+                if f["por_tipo"]:
+                    with st.expander(f["nome"]):
+                        df_f = pd.DataFrame(
+                            f["por_tipo"], columns=["Tipo","Ocorrencias"]
+                        )
+                        c_g, c_t = st.columns([2, 1])
+                        with c_g:
+                            st.bar_chart(df_f.set_index("Tipo"))
+                        with c_t:
+                            st.dataframe(df_f, hide_index=True,
+                                        use_container_width=True)
+
+    # ── ABA 2: Mapa geografico ────────────────────────────────────────────
+    with t2:
+        st.subheader("Localizacao das Fazendas")
+
+        foids = [f["owner_id"] for f in dados_faz]
+        coords = listar_coords_fazendas(foids)
+        coords_map = {c[0]: c for c in coords}
+
+        # Fazendas sem coordenadas
+        sem_coord = [f for f in dados_faz if f["owner_id"] not in coords_map]
+        com_coord = [f for f in dados_faz if f["owner_id"] in coords_map]
+
+        if sem_coord:
+            st.info(
+                f"{len(sem_coord)} fazenda(s) sem coordenadas cadastradas: "
+                + ", ".join(f["nome"] for f in sem_coord)
+            )
+
+        if com_coord:
+            # Montar dados para mapa
+            import json
+            map_data = []
+            for f in com_coord:
+                c = coords_map[f["owner_id"]]
+                n_oc = sum(t[1] for t in f["por_tipo"])
+                map_data.append({
+                    "lat": c[1], "lon": c[2],
+                    "nome": f["nome"],
+                    "ativos": f["n_ativos"],
+                    "ocorrencias": n_oc,
+                    "taxa_mort": f["taxa_mort"],
+                })
+            df_map = pd.DataFrame(map_data)
+            st.map(df_map, latitude="lat", longitude="lon",
+                  size="ocorrencias", color="#FF4B4B")
+            st.caption("Tamanho do ponto = numero de ocorrencias")
+            st.dataframe(
+                df_map[["nome","ativos","ocorrencias","taxa_mort"]].rename(
+                    columns={"nome":"Fazenda","ativos":"Animais",
+                             "ocorrencias":"Ocorrencias",
+                             "taxa_mort":"Taxa Mort %"}
+                ),
+                use_container_width=True, hide_index=True
+            )
+        else:
+            st.warning("Cadastre coordenadas das fazendas para ver o mapa.")
+
+        # Form para cadastrar/atualizar coords
+        st.divider()
+        st.subheader("Cadastrar Coordenadas")
+        faz_options = {f["nome"]: f["owner_id"] for f in dados_faz}
+        with st.form("form_coords"):
+            faz_sel = st.selectbox("Fazenda", list(faz_options.keys()))
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                lat = st.number_input("Latitude", value=-15.0,
+                                     format="%.6f",
+                                     help="Ex: -19.917 (negativo = Sul)")
+                cidade = st.text_input("Cidade")
+            with cc2:
+                lon = st.number_input("Longitude", value=-47.0,
+                                     format="%.6f",
+                                     help="Ex: -43.934 (negativo = Oeste)")
+                estado = st.text_input("Estado (UF)")
+            if st.form_submit_button("Salvar Coordenadas", type="primary"):
+                salvar_coords_fazenda(
+                    faz_options[faz_sel], lat, lon, cidade, estado
+                )
+                st.success("Coordenadas salvas!")
+                st.rerun()
+
+    # ── ABA 3: Alertas cruzados ───────────────────────────────────────────
+    with t3:
+        st.subheader("Analise de Risco de Disseminacao")
+        st.caption(
+            "Doencas que aparecem em 2 ou mais fazendas "
+            "simultaneamente indicam risco de disseminacao."
+        )
+
+        # Montar mapa de doencas por fazenda
+        doencas_por_faz = {}
+        for f in dados_faz:
+            for tipo, cnt in f["por_tipo"]:
+                if tipo not in doencas_por_faz:
+                    doencas_por_faz[tipo] = []
+                doencas_por_faz[tipo].append((f["nome"], cnt))
+
+        alertas = {k: v for k, v in doencas_por_faz.items() if len(v) >= 2}
+        sem_alerta = {k: v for k, v in doencas_por_faz.items() if len(v) < 2}
+
+        if alertas:
+            for tipo, fazendas in sorted(
+                alertas.items(),
+                key=lambda x: len(x[1]), reverse=True
+            ):
+                st.error(
+                    f"⚠ **{tipo}** — presente em "
+                    f"{len(fazendas)} fazendas: "
+                    + ", ".join(f"{n} ({c} casos)" for n, c in fazendas)
+                )
+        else:
+            st.success("Nenhuma doenca em comum entre fazendas. Bom sinal!")
+
+        if sem_alerta:
+            st.divider()
+            st.caption("Ocorrencias isoladas (1 fazenda apenas):")
+            for tipo, fazendas in sem_alerta.items():
+                st.caption(f"• {tipo}: {fazendas[0][0]} ({fazendas[0][1]} casos)")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TELA 13: INBOX — COMUNICACAO VET-FAZENDEIRO
+# ════════════════════════════════════════════════════════════════════════════
+def page_inbox(u):
+    hdr("Mensagens", "Comunicacao",
+        "Troca de mensagens entre veterinario e fazendeiro")
+
+    # Contar nao lidas
+    n_nl = contar_mensagens_nao_lidas(u["id"])
+    if n_nl:
+        st.warning(f"📬 {n_nl} mensagem(ns) nao lida(s)")
+
+    t1, t2 = st.tabs([
+        f"Caixa de Entrada ({n_nl} novas)" if n_nl else "Caixa de Entrada",
+        "Enviar Mensagem"
+    ])
+
+    with t1:
+        msgs = listar_mensagens(u["id"], caixa="entrada")
+        if not msgs:
+            st.info("Nenhuma mensagem recebida.")
+        else:
+            for msg in msgs[:30]:
+                mid, rem_id, _, assunto, corpo, lida, dt, tipo = msg
+                nome_rem = obter_nome_usuario(rem_id) or f"#{rem_id}"
+                dt_fmt   = "/".join(reversed(str(dt)[:10].split("-")))
+                icone    = "📬" if not lida else "📭"
+                titulo   = f"{icone} {nome_rem} — {assunto or 'sem assunto'} | {dt_fmt}"
+
+                with st.expander(titulo, expanded=not lida):
+                    st.markdown(corpo)
+                    if not lida:
+                        marcar_mensagem_lida(mid)
+                    # Responder
+                    with st.form(f"form_resp_{mid}"):
+                        resp = st.text_area(
+                            "Responder", height=80,
+                            key=f"resp_{mid}"
+                        )
+                        if st.form_submit_button("Enviar resposta"):
+                            if resp:
+                                enviar_mensagem(
+                                    remetente_id=u["id"],
+                                    destinatario_id=rem_id,
+                                    corpo=resp,
+                                    assunto=f"Re: {assunto or ''}",
+                                    tipo="resposta"
+                                )
+                                st.success("Resposta enviada!")
+                                st.rerun()
+
+        st.divider()
+        with st.expander("Mensagens enviadas"):
+            enviadas = listar_mensagens(u["id"], caixa="enviadas")
+            if not enviadas:
+                st.info("Nenhuma mensagem enviada.")
+            else:
+                for msg in enviadas[:20]:
+                    _, _, dest_id, assunto, corpo, _, dt, _ = msg
+                    nome_dest = obter_nome_usuario(dest_id) or f"#{dest_id}"
+                    dt_fmt    = "/".join(reversed(str(dt)[:10].split("-")))
+                    st.caption(
+                        f"📤 Para: {nome_dest} | "
+                        f"{assunto or 'sem assunto'} | {dt_fmt}"
+                    )
+
+    with t2:
+        st.caption(
+            "Envie mensagens para fazendeiros ou veterinarios. "
+            "Eles veem aqui e no painel de notificacoes."
+        )
+
+        # Montar lista de destinatarios
+        if is_vet():
+            # Vet envia para seus fazendeiros
+            from database import listar_fazendas_do_vet
+            foids = listar_fazendas_do_vet(u["id"])
+            dest_opts = {
+                obter_nome_usuario(fid) or f"#{fid}": fid
+                for fid in foids
+            }
+        else:
+            # Fazendeiro envia para vets que atendem sua fazenda
+            oid = u.get("owner_id") or u["id"]
+            dest_opts = {}
+            try:
+                with _conexao() as conn:
+                    cur = conn.cursor()
+                    p   = _ph()
+                    cur.execute(
+                        f"SELECT DISTINCT vet_id FROM visitas_tecnicas "
+                        f"WHERE fazenda_owner_id={p}",
+                        (oid,)
+                    )
+                    for row in cur.fetchall():
+                        nome = obter_nome_usuario(row[0]) or f"#{row[0]}"
+                        dest_opts[nome] = row[0]
+            except Exception:
+                pass
+
+        if not dest_opts:
+            st.warning(
+                "Nenhum destinatario disponivel. "
+                "O vet precisa ter agendado ao menos uma visita."
+            )
+        else:
+            with st.form("form_nova_msg"):
+                dest_sel = st.selectbox(
+                    "Destinatario *", list(dest_opts.keys())
+                )
+                assunto_m = st.text_input(
+                    "Assunto",
+                    placeholder="Ex: Resultado do exame do BOI-001"
+                )
+                corpo_m = st.text_area(
+                    "Mensagem *", height=150,
+                    placeholder="Digite sua mensagem aqui..."
+                )
+                if st.form_submit_button("Enviar", type="primary"):
+                    if not corpo_m:
+                        st.error("Digite a mensagem.")
+                    else:
+                        enviar_mensagem(
+                            remetente_id=u["id"],
+                            destinatario_id=dest_opts[dest_sel],
+                            corpo=corpo_m,
+                            assunto=assunto_m or "",
+                            tipo="mensagem"
+                        )
+                        st.success("Mensagem enviada!")
+                        st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TELA 14: CAMPANHAS DE VACINACAO
+# ════════════════════════════════════════════════════════════════════════════
+def page_campanhas_vacinacao(u):
+    _requer_vet()
+    hdr("Campanhas de Vacinacao", "Gestao por Safra",
+        "Planeje e acompanhe campanhas de vacinacao em todas as fazendas")
+
+    t1, t2, t3 = st.tabs(["Minhas Campanhas", "Criar Campanha", "Executar"])
+
+    # ── ABA 1: Listar campanhas ───────────────────────────────────────────
+    with t1:
+        camps = listar_campanhas(u["id"])
+        if not camps:
+            st.info("Nenhuma campanha criada. Use a aba 'Criar Campanha'.")
+        else:
+            for camp in camps:
+                (cid, _, nome_c, vacina_c, safra_c, dt_ini, dt_fim,
+                 meta_c, stat_c, obs_c) = camp
+                res = resumo_campanha(cid)
+                pct = res["pct"]
+                ic  = "✅" if stat_c == "encerrada"                       else "🟢" if pct >= meta_c                       else "🟡" if pct >= 50 else "🔴"
+                with st.expander(
+                    f"{ic} {nome_c} | {vacina_c} | Safra {safra_c} "
+                    f"| {pct}% de cobertura"
+                ):
+                    cc1, cc2 = st.columns(2)
+                    with cc1:
+                        st.markdown(f"**Vacina:** {vacina_c}")
+                        st.markdown(f"**Safra:** {safra_c}")
+                        st.markdown(
+                            f"**Periodo:** "
+                            f"{_fmt_dt(dt_ini)} a {_fmt_dt(dt_fim)}"
+                        )
+                        st.markdown(f"**Meta:** {meta_c}% de cobertura")
+                    with cc2:
+                        st.metric("Lotes", res["n_lotes"])
+                        st.metric("Animais meta", res["meta"])
+                        st.metric("Vacinados", res["vacinados"])
+                        st.metric("Cobertura", f"{pct}%")
+
+                    # Progress bar
+                    st.progress(min(pct / 100, 1.0))
+
+                    # Lotes da campanha
+                    lotes_camp = listar_lotes_campanha(cid)
+                    if lotes_camp:
+                        df_lc = pd.DataFrame(lotes_camp, columns=[
+                            "ID","CampID","LoteID","Nome",
+                            "Meta","Vacinados","Status","Execucao"
+                        ])
+                        df_lc["Execucao"] = df_lc["Execucao"].apply(_fmt_dt)
+                        df_lc["Cobertura %"] = df_lc.apply(
+                            lambda r: f"{round(100*r['Vacinados']/max(1,r['Meta']),1)}%",
+                            axis=1
+                        )
+                        st.dataframe(
+                            df_lc[["Nome","Meta","Vacinados",
+                                   "Cobertura %","Status","Execucao"]],
+                            use_container_width=True, hide_index=True
+                        )
+
+                    if obs_c:
+                        st.caption(f"Obs: {obs_c}")
+
+    # ── ABA 2: Criar campanha ─────────────────────────────────────────────
+    with t2:
+        with st.form("form_criar_camp"):
+            ca1, ca2 = st.columns(2)
+            with ca1:
+                nome_camp  = st.text_input(
+                    "Nome da campanha *",
+                    placeholder="Ex: Vacinacao Aftosa Safra 2026"
+                )
+                vacina_camp = st.text_input(
+                    "Vacina *",
+                    placeholder="Ex: Aftosa, Brucelose, Raiva"
+                )
+                safra_camp  = st.text_input(
+                    "Safra *",
+                    placeholder="Ex: 2026, 2025/2026"
+                )
+            with ca2:
+                dt_ini_c = st.date_input("Data de inicio *",
+                                        value=date.today())
+                dt_fim_c = st.date_input("Data de termino *")
+                meta_cob = st.number_input(
+                    "Meta de cobertura (%)",
+                    min_value=50, max_value=100,
+                    value=100, step=5
+                )
+            obs_camp = st.text_area("Observacoes", height=60)
+
+            if st.form_submit_button("Criar Campanha", type="primary"):
+                if not nome_camp or not vacina_camp or not safra_camp:
+                    st.error("Preencha nome, vacina e safra.")
+                else:
+                    cid = criar_campanha(
+                        vet_id=u["id"],
+                        nome=nome_camp, vacina=vacina_camp,
+                        safra=safra_camp,
+                        data_inicio=str(dt_ini_c),
+                        data_fim=str(dt_fim_c),
+                        meta_cobertura=float(meta_cob),
+                        observacoes=obs_camp or ""
+                    )
+                    st.session_state["_camp_atual"] = cid
+                    st.success(
+                        f"Campanha #{cid} criada! "
+                        f"Agora adicione os lotes na aba 'Executar'."
+                    )
+                    st.rerun()
+
+    # ── ABA 3: Executar (adicionar lotes e registrar vacinados) ───────────
+    with t3:
+        camps_list = listar_campanhas(u["id"])
+        if not camps_list:
+            st.info("Crie uma campanha primeiro.")
+            return
+
+        dict_camps = {
+            f"#{c[0]} - {c[2]} ({c[4]})": c[0]
+            for c in camps_list
+            if c[8] != "encerrada"
+        }
+        if not dict_camps:
+            st.info("Nenhuma campanha ativa.")
+            return
+
+        camp_sel = st.selectbox(
+            "Campanha", list(dict_camps.keys()), key="exec_camp"
+        )
+        cid_sel  = dict_camps[camp_sel]
+
+        # Adicionar lote
+        st.subheader("Adicionar Lote a Campanha")
+        sel_fazenda_vet(key="vet_faz_camp")
+        foid_c = st.session_state.get("_vet_foid")
+        if foid_c:
+            from database import listar_lotes
+            lotes_c = listar_lotes(owner_id=foid_c)
+            if lotes_c:
+                dict_lc = {f"{l[1]}": l[0] for l in lotes_c}
+                with st.form("form_add_lote_camp"):
+                    lote_c_sel = st.selectbox(
+                        "Lote", list(dict_lc.keys())
+                    )
+                    meta_c_an  = st.number_input(
+                        "Meta de animais a vacinar",
+                        min_value=1,
+                        value=contar_animais_no_lote(dict_lc[lote_c_sel])
+                    )
+                    if st.form_submit_button("Adicionar Lote"):
+                        adicionar_lote_campanha(
+                            cid_sel, dict_lc[lote_c_sel], int(meta_c_an)
+                        )
+                        st.success("Lote adicionado!")
+                        st.rerun()
+
+        # Registrar vacinados
+        st.subheader("Registrar Vacinacao por Lote")
+        lotes_camp = listar_lotes_campanha(cid_sel)
+        pendentes  = [l for l in lotes_camp if l[6] == "pendente"]
+
+        if not pendentes:
+            st.success("Todos os lotes desta campanha estao concluidos!")
+        else:
+            for lc in pendentes:
+                (lcid, _, lid, nome_l, meta_l,
+                 vac_l, stat_l, dt_ex) = lc
+                with st.expander(
+                    f"🔵 {nome_l} — Meta: {meta_l} animais"
+                ):
+                    with st.form(f"form_exec_{lcid}"):
+                        n_vac = st.number_input(
+                            "Animais vacinados *",
+                            min_value=0, max_value=int(meta_l)*2,
+                            value=int(meta_l), step=1
+                        )
+                        dt_ex_c = st.date_input(
+                            "Data de execucao",
+                            value=date.today()
+                        )
+                        if st.form_submit_button(
+                            "Registrar", type="primary"
+                        ):
+                            registrar_vacinacao_campanha(
+                                lcid, n_vac, str(dt_ex_c)
+                            )
+                            st.success(
+                                f"{n_vac} animais vacinados em {nome_l}!"
+                            )
+                            st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TELA 15: HISTORICO CLINICO PDF
+# ════════════════════════════════════════════════════════════════════════════
+def page_historico_clinico_pdf(u):
+    _requer_vet()
+    hdr("Historico Clinico PDF", "Documentacao",
+        "Exporte o historico completo do animal em PDF com cabecalho veterinario")
+
+    crmv = _crmv_atual(u)
+    sel_fazenda_vet(key="vet_faz_hcpdf")
+    foid = st.session_state.get("_vet_foid")
+    if not foid:
+        st.warning("Selecione uma fazenda.")
+        return
+
+    from database import listar_lotes
+    lotes_pdf = listar_lotes(owner_id=foid)
+    if not lotes_pdf:
+        st.warning("Nenhum lote nesta fazenda.")
+        return
+
+    dict_lp = {f"{l[1]}": l[0] for l in lotes_pdf}
+    lote_p  = st.selectbox("Lote", list(dict_lp.keys()), key="hc_lote")
+    animais_p = listar_animais_por_lote(dict_lp[lote_p])
+
+    if not animais_p:
+        st.warning("Nenhum animal neste lote.")
+        return
+
+    dict_ap = {f"{a[1]}": a[0] for a in animais_p}
+    an_p    = st.selectbox("Animal", list(dict_ap.keys()), key="hc_anim")
+    aid     = dict_ap[an_p]
+
+    # Preview dos dados
+    dados = historico_clinico_animal(aid)
+    animal = dados.get("animal", {})
+
+    col_i, col_b = st.columns(2)
+    with col_i:
+        st.markdown(f"**Brinco:** {animal.get('brinco','-')}")
+        st.markdown(f"**Raca:** {animal.get('raca','-')}")
+        st.markdown(f"**Sexo:** {animal.get('sexo','-')}")
+    with col_b:
+        st.metric("Pesagens", len(dados.get("pesagens",[])))
+        st.metric("Ocorrencias", len(dados.get("ocorrencias",[])))
+        st.metric("Exames", len(dados.get("exames",[])))
+
+    st.divider()
+    if st.button("Gerar PDF do Historico Clinico",
+                type="primary", use_container_width=True):
+        try:
+            from pdf_vet import gerar_pdf_historico_animal
+            pdf_bytes = gerar_pdf_historico_animal(
+                dados,
+                nome_vet=u.get("nome",""),
+                crmv=crmv
+            )
+            st.download_button(
+                label=f"Baixar historico_{an_p}.pdf",
+                data=pdf_bytes,
+                file_name=f"historico_{an_p.replace(' ','_')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"Erro ao gerar PDF: {e}")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TELA 16: DASHBOARD DE PRODUTIVIDADE DO VET
+# ════════════════════════════════════════════════════════════════════════════
+def page_dashboard_produtividade(u):
+    _requer_vet()
+    hdr("Meu Dashboard", "Produtividade Profissional",
+        "Metricas de desempenho e resumo da sua atuacao")
+
+    from datetime import date
+    hoje  = date.today()
+    p     = _ph()
+
+    # Coletar metricas
+    visitas  = listar_visitas(vet_id=u["id"])
+    receitas = listar_receitas(vet_id=u["id"])
+    mons_at  = listar_monitoramentos(vet_id=u["id"], apenas_ativos=True)
+    mons_enc = listar_monitoramentos(vet_id=u["id"], apenas_ativos=False)
+    res_fin  = resumo_financeiro_vet(u["id"])
+
+    from database import listar_fazendas_do_vet
+    n_faz    = len(listar_fazendas_do_vet(u["id"]))
+    n_vis_r  = len([v for v in visitas if v[6] == "realizada"])
+    n_vis_a  = len([v for v in visitas if v[6] == "agendada"])
+    n_rec    = len(receitas)
+    n_mon_at = len(mons_at)
+    n_mon_enc = len([m for m in mons_enc if m["status"] == "encerrado"])
+    taxa_res  = round(
+        100 * n_mon_enc / max(1, n_mon_at + n_mon_enc), 1
+    )
+
+    # Cards principais
+    st.subheader("Resumo Geral")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Fazendas atendidas",  n_faz)
+    c2.metric("Visitas realizadas",  n_vis_r,
+             delta=f"{n_vis_a} agendadas")
+    c3.metric("Receitas emitidas",   n_rec)
+    c4.metric("Taxa resolucao",      f"{taxa_res}%",
+             help="Monitoramentos encerrados / total")
+
+    st.divider()
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("A receber",       f"R$ {res_fin['pendente']:,.2f}")
+    c6.metric("Recebido no mes", f"R$ {res_fin['pago']:,.2f}")
+    c7.metric("Monitoramentos ativos", n_mon_at)
+    c8.metric("CRMV", obter_crmv_usuario(u["id"]) or "Nao cadastrado")
+
+    # Grafico de visitas por mes
+    if visitas:
+        st.divider()
+        st.subheader("Visitas por Mes")
+        from collections import Counter
+        meses = Counter(
+            str(v[3])[:7]
+            for v in visitas if v[6] == "realizada"
+        )
+        if meses:
+            df_vis = pd.DataFrame(
+                sorted(meses.items()),
+                columns=["Mes", "Visitas"]
+            )
+            st.bar_chart(df_vis.set_index("Mes"))
+
+    # Onboarding checklist
+    st.divider()
+    st.subheader("Checklist de Configuracao")
+    checks = [
+        ("CRMV cadastrado",          bool(obter_crmv_usuario(u["id"]))),
+        ("Pelo menos 1 visita",       n_vis_r > 0),
+        ("Protocolo criado",          len(listar_protocolos(u["id"])) > 0),
+        ("Primeiro receituario",      n_rec > 0),
+        ("Coordenadas de fazendas",   bool(listar_coords_fazendas(
+            listar_fazendas_do_vet(u["id"])
+        ))),
+    ]
+    for label, ok in checks:
+        ic = "✅" if ok else "⬜"
+        st.markdown(f"{ic} {label}")
+
+    pct_conf = round(100 * sum(ok for _, ok in checks) / len(checks))
+    st.progress(pct_conf / 100)
+    st.caption(f"Configuracao: {pct_conf}% completa")
