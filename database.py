@@ -3267,6 +3267,366 @@ def monitoramentos_vencendo(owner_id, dias=3):
 
 
 # ── HONORARIOS VETERINARIOS ──────────────────────────────────
+# ── MENSAGENS VET-FAZENDEIRO ─────────────────────────────────
+def enviar_mensagem(remetente_id, destinatario_id, corpo,
+                   assunto="", tipo="mensagem"):
+    """Envia mensagem interna entre vet e fazendeiro."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO mensagens_vet "
+                f"(remetente_id,destinatario_id,assunto,corpo,"
+                f"lida,criado_em,tipo) "
+                f"VALUES({p},{p},{p},{p},0,{p},{p}) RETURNING id",
+                (remetente_id, destinatario_id, assunto or "",
+                 corpo, str(date.today()), tipo)
+            )
+            return cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO mensagens_vet "
+                f"(remetente_id,destinatario_id,assunto,corpo,"
+                f"lida,criado_em,tipo) "
+                f"VALUES({p},{p},{p},{p},0,{p},{p})",
+                (remetente_id, destinatario_id, assunto or "",
+                 corpo, str(date.today()), tipo)
+            )
+            return cur.lastrowid
+
+
+def listar_mensagens(user_id, caixa="entrada"):
+    """Lista mensagens do usuario. caixa='entrada' ou 'enviadas'."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if caixa == "entrada":
+            cur.execute(
+                f"SELECT id,remetente_id,destinatario_id,assunto,"
+                f"corpo,lida,criado_em,tipo "
+                f"FROM mensagens_vet WHERE destinatario_id={p} "
+                f"ORDER BY criado_em DESC",
+                (user_id,)
+            )
+        else:
+            cur.execute(
+                f"SELECT id,remetente_id,destinatario_id,assunto,"
+                f"corpo,lida,criado_em,tipo "
+                f"FROM mensagens_vet WHERE remetente_id={p} "
+                f"ORDER BY criado_em DESC",
+                (user_id,)
+            )
+        return cur.fetchall()
+
+
+def marcar_mensagem_lida(mensagem_id):
+    """Marca mensagem como lida."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE mensagens_vet SET lida=1 WHERE id={p}",
+            (mensagem_id,)
+        )
+        conn.commit()
+
+
+def contar_mensagens_nao_lidas(user_id):
+    """Retorna numero de mensagens nao lidas."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT COUNT(*) FROM mensagens_vet "
+                f"WHERE destinatario_id={p} AND lida=0",
+                (user_id,)
+            )
+            return cur.fetchone()[0]
+    except Exception:
+        return 0
+
+
+# ── CAMPANHAS DE VACINACAO ────────────────────────────────────
+def criar_campanha(vet_id, nome, vacina, safra, data_inicio,
+                  data_fim, meta_cobertura=100, observacoes=""):
+    """Cria campanha de vacinacao."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO campanhas_vacinacao "
+                f"(vet_id,nome,vacina,safra,data_inicio,data_fim,"
+                f"meta_cobertura,status,observacoes,criado_em) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},'ativa',{p},{p}) RETURNING id",
+                (vet_id, nome, vacina, safra,
+                 str(data_inicio), str(data_fim),
+                 float(meta_cobertura), observacoes or "",
+                 str(date.today()))
+            )
+            return cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO campanhas_vacinacao "
+                f"(vet_id,nome,vacina,safra,data_inicio,data_fim,"
+                f"meta_cobertura,status,observacoes,criado_em) "
+                f"VALUES({p},{p},{p},{p},{p},{p},{p},'ativa',{p},{p})",
+                (vet_id, nome, vacina, safra,
+                 str(data_inicio), str(data_fim),
+                 float(meta_cobertura), observacoes or "",
+                 str(date.today()))
+            )
+            return cur.lastrowid
+
+
+def listar_campanhas(vet_id):
+    """Lista campanhas do vet."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT id,vet_id,nome,vacina,safra,data_inicio,data_fim,"
+            f"meta_cobertura,status,observacoes "
+            f"FROM campanhas_vacinacao WHERE vet_id={p} "
+            f"ORDER BY criado_em DESC",
+            (vet_id,)
+        )
+        return cur.fetchall()
+
+
+def adicionar_lote_campanha(campanha_id, lote_id, meta_animais):
+    """Adiciona lote a uma campanha."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO campanha_lotes "
+            f"(campanha_id,lote_id,meta_animais,vacinados,status) "
+            f"VALUES({p},{p},{p},0,'pendente')",
+            (campanha_id, lote_id, int(meta_animais))
+        )
+        conn.commit()
+    return True
+
+
+def listar_lotes_campanha(campanha_id):
+    """Lista lotes de uma campanha com progresso."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT cl.id,cl.campanha_id,cl.lote_id,l.nome,"
+            f"cl.meta_animais,cl.vacinados,cl.status,cl.data_execucao "
+            f"FROM campanha_lotes cl "
+            f"JOIN lotes l ON l.id=cl.lote_id "
+            f"WHERE cl.campanha_id={p} ORDER BY l.nome",
+            (campanha_id,)
+        )
+        return cur.fetchall()
+
+
+def registrar_vacinacao_campanha(campanha_lote_id, vacinados, data_exec=None):
+    """Registra execucao da vacinacao em um lote da campanha."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p  = _ph()
+    dt = str(data_exec or date.today())
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE campanha_lotes SET vacinados={p},"
+            f"status='concluido',data_execucao={p} WHERE id={p}",
+            (int(vacinados), dt, campanha_lote_id)
+        )
+        conn.commit()
+    return True
+
+
+def resumo_campanha(campanha_id):
+    """Retorna progresso consolidado da campanha."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT COUNT(*),COALESCE(SUM(meta_animais),0),"
+            f"COALESCE(SUM(vacinados),0),"
+            f"COUNT(CASE WHEN status='concluido' THEN 1 END) "
+            f"FROM campanha_lotes WHERE campanha_id={p}",
+            (campanha_id,)
+        )
+        r = cur.fetchone()
+        if not r or not r[0]:
+            return {"n_lotes":0,"meta":0,"vacinados":0,"concluidos":0,"pct":0}
+        n_lotes, meta, vac, conc = r[0], r[1], r[2], r[3]
+        pct = round(100 * vac / max(1, meta), 1)
+        return {
+            "n_lotes": n_lotes, "meta": meta,
+            "vacinados": vac, "concluidos": conc, "pct": pct
+        }
+
+
+# ── COORDENADAS DE FAZENDAS ───────────────────────────────────
+def salvar_coords_fazenda(owner_id, latitude, longitude,
+                          cidade="", estado=""):
+    """Salva ou atualiza coordenadas da fazenda."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO fazendas_coords "
+                f"(owner_id,latitude,longitude,cidade,estado) "
+                f"VALUES({p},{p},{p},{p},{p}) "
+                f"ON CONFLICT(owner_id) DO UPDATE SET "
+                f"latitude={p},longitude={p},cidade={p},estado={p}",
+                (owner_id, latitude, longitude, cidade or "", estado or "",
+                 latitude, longitude, cidade or "", estado or "")
+            )
+        else:
+            cur.execute(
+                f"INSERT OR REPLACE INTO fazendas_coords "
+                f"(owner_id,latitude,longitude,cidade,estado) "
+                f"VALUES({p},{p},{p},{p},{p})",
+                (owner_id, latitude, longitude, cidade or "", estado or "")
+            )
+        conn.commit()
+    return True
+
+
+def listar_coords_fazendas(owner_ids):
+    """Retorna coords das fazendas pelos owner_ids."""
+    _garantir_tabelas_vet()
+    if not owner_ids:
+        return []
+    p  = _ph()
+    ph = ",".join([p] * len(owner_ids))
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT owner_id,latitude,longitude,cidade,estado "
+            f"FROM fazendas_coords WHERE owner_id IN ({ph})",
+            tuple(owner_ids)
+        )
+        return cur.fetchall()
+
+
+# ── DADOS EPIDEMIOLOGICOS ──────────────────────────────────────
+def epidemiologia_por_fazenda(vet_id):
+    """Retorna dados epidemiologicos consolidados por fazenda."""
+    _garantir_tabelas_vet()
+    from database import listar_fazendas_do_vet
+    p    = _ph()
+    foids = listar_fazendas_do_vet(vet_id)
+    result = []
+    for foid in foids:
+        nome_faz = obter_nome_usuario(foid)
+        with _conexao() as conn:
+            cur = conn.cursor()
+            # Ocorrencias por tipo
+            try:
+                cur.execute(
+                    f"SELECT o.tipo, COUNT(*) "
+                    f"FROM ocorrencias o "
+                    f"JOIN animais a ON a.id=o.animal_id "
+                    f"WHERE a.lote_id IN "
+                    f"(SELECT id FROM lotes WHERE owner_id={p}) "
+                    f"GROUP BY o.tipo ORDER BY COUNT(*) DESC LIMIT 5",
+                    (foid,)
+                )
+                tipos = cur.fetchall()
+            except Exception:
+                tipos = []
+
+            # Total animais e mortes
+            try:
+                cur.execute(
+                    f"SELECT COUNT(*), "
+                    f"COUNT(CASE WHEN a.status='MORTO' THEN 1 END) "
+                    f"FROM animais a "
+                    f"WHERE a.lote_id IN "
+                    f"(SELECT id FROM lotes WHERE owner_id={p}) "
+                    f"AND a.ativo=1",
+                    (foid,)
+                )
+                r = cur.fetchone()
+                n_ativos = r[0] or 0
+                n_mortos = r[1] or 0
+            except Exception:
+                n_ativos = n_mortos = 0
+
+        result.append({
+            "owner_id":  foid,
+            "nome":      nome_faz,
+            "n_ativos":  n_ativos,
+            "n_mortos":  n_mortos,
+            "taxa_mort": round(100 * n_mortos / max(1, n_ativos+n_mortos), 2),
+            "por_tipo":  tipos,
+        })
+    return result
+
+
+# ── HISTORICO CLINICO PDF ──────────────────────────────────────
+def historico_clinico_animal(animal_id):
+    """Retorna historico completo do animal para PDF."""
+    p = _ph()
+    dados = {}
+
+    # Dados basicos
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT a.identificacao,a.raca,a.sexo,a.idade,"
+                f"a.peso_entrada,a.peso_alvo,l.nome "
+                f"FROM animais a JOIN lotes l ON l.id=a.lote_id "
+                f"WHERE a.id={p}",
+                (animal_id,)
+            )
+            r = cur.fetchone()
+            if r:
+                dados["animal"] = {
+                    "brinco": r[0], "raca": r[1], "sexo": r[2],
+                    "idade": r[3], "peso_entrada": r[4],
+                    "peso_alvo": r[5], "lote": r[6]
+                }
+    except Exception:
+        dados["animal"] = {}
+
+    # Pesagens
+    dados["pesagens"] = listar_pesagens(animal_id) or []
+
+    # Ocorrencias
+    dados["ocorrencias"] = listar_ocorrencias(animal_id) or []
+
+    # Exames
+    try:
+        dados["exames"] = listar_exames(animal_id=animal_id) or []
+    except Exception:
+        dados["exames"] = []
+
+    # Carencia ativa
+    try:
+        dados["carencia"] = animal_em_carencia(animal_id) or []
+    except Exception:
+        dados["carencia"] = []
+
+    return dados
+
+
 def lancar_honorario(vet_id, fazenda_owner_id, descricao, valor,
                      tipo="consulta", visita_id=None,
                      itens=None, observacoes=""):
@@ -4067,6 +4427,46 @@ def _garantir_tabelas_vet():
             quantidade      REAL NOT NULL DEFAULT 1,
             valor_unitario  REAL NOT NULL DEFAULT 0,
             valor_total     REAL NOT NULL DEFAULT 0
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS mensagens_vet (
+            id              {pk_type},
+            remetente_id    INTEGER NOT NULL,
+            destinatario_id INTEGER NOT NULL,
+            assunto         TEXT NOT NULL DEFAULT '',
+            corpo           TEXT NOT NULL,
+            lida            INTEGER NOT NULL DEFAULT 0,
+            criado_em       TEXT NOT NULL,
+            tipo            TEXT NOT NULL DEFAULT 'mensagem'
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS campanhas_vacinacao (
+            id              {pk_type},
+            vet_id          INTEGER NOT NULL,
+            nome            TEXT NOT NULL,
+            vacina          TEXT NOT NULL,
+            safra           TEXT NOT NULL,
+            data_inicio     TEXT NOT NULL,
+            data_fim        TEXT NOT NULL,
+            meta_cobertura  REAL NOT NULL DEFAULT 100,
+            status          TEXT NOT NULL DEFAULT 'ativa',
+            observacoes     TEXT DEFAULT '',
+            criado_em       TEXT NOT NULL
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS campanha_lotes (
+            id              {pk_type},
+            campanha_id     INTEGER NOT NULL,
+            lote_id         INTEGER NOT NULL,
+            meta_animais    INTEGER NOT NULL DEFAULT 0,
+            vacinados       INTEGER NOT NULL DEFAULT 0,
+            status          TEXT NOT NULL DEFAULT 'pendente',
+            data_execucao   TEXT DEFAULT NULL
+        )""",
+        f"""CREATE TABLE IF NOT EXISTS fazendas_coords (
+            id              {pk_type},
+            owner_id        INTEGER NOT NULL UNIQUE,
+            latitude        REAL NOT NULL,
+            longitude       REAL NOT NULL,
+            cidade          TEXT DEFAULT '',
+            estado          TEXT DEFAULT ''
         )""",
     ]
 
