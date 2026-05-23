@@ -3196,25 +3196,25 @@ def listar_monitoramentos(animal_id=None, vet_id=None,
     hoje = str(date.today())
     with _conexao() as conn:
         cur = conn.cursor()
-        filtro_status = "AND status='ativo'" if apenas_ativos else ""
+        # Prefixo m. em todas as referencias para evitar AmbiguousColumn no JOIN
+        filtro_status = "AND m.status='ativo'" if apenas_ativos else ""
         if animal_id is not None:
             cur.execute(
-                f"SELECT id,animal_id,vet_id,receita_id,descricao,"
-                f"data_inicio,data_retorno,status,evolucoes "
-                f"FROM monitoramento_pos_tratamento "
-                f"WHERE animal_id={p} {filtro_status} ORDER BY data_retorno",
+                f"SELECT m.id,m.animal_id,m.vet_id,m.receita_id,m.descricao,"
+                f"m.data_inicio,m.data_retorno,m.status,m.evolucoes "
+                f"FROM monitoramento_pos_tratamento m "
+                f"WHERE m.animal_id={p} {filtro_status} ORDER BY m.data_retorno",
                 (animal_id,)
             )
         elif vet_id is not None:
             cur.execute(
-                f"SELECT id,animal_id,vet_id,receita_id,descricao,"
-                f"data_inicio,data_retorno,status,evolucoes "
-                f"FROM monitoramento_pos_tratamento "
-                f"WHERE vet_id={p} {filtro_status} ORDER BY data_retorno",
+                f"SELECT m.id,m.animal_id,m.vet_id,m.receita_id,m.descricao,"
+                f"m.data_inicio,m.data_retorno,m.status,m.evolucoes "
+                f"FROM monitoramento_pos_tratamento m "
+                f"WHERE m.vet_id={p} {filtro_status} ORDER BY m.data_retorno",
                 (vet_id,)
             )
         elif owner_id is not None:
-            # Fazendeiro ve monitoramentos dos seus animais
             cur.execute(
                 f"SELECT m.id,m.animal_id,m.vet_id,m.receita_id,m.descricao,"
                 f"m.data_inicio,m.data_retorno,m.status,m.evolucoes,"
