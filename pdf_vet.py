@@ -398,9 +398,9 @@ def gerar_pdf_historico_animal(dados, nome_vet="", crmv=""):
         for oc in ocorrs:
             dt_oc = "/".join(reversed(str(oc[2])[:10].split("-")))
             grav  = oc[5] if len(oc) > 5 else ""
-            cor_g = colors.HexColor("#DC3545") if grav=="Alta"                     else colors.HexColor("#FFC107") if grav=="Media"                     else _CINZA
+            cor_str = "#DC3545" if grav=="Alta"                     else "#FFC107" if grav=="Media"                     else "#6C757D"
             story.append(Paragraph(
-                f"<font color='#{cor_g.hexval()[2:]}'>"
+                f"<font color='#{cor_str}'>"
                 f"[{dt_oc}] {oc[3]} — {grav}</font>",
                 styles["Campo"]
             ))
