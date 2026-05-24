@@ -2059,9 +2059,32 @@ def page_campanhas_vacinacao(u):
         st.subheader("Registrar Vacinacao por Lote")
         lotes_camp = listar_lotes_campanha(cid_sel)
         pendentes  = [l for l in lotes_camp if l[6] == "pendente"]
+        concluidos = [l for l in lotes_camp if l[6] == "concluido"]
 
         if not pendentes:
             st.success("Todos os lotes desta campanha estao concluidos!")
+
+        # Botao de sincronizacao para lotes ja concluidos
+        if concluidos:
+            if st.button(
+                "🔄 Sincronizar calendario e prontuarios",
+                help="Garante que o calendario sanitario e os prontuarios "
+                     "estejam atualizados para os lotes ja executados",
+                type="secondary"
+            ):
+                total = 0
+                for lc in concluidos:
+                    dt_ex = str(lc[7]) if lc[7] and str(lc[7]) != "None" else None
+                    n = sincronizar_campanha_executada(lc[0], dt_ex)
+                    total += n
+                if total:
+                    st.success(
+                        f"Sincronizado! {total} ocorrencia(s) criada(s) "
+                        f"nos prontuarios. Calendário atualizado."
+                    )
+                else:
+                    st.info("Calendario e prontuarios já estavam atualizados.")
+                st.rerun()
         else:
             for lc in pendentes:
                 (lcid, _, lid, nome_l, meta_l,
