@@ -3566,6 +3566,9 @@ from _pages.veterinario import (
     page_painel_saude, page_controle_carencia,
     page_exames_laboratoriais, page_monitoramento,
     page_gestao_financeira_vet,
+    page_mapa_epidemiologico, page_inbox,
+    page_campanhas_vacinacao, page_historico_clinico_pdf,
+    page_dashboard_produtividade,
 )
 from _pages.sistema    import (page_inicio, page_buscar_animal, page_notificacoes,
     page_log_auditoria, page_administracao, page_gestao_usuarios)
@@ -4166,15 +4169,19 @@ with st.sidebar:
     # ── GRUPO VETERINARIO: exclusivo para vet ──
     if is_vet():
         GRUPOS["Veterinario"] = [
+            ("Meu Dashboard",       "Produtividade e configuracao"),
             ("Meu CRMV",            "Registro profissional"),
             ("Receituario",         "Emissao de receitas"),
             ("Diagnostico IA",      "Analise clinica com IA"),
             ("Protocolos",          "Protocolos sanitarios"),
+            ("Campanhas",           "Vacinacao por safra"),
             ("Exames Lab",          "Exames laboratoriais"),
             ("Monitoramento",       "Pos-tratamento e follow-up"),
+            ("Historico PDF",       "Historico clinico do animal"),
             ("Agenda Visitas",      "Visitas tecnicas"),
             ("Relatorio Visita",    "Laudos de visita"),
             ("Painel Saude",        "Estatisticas do rebanho"),
+            ("Mapa Epidemio",       "Epidemiologia cruzada"),
             ("Controle Carencia",   "Periodo de abate"),
             ("Financeiro Vet",      "Honorarios e faturamento"),
         ]
@@ -4445,6 +4452,11 @@ _ROTAS = {
     "Exames Lab":           page_exames_laboratoriais,
     "Monitoramento":        page_monitoramento,
     "Financeiro Vet":       page_gestao_financeira_vet,
+    "Meu Dashboard":        page_dashboard_produtividade,
+    "Mapa Epidemio":        page_mapa_epidemiologico,
+    "Mensagens":            page_inbox,
+    "Campanhas":            page_campanhas_vacinacao,
+    "Historico PDF":        page_historico_clinico_pdf,
 }
 
 
