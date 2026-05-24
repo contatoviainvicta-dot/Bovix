@@ -3405,7 +3405,7 @@ def listar_campanhas(vet_id):
 
 
 def adicionar_lote_campanha(campanha_id, lote_id, meta_animais):
-    """Adiciona lote a uma campanha."""
+    """Adiciona lote a campanha e agenda a vacina no calendario sanitario."""
     _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
@@ -3417,6 +3417,30 @@ def adicionar_lote_campanha(campanha_id, lote_id, meta_animais):
             (campanha_id, lote_id, int(meta_animais))
         )
         conn.commit()
+
+    # Buscar dados da campanha para agendar no calendario
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT vet_id,nome,vacina,data_inicio "
+                f"FROM campanhas_vacinacao WHERE id={p}",
+                (campanha_id,)
+            )
+            camp = cur.fetchone()
+        if camp:
+            vet_id, nome_camp, vacina, dt_ini = camp
+            obs = f"Campanha: {nome_camp}"
+            adicionar_vacina_agenda(
+                lote_id=lote_id,
+                nome_vacina=vacina,
+                data_prevista=str(dt_ini),
+                observacao=obs,
+                agendado_por=vet_id
+            )
+    except Exception:
+        pass
+
     return True
 
 
@@ -3438,11 +3462,34 @@ def listar_lotes_campanha(campanha_id):
 
 
 def registrar_vacinacao_campanha(campanha_lote_id, vacinados, data_exec=None):
-    """Registra execucao da vacinacao em um lote da campanha."""
+    """Registra execucao: atualiza campanha, confirma vacina no calendario
+    e registra ocorrencia Vacinacao no prontuario dos animais."""
     _garantir_tabelas_vet()
     from datetime import date
     p  = _ph()
     dt = str(data_exec or date.today())
+
+    # Buscar dados do lote e campanha
+    lote_id = None
+    vacina  = None
+    nome_camp = None
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT cl.lote_id, c.vacina, c.nome "
+                f"FROM campanha_lotes cl "
+                f"JOIN campanhas_vacinacao c ON c.id=cl.campanha_id "
+                f"WHERE cl.id={p}",
+                (campanha_lote_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                lote_id, vacina, nome_camp = row[0], row[1], row[2]
+    except Exception:
+        pass
+
+    # Atualizar campanha_lotes
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -3451,6 +3498,43 @@ def registrar_vacinacao_campanha(campanha_lote_id, vacinados, data_exec=None):
             (int(vacinados), dt, campanha_lote_id)
         )
         conn.commit()
+
+    # Confirmar vacina no calendario sanitario (se existir)
+    if lote_id and vacina:
+        try:
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    f"SELECT id FROM vacinas_agenda "
+                    f"WHERE lote_id={p} AND nome_vacina={p} "
+                    f"AND status='pendente' LIMIT 1",
+                    (lote_id, vacina)
+                )
+                vac_row = cur.fetchone()
+            if vac_row:
+                registrar_vacina_realizada(
+                    vac_row[0], dt,
+                    obs_extra=f"Campanha: {nome_camp}"
+                )
+        except Exception:
+            pass
+
+        # Registrar ocorrencia em todos os animais do lote
+        obs_oc = f"Vacinacao em campanha: {nome_camp} | {vacina}"
+        animais = listar_animais_por_lote(lote_id)
+        for an in animais:
+            try:
+                adicionar_ocorrencia(
+                    animal_id=an[0], data=dt,
+                    tipo="Vacinacao",
+                    descricao=obs_oc,
+                    gravidade="Baixa",
+                    custo=0, dias_recuperacao=0,
+                    status="Resolvido"
+                )
+            except Exception:
+                pass
+
     return True
 
 
