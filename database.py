@@ -367,6 +367,44 @@ _MIGRATIONS = [
     (6, "coluna_crmv_usuarios", [
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS crmv TEXT DEFAULT NULL",
     ]),
+    (7, "planos_e_notificacoes", [
+        # Colunas de plano na tabela usuarios
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano TEXT DEFAULT 'free'",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_nome TEXT DEFAULT 'Free'",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS plano_expira TEXT DEFAULT NULL",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS limite_animais INTEGER DEFAULT 50",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS limite_fazendas INTEGER DEFAULT 1",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS trial_inicio TEXT DEFAULT NULL",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS status_conta TEXT DEFAULT 'ativo'",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS onboarding_completo INTEGER DEFAULT 0",
+        # Tabela de log de emails
+        """CREATE TABLE IF NOT EXISTS email_log (
+            id              {pk},
+            destinatario    TEXT NOT NULL,
+            assunto         TEXT NOT NULL,
+            corpo           TEXT NOT NULL,
+            status          TEXT NOT NULL DEFAULT 'pendente',
+            erro            TEXT DEFAULT NULL,
+            criado_em       TEXT NOT NULL,
+            enviado_em      TEXT DEFAULT NULL
+        )""",
+        # Tabela de configuracoes do sistema
+        """CREATE TABLE IF NOT EXISTS config_sistema (
+            chave  TEXT PRIMARY KEY,
+            valor  TEXT NOT NULL,
+            tipo   TEXT NOT NULL DEFAULT 'string',
+            descricao TEXT DEFAULT ''
+        )""",
+    ]),
+    (8, "onboarding_steps", [
+        """CREATE TABLE IF NOT EXISTS onboarding_log (
+            id          {pk},
+            user_id     INTEGER NOT NULL,
+            passo       TEXT NOT NULL,
+            completo    INTEGER NOT NULL DEFAULT 0,
+            criado_em   TEXT NOT NULL
+        )""",
+    ]),
 ]
 
 
@@ -4156,6 +4194,481 @@ def historico_clinico_animal(animal_id):
         dados["carencia"] = []
 
     return dados
+
+
+# ── PLANOS E LIMITES ─────────────────────────────────────────
+_PLANOS = {
+    "free": {
+        "nome":            "Free",
+        "preco":           0,
+        "limite_animais":  50,
+        "limite_fazendas": 1,
+        "modulo_vet":      False,
+        "descricao":       "Ate 50 animais, 1 fazenda, funcoes basicas",
+    },
+    "pro": {
+        "nome":            "Pro",
+        "preco":           99,
+        "limite_animais":  500,
+        "limite_fazendas": 3,
+        "modulo_vet":      False,
+        "descricao":       "Ate 500 animais, 3 fazendas, relatorios avancados",
+    },
+    "vet": {
+        "nome":            "Vet",
+        "preco":           199,
+        "limite_animais":  2000,
+        "limite_fazendas": 10,
+        "modulo_vet":      True,
+        "descricao":       "Ilimitado para vets, ate 10 fazendas atendidas",
+    },
+    "enterprise": {
+        "nome":            "Enterprise",
+        "preco":           0,
+        "limite_animais":  999999,
+        "limite_fazendas": 999,
+        "modulo_vet":      True,
+        "descricao":       "Personalizado, suporte dedicado",
+    },
+}
+
+
+def buscar_usuario_por_email(email):
+    """Busca usuario por email. Retorna dict ou None."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT id,nome,email,perfil,fazenda_id,"
+            f"COALESCE(owner_id,id) as owner_id "
+            f"FROM usuarios WHERE email={p}",
+            (email,)
+        )
+        r = cur.fetchone()
+    if not r:
+        return None
+    return dict(id=r[0], nome=r[1], email=r[2],
+                perfil=r[3], fazenda_id=r[4], owner_id=r[5])
+
+
+def obter_plano(user_id):
+    """Retorna dados do plano do usuario."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT plano, plano_nome, plano_expira, "
+                f"limite_animais, limite_fazendas, status_conta "
+                f"FROM usuarios WHERE id={p}",
+                (user_id,)
+            )
+            r = cur.fetchone()
+        if not r:
+            return _PLANOS["free"]
+        plano_key = (r[0] or "free").lower()
+        dados = _PLANOS.get(plano_key, _PLANOS["free"]).copy()
+        dados["plano_key"]   = plano_key
+        dados["plano_expira"] = r[2]
+        dados["status_conta"] = r[5] or "ativo"
+        return dados
+    except Exception:
+        return _PLANOS["free"]
+
+
+def atualizar_plano(user_id, plano_key, expira=None):
+    """Atualiza plano do usuario."""
+    info = _PLANOS.get(plano_key, _PLANOS["free"])
+    p    = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE usuarios SET plano={p}, plano_nome={p}, "
+            f"plano_expira={p}, limite_animais={p}, limite_fazendas={p} "
+            f"WHERE id={p}",
+            (plano_key, info["nome"], expira,
+             info["limite_animais"], info["limite_fazendas"],
+             user_id)
+        )
+        conn.commit()
+    return True
+
+
+def verificar_limite_animais(user_id):
+    """Retorna (atual, limite, pode_adicionar)."""
+    p = _ph()
+    plano = obter_plano(user_id)
+    limite = plano.get("limite_animais", 50)
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT COUNT(*) FROM animais a "
+                f"JOIN lotes l ON l.id=a.lote_id "
+                f"WHERE l.owner_id={p} AND a.ativo=1",
+                (user_id,)
+            )
+            atual = cur.fetchone()[0]
+        return atual, limite, atual < limite
+    except Exception:
+        return 0, limite, True
+
+
+def verificar_limite_fazendas(user_id):
+    """Retorna (atual, limite, pode_adicionar). Para fazendeiros."""
+    plano  = obter_plano(user_id)
+    limite = plano.get("limite_fazendas", 1)
+    # Fazendeiros: 1 conta = 1 fazenda (mas sub-usuarios contam)
+    return 1, limite, True
+
+
+# ── EMAIL NOTIFICATIONS ───────────────────────────────────────
+def _smtp_config():
+    """Retorna config SMTP dos secrets do Streamlit."""
+    try:
+        import streamlit as st
+        cfg = st.secrets.get("smtp", {})
+        return {
+            "host":     cfg.get("host", "smtp.gmail.com"),
+            "port":     int(cfg.get("port", 587)),
+            "user":     cfg.get("user", ""),
+            "password": cfg.get("password", ""),
+            "from":     cfg.get("from_email", cfg.get("user", "")),
+        }
+    except Exception:
+        return {}
+
+
+def enviar_email(destinatario, assunto, corpo_html, corpo_txt=""):
+    """Envia email via SMTP. Registra no email_log independente do resultado."""
+    from datetime import datetime
+    p  = _ph()
+    dt = datetime.utcnow().isoformat()
+
+    # Registrar tentativa
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            if _usar_postgres():
+                cur.execute(
+                    f"INSERT INTO email_log "
+                    f"(destinatario,assunto,corpo,status,criado_em) "
+                    f"VALUES({p},{p},{p},'pendente',{p}) RETURNING id",
+                    (destinatario, assunto, corpo_txt or corpo_html, dt)
+                )
+                log_id = cur.fetchone()[0]
+            else:
+                cur.execute(
+                    f"INSERT INTO email_log "
+                    f"(destinatario,assunto,corpo,status,criado_em) "
+                    f"VALUES({p},{p},{p},'pendente',{p})",
+                    (destinatario, assunto, corpo_txt or corpo_html, dt)
+                )
+                log_id = cur.lastrowid
+            conn.commit()
+    except Exception:
+        log_id = None
+
+    # Tentar envio SMTP
+    cfg = _smtp_config()
+    if not cfg.get("user") or not cfg.get("password"):
+        _log_db.warning("SMTP nao configurado — email nao enviado para %s",
+                       destinatario)
+        return False, "SMTP nao configurado"
+
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = assunto
+        msg["From"]    = cfg["from"]
+        msg["To"]      = destinatario
+
+        if corpo_txt:
+            msg.attach(MIMEText(corpo_txt, "plain", "utf-8"))
+        msg.attach(MIMEText(corpo_html, "html", "utf-8"))
+
+        with smtplib.SMTP(cfg["host"], cfg["port"]) as server:
+            server.starttls()
+            server.login(cfg["user"], cfg["password"])
+            server.sendmail(cfg["from"], [destinatario], msg.as_string())
+
+        # Marcar como enviado
+        if log_id:
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    f"UPDATE email_log SET status='enviado', "
+                    f"enviado_em={p} WHERE id={p}",
+                    (datetime.utcnow().isoformat(), log_id)
+                )
+                conn.commit()
+
+        _log_db.info("Email enviado para %s | assunto: %s", destinatario, assunto)
+        return True, "ok"
+
+    except Exception as e:
+        erro = str(e)
+        _log_db.error("Falha ao enviar email para %s: %s", destinatario, erro)
+        if log_id:
+            try:
+                with _conexao() as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"UPDATE email_log SET status='erro', erro={p} "
+                        f"WHERE id={p}",
+                        (erro[:500], log_id)
+                    )
+                    conn.commit()
+            except Exception:
+                pass
+        return False, erro
+
+
+def enviar_email_boas_vindas(nome, email, plano="free"):
+    """Email de boas-vindas ao novo usuario."""
+    info  = _PLANOS.get(plano, _PLANOS["free"])
+    html  = f"""
+    <html><body style='font-family:sans-serif;max-width:600px;margin:auto'>
+    <div style='background:#1B4332;padding:20px;text-align:center'>
+        <h1 style='color:white;margin:0'>🐄 BOVIX</h1>
+        <p style='color:#40916C;margin:5px 0'>Sistema de Gestao Pecuaria</p>
+    </div>
+    <div style='padding:30px;background:#f9f9f9'>
+        <h2 style='color:#1B4332'>Bem-vindo(a), {nome}!</h2>
+        <p>Sua conta foi criada com sucesso no plano <strong>{info['nome']}</strong>.</p>
+        <p>Com o BOVIX voce pode:</p>
+        <ul>
+            <li>Gerenciar animais, pesagens e lotes</li>
+            <li>Acompanhar o calendario sanitario</li>
+            <li>Gerar relatorios de desempenho</li>
+            {'<li>Usar o modulo veterinario completo</li>' if info['modulo_vet'] else ''}
+        </ul>
+        <p>Seu limite atual: <strong>{info['limite_animais']} animais</strong> e
+        <strong>{info['limite_fazendas']} fazenda(s)</strong>.</p>
+        <div style='background:#1B4332;padding:15px;border-radius:8px;text-align:center;margin-top:20px'>
+            <p style='color:white;margin:0'>Qualquer duvida, responda este email.</p>
+        </div>
+    </div>
+    </body></html>
+    """
+    txt = f"Bem-vindo(a) ao BOVIX, {nome}! Plano: {info['nome']}."
+    return enviar_email(email, "Bem-vindo ao BOVIX!", html, txt)
+
+
+def enviar_email_alerta_diario(nome, email, alertas):
+    """Email diario com resumo de alertas."""
+    if not alertas:
+        return False, "sem alertas"
+
+    itens_html = "".join(
+        f"<li style='margin:8px 0'>{a}</li>"
+        for a in alertas
+    )
+    html = f"""
+    <html><body style='font-family:sans-serif;max-width:600px;margin:auto'>
+    <div style='background:#1B4332;padding:20px;text-align:center'>
+        <h1 style='color:white;margin:0'>🐄 BOVIX</h1>
+    </div>
+    <div style='padding:30px'>
+        <h2 style='color:#1B4332'>Ola, {nome}!</h2>
+        <p>Resumo de alertas do dia:</p>
+        <ul style='background:#f5f0e8;padding:20px;border-radius:8px'>
+            {itens_html}
+        </ul>
+        <p style='color:#888;font-size:12px'>
+            Voce recebe este email porque tem alertas ativos no BOVIX.
+        </p>
+    </div>
+    </body></html>
+    """
+    txt = f"BOVIX Alertas - {nome}:\n" + "\n".join(f"- {a}" for a in alertas)
+    return enviar_email(
+        email, f"BOVIX — {len(alertas)} alerta(s) hoje", html, txt
+    )
+
+
+# ── ONBOARDING ────────────────────────────────────────────────
+_PASSOS_ONBOARDING = [
+    ("perfil",     "Complete seu perfil"),
+    ("fazenda",    "Configure sua fazenda"),
+    ("lote",       "Crie seu primeiro lote"),
+    ("animais",    "Cadastre seus animais"),
+    ("calendario", "Configure o calendario sanitario"),
+    ("alertas",    "Configure seus alertas"),
+]
+
+
+def obter_progresso_onboarding(user_id):
+    """Retorna dict {passo: completo} para o usuario."""
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            p = _ph()
+            cur.execute(
+                f"SELECT passo, completo FROM onboarding_log "
+                f"WHERE user_id={p}",
+                (user_id,)
+            )
+            rows = {r[0]: bool(r[1]) for r in cur.fetchall()}
+        return {passo: rows.get(passo, False)
+                for passo, _ in _PASSOS_ONBOARDING}
+    except Exception:
+        return {passo: False for passo, _ in _PASSOS_ONBOARDING}
+
+
+def marcar_passo_onboarding(user_id, passo):
+    """Marca passo do onboarding como completo."""
+    from datetime import date
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            if _usar_postgres():
+                cur.execute(
+                    f"INSERT INTO onboarding_log "
+                    f"(user_id,passo,completo,criado_em) "
+                    f"VALUES({p},{p},1,{p}) "
+                    f"ON CONFLICT(user_id,passo) DO UPDATE SET completo=1",
+                    (user_id, passo, str(date.today()))
+                )
+            else:
+                cur.execute(
+                    f"INSERT OR REPLACE INTO onboarding_log "
+                    f"(user_id,passo,completo,criado_em) "
+                    f"VALUES({p},{p},1,{p})",
+                    (user_id, passo, str(date.today()))
+                )
+            conn.commit()
+        # Verificar se todos os passos foram concluidos
+        prog = obter_progresso_onboarding(user_id)
+        if all(prog.values()):
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    f"UPDATE usuarios SET onboarding_completo=1 WHERE id={p}",
+                    (user_id,)
+                )
+                conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+def onboarding_completo(user_id):
+    """Verifica se o usuario completou o onboarding."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT onboarding_completo FROM usuarios WHERE id={p}",
+                (user_id,)
+            )
+            r = cur.fetchone()
+        return bool(r and r[0])
+    except Exception:
+        return True  # Em caso de erro, nao bloquear
+
+
+# ── IMPORTACAO CSV ────────────────────────────────────────────
+def importar_animais_csv(lote_id, linhas_csv):
+    """Importa animais de lista de dicts.
+    Colunas esperadas: identificacao, raca, sexo, idade, peso_entrada.
+    Retorna (n_ok, n_erro, erros)."""
+    n_ok = n_erro = 0
+    erros = []
+
+    for i, linha in enumerate(linhas_csv, 1):
+        try:
+            ident = str(linha.get("identificacao", "")).strip()
+            if not ident:
+                erros.append(f"Linha {i}: identificacao obrigatoria")
+                n_erro += 1
+                continue
+
+            raca        = str(linha.get("raca", "")).strip() or "Nao informada"
+            sexo        = str(linha.get("sexo", "M")).strip().upper()
+            if sexo not in ("M","F"):
+                sexo = "M"
+            idade       = int(float(linha.get("idade", 0) or 0))
+            peso_entrada = float(linha.get("peso_entrada", 0) or 0)
+            peso_alvo   = float(linha.get("peso_alvo", 0) or 0)
+            obs         = str(linha.get("observacoes", "")).strip()
+
+            adicionar_animal(
+                lote_id=lote_id,
+                identificacao=ident,
+                raca=raca, sexo=sexo,
+                idade=idade,
+                peso_entrada=peso_entrada,
+                peso_alvo=peso_alvo,
+                observacoes=obs
+            )
+            n_ok += 1
+        except Exception as e:
+            erros.append(f"Linha {i}: {e}")
+            n_erro += 1
+
+    return n_ok, n_erro, erros
+
+
+def importar_pesagens_csv(linhas_csv, owner_id):
+    """Importa pesagens de lista de dicts.
+    Colunas esperadas: identificacao (brinco), data (YYYY-MM-DD), peso.
+    Retorna (n_ok, n_erro, erros)."""
+    from datetime import datetime
+    n_ok = n_erro = 0
+    erros = []
+    p = _ph()
+
+    for i, linha in enumerate(linhas_csv, 1):
+        try:
+            ident = str(linha.get("identificacao", "")).strip()
+            data  = str(linha.get("data", "")).strip()
+            peso  = float(linha.get("peso", 0) or 0)
+
+            if not ident or not data or not peso:
+                erros.append(f"Linha {i}: identificacao, data e peso obrigatorios")
+                n_erro += 1
+                continue
+
+            # Normalizar data
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                try:
+                    data = datetime.strptime(data, fmt).strftime("%Y-%m-%d")
+                    break
+                except ValueError:
+                    continue
+
+            # Buscar animal por identificacao no lote do owner
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    f"SELECT a.id FROM animais a "
+                    f"WHERE a.identificacao={p} "
+                    f"AND a.lote_id IN "
+                    f"(SELECT id FROM lotes WHERE owner_id={p}) "
+                    f"LIMIT 1",
+                    (ident, owner_id)
+                )
+                row = cur.fetchone()
+
+            if not row:
+                erros.append(f"Linha {i}: animal '{ident}' nao encontrado")
+                n_erro += 1
+                continue
+
+            adicionar_pesagem(row[0], peso, data)
+            n_ok += 1
+
+        except Exception as e:
+            erros.append(f"Linha {i}: {e}")
+            n_erro += 1
+
+    return n_ok, n_erro, erros
 
 
 def lancar_honorario(vet_id, fazenda_owner_id, descricao, valor,
