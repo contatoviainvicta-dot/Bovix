@@ -5011,18 +5011,21 @@ _ROTAS = {
 page_fn = _ROTAS.get(menu)
 if page_fn:
     # Banner onboarding para usuarios novos
-    from database import onboarding_completo as _ob_ok
-    _oid_on = u.get("owner_id") or u["id"]
-    if not _ob_ok(_oid_on) and _page != "Onboarding":
-        from database import obter_progresso_onboarding, _PASSOS_ONBOARDING
-        _prog_on = obter_progresso_onboarding(_oid_on)
-        _conc_on = sum(1 for v in _prog_on.values() if v)
-        _tot_on  = len(_PASSOS_ONBOARDING)
-        if _conc_on < _tot_on:
-            st.info(
-                f"Configure o BOVIX: {_conc_on}/{_tot_on} passos concluidos. "
-                f"[Abrir configuracao](?page=Onboarding)"
-            )
+    try:
+        from database import onboarding_completo as _ob_ok
+        _oid_on = u.get("owner_id") or u["id"]
+        if not _ob_ok(_oid_on) and menu != "Onboarding":
+            from database import obter_progresso_onboarding, _PASSOS_ONBOARDING
+            _prog_on = obter_progresso_onboarding(_oid_on)
+            _conc_on = sum(1 for v in _prog_on.values() if v)
+            _tot_on  = len(_PASSOS_ONBOARDING)
+            if _conc_on < _tot_on:
+                st.info(
+                    f"Configure o BOVIX: {_conc_on}/{_tot_on} passos concluidos. "
+                    "Acesse **Sistema → Onboarding** para continuar."
+                )
+    except Exception:
+        pass
     page_fn(u)
 else:
     st.error(f"Tela '{menu}' nao encontrada.")
