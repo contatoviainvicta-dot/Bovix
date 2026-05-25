@@ -267,7 +267,7 @@ def page_protocolos(u):
                             df_i[["Dia","Tipo","Nome","Obs"]].rename(
                                 columns={"Dia":"Dia (offset)"}
                             ),
-                            use_container_width=True, hide_index=True
+                            width='stretch', hide_index=True
                         )
                     else:
                         st.caption("Nenhum item neste protocolo.")
@@ -849,7 +849,7 @@ def page_painel_saude(u):
         with c_g:
             st.bar_chart(df_tipos.set_index("Tipo"))
         with c_t:
-            st.dataframe(df_tipos, hide_index=True, use_container_width=True)
+            st.dataframe(df_tipos, hide_index=True, width='stretch')
     else:
         st.info("Nenhuma ocorrencia registrada nesta fazenda.")
 
@@ -865,7 +865,7 @@ def page_painel_saude(u):
         df_car["Liberacao"] = df_car["Liberacao"].apply(_fmt_dt)
         st.dataframe(
             df_car[["Brinco","Medicamento","Data Aplicacao","Dias","Liberacao"]],
-            use_container_width=True, hide_index=True
+            width='stretch', hide_index=True
         )
     else:
         st.success("Nenhum animal em periodo de carencia.")
@@ -965,7 +965,7 @@ def page_controle_carencia(u):
 
             st.dataframe(
                 df_c[["Brinco","Medicamento","Data Aplicacao","Liberacao","Dias rest."]],
-                use_container_width=True, hide_index=True
+                width='stretch', hide_index=True
             )
 
 
@@ -1374,7 +1374,7 @@ def page_gestao_financeira_vet(u):
                         )
                         st.dataframe(
                             df_i[["Descricao","Qtd","Valor Unit","Total"]],
-                            use_container_width=True,
+                            width='stretch',
                             hide_index=True
                         )
 
@@ -1532,7 +1532,7 @@ def page_gestao_financeira_vet(u):
                  for r in res_sel["por_fazenda"]],
                 columns=["Fazenda","Lançamentos","Total"]
             )
-            st.dataframe(df_faz, use_container_width=True,
+            st.dataframe(df_faz, width='stretch',
                         hide_index=True)
 
         # Gráfico últimos 12 meses
@@ -1566,7 +1566,7 @@ def page_gestao_financeira_vet(u):
                 columns=["Data","Fazenda","Descricao",
                          "Tipo","Valor","Status"]
             )
-            st.dataframe(df_ext, use_container_width=True,
+            st.dataframe(df_ext, width='stretch',
                         hide_index=True)
         else:
             st.info("Nenhum lançamento neste período.")
@@ -1621,7 +1621,7 @@ def page_mapa_epidemiologico(u):
 
         if rows_comp:
             df_comp = pd.DataFrame(rows_comp)
-            st.dataframe(df_comp, use_container_width=True, hide_index=True)
+            st.dataframe(df_comp, width='stretch', hide_index=True)
 
             st.divider()
             st.subheader("Distribuicao de Ocorrencias por Tipo")
@@ -1651,7 +1651,7 @@ def page_mapa_epidemiologico(u):
                             st.bar_chart(df_f.set_index("Tipo"))
                         with c_t:
                             st.dataframe(df_f, hide_index=True,
-                                        use_container_width=True)
+                                        width='stretch')
 
     # ── ABA 2: Mapa geografico ────────────────────────────────────────────
     with t2:
@@ -1695,7 +1695,7 @@ def page_mapa_epidemiologico(u):
                              "ocorrencias":"Ocorrencias",
                              "taxa_mort":"Taxa Mort %"}
                 ),
-                use_container_width=True, hide_index=True
+                width='stretch', hide_index=True
             )
         else:
             st.warning("Cadastre coordenadas das fazendas para ver o mapa.")
@@ -1955,7 +1955,7 @@ def page_campanhas_vacinacao(u):
                         st.dataframe(
                             df_lc[["Nome","Meta","Vacinados",
                                    "Cobertura %","Status","Execucao"]],
-                            use_container_width=True, hide_index=True
+                            width='stretch', hide_index=True
                         )
 
                     if obs_c:
@@ -2163,7 +2163,7 @@ def page_historico_clinico_pdf(u):
 
     st.divider()
     if st.button("Gerar PDF do Historico Clinico",
-                type="primary", use_container_width=True):
+                type="primary", width='stretch'):
         try:
             from pdf_vet import gerar_pdf_historico_animal
             pdf_bytes = gerar_pdf_historico_animal(
@@ -2176,7 +2176,7 @@ def page_historico_clinico_pdf(u):
                 data=pdf_bytes,
                 file_name=f"historico_{an_p.replace(' ','_')}.pdf",
                 mime="application/pdf",
-                use_container_width=True
+                width='stretch'
             )
         except Exception as e:
             st.error(f"Erro ao gerar PDF: {e}")
