@@ -71,7 +71,7 @@ def page_calendario_sanitario(u):
             )
             st.dataframe(
                 df_v[["","Lote","Vacina","Previsto","Realizado","Status","Obs"]],
-                use_container_width=True, hide_index=True
+                width='stretch', hide_index=True
             )
         else:
             st.info("Nenhuma vacina agendada.")
