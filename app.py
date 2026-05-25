@@ -4339,6 +4339,7 @@ from _pages.sistema    import (page_inicio, page_buscar_animal, page_notificacoe
     page_log_auditoria, page_administracao, page_gestao_usuarios)
 from _pages.crescimento import (page_importar_csv, page_onboarding,
     page_planos, page_notificacoes_email)
+from _pages.dashboard_exec import page_dashboard_executivo
 
 try:
     from exports import gerar_excel_lote, gerar_excel_sanitario, gerar_pdf_relatorio
@@ -5235,6 +5236,7 @@ _ROTAS = {
     "Onboarding":           page_onboarding,
     "Planos":               page_planos,
     "Email Alertas":        page_notificacoes_email,
+    "Dashboard Financeiro": page_dashboard_executivo,
 }
 
 
