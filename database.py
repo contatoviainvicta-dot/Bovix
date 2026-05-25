@@ -405,6 +405,26 @@ _MIGRATIONS = [
             criado_em   TEXT NOT NULL
         )""",
     ]),
+    (9, "custos_lote_e_dre", [
+        """CREATE TABLE IF NOT EXISTS custos_lote (
+            id              {pk},
+            lote_id         INTEGER NOT NULL,
+            categoria       TEXT NOT NULL DEFAULT 'outros',
+            descricao       TEXT NOT NULL,
+            valor           REAL NOT NULL DEFAULT 0,
+            data_lancamento TEXT NOT NULL,
+            observacoes     TEXT DEFAULT ''
+        )""",
+        """CREATE TABLE IF NOT EXISTS dre_entradas (
+            id          {pk},
+            owner_id    INTEGER NOT NULL,
+            descricao   TEXT NOT NULL,
+            valor       REAL NOT NULL DEFAULT 0,
+            categoria   TEXT NOT NULL DEFAULT 'venda',
+            data_ref    TEXT NOT NULL,
+            lote_id     INTEGER DEFAULT NULL
+        )""",
+    ]),
 ]
 
 
@@ -4231,6 +4251,351 @@ _PLANOS = {
         "descricao":       "Personalizado, suporte dedicado",
     },
 }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DASHBOARD FINANCEIRO DO FAZENDEIRO
+# ═══════════════════════════════════════════════════════════════════════════
+
+def adicionar_custo_lote(lote_id, categoria, descricao, valor,
+                         data_lancamento, observacoes=""):
+    """Lança custo variável no lote (ração, medicamento, frete, etc)."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO custos_lote "
+                f"(lote_id,categoria,descricao,valor,data_lancamento,observacoes)"
+                f" VALUES({p},{p},{p},{p},{p},{p}) RETURNING id",
+                (lote_id, categoria, descricao, float(valor),
+                 str(data_lancamento or date.today()), observacoes or "")
+            )
+            return cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO custos_lote "
+                f"(lote_id,categoria,descricao,valor,data_lancamento,observacoes)"
+                f" VALUES({p},{p},{p},{p},{p},{p})",
+                (lote_id, categoria, descricao, float(valor),
+                 str(data_lancamento or date.today()), observacoes or "")
+            )
+            return cur.lastrowid
+
+
+def listar_custos_lote(lote_id):
+    """Lista todos os custos de um lote."""
+    _garantir_tabelas_vet()
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT id,lote_id,categoria,descricao,valor,"
+            f"data_lancamento,observacoes "
+            f"FROM custos_lote WHERE lote_id={p} ORDER BY data_lancamento DESC",
+            (lote_id,)
+        )
+        return cur.fetchall()
+
+
+def margem_bruta_lote(lote_id):
+    """Calcula margem bruta completa do lote.
+    Retorna dict com todos os componentes financeiros."""
+    from datetime import date
+    p = _ph()
+
+    # Dados básicos do lote
+    lote = obter_lote(lote_id)
+    if not lote:
+        return {}
+
+    nome_lote  = lote[1]
+    qtd        = int(lote[5] or lote[4] or 0)  # qtd_recebida ou comprada
+    preco_ua   = float(lote[9] or 0)            # preco_por_animal
+    data_entr  = str(lote[3])[:10]
+    data_vend  = str(lote[10])[:10] if len(lote) > 10 and lote[10] else None
+
+    # Custo de compra
+    custo_compra = preco_ua * qtd
+
+    # Custos variáveis lançados
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT COALESCE(SUM(valor),0),categoria "
+                f"FROM custos_lote WHERE lote_id={p} "
+                f"GROUP BY categoria",
+                (lote_id,)
+            )
+            custos_var = {r[1]: float(r[0]) for r in cur.fetchall()}
+    except Exception:
+        custos_var = {}
+
+    total_custos_var = sum(custos_var.values())
+
+    # Receita de venda (se lote já foi vendido)
+    receita_venda = 0.0
+    preco_venda_kg = 0.0
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT preco_venda_kg,peso_total_kg FROM vendas_lote "
+                f"WHERE lote_id={p} ORDER BY id DESC LIMIT 1",
+                (lote_id,)
+            )
+            row = cur.fetchone()
+            if row:
+                preco_venda_kg = float(row[0])
+                receita_venda  = preco_venda_kg * float(row[1])
+    except Exception:
+        pass
+
+    # Projeção de receita (se não vendido ainda)
+    receita_projetada = 0.0
+    animais = listar_animais_por_lote(lote_id)
+    n_ativos = len([a for a in animais if a])
+    peso_medio_atual = 0.0
+    peso_medio_alvo  = 0.0
+
+    if animais:
+        pesos_atuais = []
+        pesos_alvo   = []
+        for a in animais:
+            pes = listar_pesagens(a[0])
+            if pes:
+                pesos_atuais.append(float(pes[-1][2]))
+            peso_alvo_a = float(a[7] or 0) if len(a) > 7 else 0
+            if peso_alvo_a:
+                pesos_alvo.append(peso_alvo_a)
+
+        if pesos_atuais:
+            peso_medio_atual = sum(pesos_atuais) / len(pesos_atuais)
+        if pesos_alvo:
+            peso_medio_alvo = sum(pesos_alvo) / len(pesos_alvo)
+
+        # Usar cotação CEPEA ou padrão R$15/kg
+        try:
+            cotacao = obter_cotacao_boi_gordo() or 15.0
+        except Exception:
+            cotacao = 15.0
+
+        peso_ref = peso_medio_alvo if peso_medio_alvo > 0 else peso_medio_atual
+        if peso_ref > 0 and cotacao > 0:
+            # @ = arroba = 15kg
+            receita_projetada = (peso_ref / 15) * cotacao * n_ativos
+
+    # Cálculos finais
+    custo_total = custo_compra + total_custos_var
+    receita     = receita_venda if receita_venda > 0 else receita_projetada
+    margem_r    = receita - custo_total
+    margem_pct  = round(100 * margem_r / max(receita, 1), 1) if receita > 0 else 0
+
+    # Dias no confinamento
+    try:
+        from datetime import datetime
+        d_ini = datetime.strptime(data_entr, "%Y-%m-%d").date()
+        d_ref = datetime.strptime(data_vend, "%Y-%m-%d").date()                 if data_vend else date.today()
+        dias_conf = (d_ref - d_ini).days
+    except Exception:
+        dias_conf = 0
+
+    return {
+        "lote_id":          lote_id,
+        "nome":             nome_lote,
+        "n_animais":        n_ativos,
+        "qtd_comprada":     qtd,
+        "custo_compra":     custo_compra,
+        "custo_compra_ua":  preco_ua,
+        "custos_var":       custos_var,
+        "total_custos_var": total_custos_var,
+        "custo_total":      custo_total,
+        "custo_ua":         custo_total / max(n_ativos, 1),
+        "receita_venda":    receita_venda,
+        "receita_projetada":receita_projetada,
+        "receita":          receita,
+        "vendido":          receita_venda > 0,
+        "margem_r":         margem_r,
+        "margem_pct":       margem_pct,
+        "peso_medio_atual": round(peso_medio_atual, 1),
+        "peso_medio_alvo":  round(peso_medio_alvo, 1),
+        "dias_confinamento":dias_conf,
+        "data_entrada":     data_entr,
+        "data_venda":       data_vend,
+    }
+
+
+def dashboard_financeiro_fazendeiro(owner_id):
+    """Consolida todos os indicadores financeiros do fazendeiro.
+    Retorna dict com KPIs, lotes e alertas."""
+    from datetime import date
+    lotes = listar_lotes(owner_id=owner_id)
+    if not lotes:
+        return {"lotes": [], "kpis": {}, "alertas": [], "dre": {}}
+
+    # Calcular margem de cada lote
+    margens = []
+    for l in lotes:
+        try:
+            m = margem_bruta_lote(l[0])
+            if m:
+                margens.append(m)
+        except Exception:
+            pass
+
+    if not margens:
+        return {"lotes": [], "kpis": {}, "alertas": [], "dre": {}}
+
+    # KPIs consolidados
+    total_investido  = sum(m["custo_total"] for m in margens)
+    total_receita    = sum(m["receita"] for m in margens)
+    total_margem     = sum(m["margem_r"] for m in margens)
+    margem_media_pct = round(total_margem / max(total_receita, 1) * 100, 1)
+
+    lotes_positivos  = [m for m in margens if m["margem_r"] >= 0]
+    lotes_negativos  = [m for m in margens if m["margem_r"] < 0]
+    total_animais    = sum(m["n_animais"] for m in margens)
+    receita_proj     = sum(m["receita_projetada"] for m in margens
+                          if not m["vendido"])
+    vendidos         = [m for m in margens if m["vendido"]]
+    receita_real     = sum(m["receita_venda"] for m in vendidos)
+
+    kpis = {
+        "total_lotes":       len(margens),
+        "total_animais":     total_animais,
+        "total_investido":   total_investido,
+        "total_receita":     total_receita,
+        "total_margem":      total_margem,
+        "margem_pct":        margem_media_pct,
+        "lotes_positivos":   len(lotes_positivos),
+        "lotes_negativos":   len(lotes_negativos),
+        "receita_realizada": receita_real,
+        "receita_projetada": receita_proj,
+        "lotes_vendidos":    len(vendidos),
+    }
+
+    # Alertas financeiros
+    alertas = []
+    for m in margens:
+        if m["margem_pct"] < 0:
+            alertas.append({
+                "tipo": "perda",
+                "lote": m["nome"],
+                "msg":  f"Margem negativa: R$ {m['margem_r']:,.0f} "
+                        f"({m['margem_pct']}%)",
+                "prioridade": "alta",
+            })
+        elif m["margem_pct"] < 10:
+            alertas.append({
+                "tipo": "margem_baixa",
+                "lote": m["nome"],
+                "msg":  f"Margem baixa: {m['margem_pct']}% "
+                        f"(R$ {m['margem_r']:,.0f})",
+                "prioridade": "media",
+            })
+        if m["dias_confinamento"] > 180 and not m["vendido"]:
+            alertas.append({
+                "tipo": "prazo",
+                "lote": m["nome"],
+                "msg":  f"{m['dias_confinamento']} dias em confinamento "
+                        f"sem venda — custos crescendo",
+                "prioridade": "media",
+            })
+
+    # Ranking de lotes por margem
+    ranking = sorted(margens, key=lambda x: x["margem_r"], reverse=True)
+
+    # DRE simplificado
+    dre = {
+        "receita_bruta":    total_receita,
+        "custo_compra":     sum(m["custo_compra"] for m in margens),
+        "custos_var":       sum(m["total_custos_var"] for m in margens),
+        "custo_total":      total_investido,
+        "margem_bruta":     total_margem,
+        "margem_bruta_pct": margem_media_pct,
+    }
+
+    return {
+        "lotes":    margens,
+        "kpis":     kpis,
+        "alertas":  alertas,
+        "ranking":  ranking,
+        "dre":      dre,
+    }
+
+
+def calendario_abate(owner_id):
+    """Previsão de abate para todos os lotes ativos do fazendeiro."""
+    from datetime import date, timedelta
+    lotes = listar_lotes(owner_id=owner_id)
+    resultado = []
+
+    for l in lotes:
+        lote_id = l[0]
+        animais = listar_animais_por_lote(lote_id)
+        if not animais:
+            continue
+
+        datas_prev = []
+        pesos_atuais = []
+
+        for a in animais:
+            peso_alvo = float(a[7] or 450) if len(a) > 7 else 450
+            pes = listar_pesagens(a[0])
+            if len(pes) >= 2:
+                try:
+                    gmd = calcular_gmd_temporal(a[0])
+                    if gmd and gmd > 0:
+                        peso_ult = float(pes[-1][2])
+                        pesos_atuais.append(peso_ult)
+                        kg_faltam = max(0, peso_alvo - peso_ult)
+                        dias = int(kg_faltam / gmd)
+                        data_prev = date.today() + timedelta(days=dias)
+                        datas_prev.append(data_prev)
+                except Exception:
+                    pass
+            elif pes:
+                pesos_atuais.append(float(pes[-1][2]))
+
+        if not datas_prev:
+            continue
+
+        data_media   = date.fromordinal(
+            int(sum(d.toordinal() for d in datas_prev) / len(datas_prev))
+        )
+        peso_medio   = round(sum(pesos_atuais) / max(len(pesos_atuais), 1), 1)
+        dias_restant = (data_media - date.today()).days
+
+        try:
+            cotacao = obter_cotacao_boi_gordo() or 15.0
+        except Exception:
+            cotacao = 15.0
+
+        # Receita projetada no abate
+        peso_alvo_medio = 450
+        if animais:
+            alvos = [float(a[7] or 450) for a in animais if len(a) > 7]
+            if alvos:
+                peso_alvo_medio = sum(alvos) / len(alvos)
+
+        receita_proj = (peso_alvo_medio / 15) * cotacao * len(animais)
+
+        resultado.append({
+            "lote_id":       lote_id,
+            "nome":          l[1],
+            "n_animais":     len(animais),
+            "peso_atual":    peso_medio,
+            "peso_alvo":     round(peso_alvo_medio, 1),
+            "data_abate":    str(data_media),
+            "dias_restantes":dias_restant,
+            "receita_proj":  receita_proj,
+            "cotacao":       cotacao,
+        })
+
+    return sorted(resultado, key=lambda x: x["data_abate"])
 
 
 def buscar_usuario_por_email(email):
