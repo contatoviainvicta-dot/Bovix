@@ -443,32 +443,127 @@ def page_planos(u):
     st.divider()
     st.subheader("Todos os planos")
 
-    # Cards de planos
-    cols = st.columns(4)
+    # Cards de planos — design moderno
     planos_order = ["free","pro","vet","enterprise"]
+    _icones = {
+        "free":       ("ti-seedling",       "#F1EFE8", "#5F5E5A"),
+        "pro":        ("ti-chart-line",     "#E1F5EE", "#0F6E56"),
+        "vet":        ("ti-stethoscope",    "#E6F1FB", "#185FA5"),
+        "enterprise": ("ti-building-estate","#FAEEDA", "#854F0B"),
+    }
 
-    for i, plano_key in enumerate(planos_order):
-        info = _PLANOS[plano_key]
+    # CSS uma vez
+    st.markdown("""
+<style>
+.bx-planos{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:1rem 0}
+.bx-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);
+  border-radius:12px;padding:1.1rem 1rem;display:flex;flex-direction:column;gap:9px;position:relative}
+.bx-card.bx-dest{border:2px solid #1D9E75}
+.bx-badge{position:absolute;top:-11px;left:50%;transform:translateX(-50%);
+  background:#1D9E75;color:#04342C;font-size:11px;font-weight:500;
+  padding:2px 12px;border-radius:20px;white-space:nowrap}
+.bx-ico{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.bx-nome{font-size:14px;font-weight:500;color:var(--color-text-primary);margin:0}
+.bx-atual{display:inline-block;background:var(--color-background-secondary);
+  color:var(--color-text-secondary);font-size:10px;padding:1px 8px;
+  border-radius:20px;border:0.5px solid var(--color-border-tertiary)}
+.bx-preco{display:flex;align-items:baseline;gap:3px}
+.bx-valor{font-size:22px;font-weight:500;color:var(--color-text-primary)}
+.bx-per{font-size:11px;color:var(--color-text-secondary)}
+.bx-desc{font-size:11px;color:var(--color-text-secondary);line-height:1.4;margin:0}
+.bx-div{height:0.5px;background:var(--color-border-tertiary)}
+.bx-feats{display:flex;flex-direction:column;gap:5px}
+.bx-feat{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--color-text-secondary)}
+.bx-feat i{font-size:13px;flex-shrink:0}
+.bx-feat.ok i{color:#1D9E75}
+.bx-feat.no i{color:var(--color-text-tertiary)}
+.bx-bar-wrap{display:flex;flex-direction:column;gap:3px}
+.bx-bar-lbl{display:flex;justify-content:space-between;font-size:10px;color:var(--color-text-secondary)}
+.bx-bar{height:3px;border-radius:2px;background:var(--color-border-tertiary);overflow:hidden}
+.bx-bar-fill{height:100%;border-radius:2px;background:#1D9E75}
+.bx-cta{margin-top:auto;padding:7px 0;border-radius:8px;
+  border:0.5px solid var(--color-border-secondary);font-size:12px;
+  font-weight:500;cursor:pointer;background:transparent;
+  color:var(--color-text-primary);width:100%}
+.bx-cta.bx-cta-green{background:#1D9E75;color:#E1F5EE;border-color:#1D9E75}
+</style>
+""", unsafe_allow_html=True)
+
+    # Montar HTML dos cards
+    _html_cards = '<div class="bx-planos">'
+    _feats_map = {
+        "free":       [("ok","Ate 50 animais"),("ok","1 fazenda"),("ok","Calendario sanitario"),("no","Modulo veterinario"),("no","Relatorios avancados")],
+        "pro":        [("ok","Ate 500 animais"),("ok","3 fazendas"),("ok","Calendario sanitario"),("ok","Relatorios avancados"),("no","Modulo veterinario")],
+        "vet":        [("ok","Ate 2.000 animais"),("ok","10 fazendas"),("ok","Modulo veterinario"),("ok","Relatorios avancados"),("ok","Mapa epidemiologico")],
+        "enterprise": [("ok","Animais ilimitados"),("ok","Fazendas ilimitadas"),("ok","Tudo do plano Vet"),("ok","Suporte dedicado"),("ok","API personalizada")],
+    }
+    _popular = "pro"
+
+    for plano_key in planos_order:
+        info     = _PLANOS[plano_key]
         is_atual = (plano_key == plano_atual.get("plano_key","free"))
+        icone_cls, bg_ico, cor_ico = _icones[plano_key]
+        feats    = _feats_map[plano_key]
+        dest_cls = "bx-card bx-dest" if plano_key == _popular else "bx-card"
 
-        with cols[i]:
-            borda = "border:2px solid #1B4332" if is_atual else "border:1px solid #ddd"
-            st.markdown(
-                f"<div style='{borda};border-radius:12px;padding:16px;"
-                f"text-align:center;min-height:280px'>"
-                f"<h3 style='color:#1B4332;margin:0'>{info['nome']}</h3>"
-                f"<div style='font-size:28px;font-weight:bold;margin:10px 0'>"
-                f"{'Gratis' if info['preco']==0 and plano_key=='free' else 'Consulte' if plano_key=='enterprise' else f'R${info["preco"]}'}"
-                f"{'<small>/mes</small>' if info['preco']>0 and plano_key!='enterprise' else ''}"
-                f"</div>"
-                f"<p style='color:#666;font-size:13px'>{info['descricao']}</p>"
-                f"<p><b>{info['limite_animais'] if info['limite_animais']<9999 else 'Ilimitado'}</b> animais</p>"
-                f"<p><b>{info['limite_fazendas'] if info['limite_fazendas']<999 else 'Ilimitadas'}</b> fazenda(s)</p>"
-                f"{'<p style="color:#1B4332"><b>Modulo Vet</b></p>' if info['modulo_vet'] else ''}"
-                f"{'<p style="background:#1B4332;color:white;border-radius:6px;padding:4px">PLANO ATUAL</p>' if is_atual else ''}"
-                f"</div>",
-                unsafe_allow_html=True
-            )
+        # Preco
+        if plano_key == "free":
+            preco_html = '<span class="bx-valor">Gratis</span>'
+        elif plano_key == "enterprise":
+            preco_html = '<span class="bx-valor" style="font-size:15px;line-height:1.8">Sob consulta</span>'
+        else:
+            preco_html = f'<span class="bx-valor">R${info["preco"]}</span><span class="bx-per">/mes</span>'
+
+        # Badge popular
+        badge = '<span class="bx-badge">Mais popular</span>' if plano_key == _popular else ""
+
+        # Badge atual
+        atual_badge = '<span class="bx-atual">plano atual</span>' if is_atual else ""
+
+        # Features
+        feats_html = "".join(
+            f'<div class="bx-feat {cls}"><i class="ti {"ti-check" if cls=="ok" else "ti-minus"}"></i>{txt}</div>'
+            for cls, txt in feats
+        )
+
+        # Barra de uso (so no plano atual)
+        barra_html = ""
+        if is_atual:
+            pct_uso = int(100 * atual / max(lim, 1))
+            barra_html = f"""
+            <div class="bx-bar-wrap">
+                <div class="bx-bar-lbl"><span>Animais</span><span>{atual}/{lim}</span></div>
+                <div class="bx-bar"><div class="bx-bar-fill" style="width:{pct_uso}%"></div></div>
+            </div>"""
+
+        # CTA
+        if is_atual:
+            cta = '<button class="bx-cta" disabled style="opacity:.4;cursor:default">Plano atual</button>'
+        elif plano_key == "enterprise":
+            cta = '<button class="bx-cta">Falar com vendas</button>'
+        else:
+            cta = '<button class="bx-cta bx-cta-green">Fazer upgrade</button>'
+
+        _html_cards += f"""
+        <div class="{dest_cls}">
+            {badge}
+            <div class="bx-ico" style="background:{bg_ico}">
+                <i class="ti {icone_cls}" style="color:{cor_ico}"></i>
+            </div>
+            <div>
+                <p class="bx-nome">{info["nome"]}</p>
+                {atual_badge}
+            </div>
+            <div class="bx-preco">{preco_html}</div>
+            <p class="bx-desc">{info["descricao"]}</p>
+            <div class="bx-div"></div>
+            <div class="bx-feats">{feats_html}</div>
+            {barra_html}
+            {cta}
+        </div>"""
+
+    _html_cards += "</div>"
+    st.markdown(_html_cards, unsafe_allow_html=True)
 
     st.divider()
 
