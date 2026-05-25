@@ -184,6 +184,288 @@ def _fetchone(cur):
         return dict(row)
 
 # ── Inicializar banco ────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+# SISTEMA DE MIGRATIONS VERSIONADAS
+# ═══════════════════════════════════════════════════════════════════════════
+try:
+    from bovix_logging import get_logger
+    _log_db = get_logger("bovix.db.migrations")
+except ImportError:
+    import logging
+    _log_db = logging.getLogger("bovix.db.migrations")
+
+# Cada migration tem: version (int), nome, SQL. Aplicadas em ordem.
+# IMPORTANTE: nunca alterar uma migration existente — sempre criar nova.
+_MIGRATIONS = [
+    (1, "tabelas_base_vet", [
+        """CREATE TABLE IF NOT EXISTS receitas (
+            id              {pk},
+            vet_id          INTEGER NOT NULL,
+            fazenda_owner_id INTEGER NOT NULL,
+            animal_id       INTEGER DEFAULT NULL,
+            lote_id         INTEGER DEFAULT NULL,
+            data_emissao    TEXT NOT NULL,
+            medicamento     TEXT NOT NULL,
+            dose            TEXT NOT NULL,
+            via             TEXT NOT NULL,
+            duracao         TEXT NOT NULL,
+            carencia_dias   INTEGER DEFAULT 0,
+            observacoes     TEXT DEFAULT '',
+            crmv_emissao    TEXT DEFAULT ''
+        )""",
+        """CREATE TABLE IF NOT EXISTS protocolos_sanitarios (
+            id              {pk},
+            vet_id          INTEGER NOT NULL,
+            nome            TEXT NOT NULL,
+            categoria       TEXT NOT NULL,
+            data_criacao    TEXT NOT NULL,
+            ativo           INTEGER DEFAULT 1
+        )""",
+        """CREATE TABLE IF NOT EXISTS protocolo_itens (
+            id              {pk},
+            protocolo_id    INTEGER NOT NULL,
+            tipo            TEXT NOT NULL,
+            descricao       TEXT NOT NULL,
+            dia_aplicacao   INTEGER DEFAULT 0,
+            observacoes     TEXT DEFAULT ''
+        )""",
+        """CREATE TABLE IF NOT EXISTS visitas_tecnicas (
+            id              {pk},
+            vet_id          INTEGER NOT NULL,
+            fazenda_owner_id INTEGER NOT NULL,
+            data_visita     TEXT NOT NULL,
+            objetivo        TEXT NOT NULL,
+            duracao_min     INTEGER DEFAULT 60,
+            status          TEXT NOT NULL DEFAULT 'agendada',
+            observacoes     TEXT DEFAULT ''
+        )""",
+        """CREATE TABLE IF NOT EXISTS relatorios_visita (
+            id              {pk},
+            visita_id       INTEGER DEFAULT NULL,
+            vet_id          INTEGER NOT NULL,
+            fazenda_owner_id INTEGER NOT NULL,
+            data_relatorio  TEXT NOT NULL,
+            animais_inspecionados INTEGER DEFAULT 0,
+            achados         TEXT DEFAULT '',
+            tratamentos     TEXT DEFAULT '',
+            recomendacoes   TEXT DEFAULT '',
+            proxima_visita  TEXT DEFAULT NULL,
+            observacoes     TEXT DEFAULT '',
+            crmv_emissao    TEXT DEFAULT ''
+        )""",
+        """CREATE TABLE IF NOT EXISTS carencias_ativas (
+            id              {pk},
+            animal_id       INTEGER NOT NULL,
+            medicamento     TEXT NOT NULL,
+            data_aplicacao  TEXT NOT NULL,
+            carencia_dias   INTEGER NOT NULL,
+            data_liberacao  TEXT NOT NULL,
+            ativo           INTEGER DEFAULT 1
+        )""",
+    ]),
+    (2, "tabelas_exames_monitor", [
+        """CREATE TABLE IF NOT EXISTS exames_laboratoriais (
+            id              {pk},
+            animal_id       INTEGER NOT NULL,
+            vet_id          INTEGER NOT NULL,
+            data_coleta     TEXT NOT NULL,
+            tipo_exame      TEXT NOT NULL,
+            laboratorio     TEXT DEFAULT '',
+            resultado       TEXT DEFAULT '',
+            interpretacao   TEXT DEFAULT '',
+            status          TEXT DEFAULT 'aguardando',
+            alerta          INTEGER DEFAULT 0,
+            anexo_url       TEXT DEFAULT NULL,
+            criado_em       TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS monitoramento_pos_tratamento (
+            id              {pk},
+            animal_id       INTEGER NOT NULL,
+            vet_id          INTEGER NOT NULL,
+            receita_id      INTEGER DEFAULT NULL,
+            descricao       TEXT NOT NULL,
+            data_inicio     TEXT NOT NULL,
+            data_retorno    TEXT NOT NULL,
+            status          TEXT DEFAULT 'ativo',
+            evolucoes       TEXT DEFAULT '[]',
+            alerta_enviado  INTEGER DEFAULT 0
+        )""",
+    ]),
+    (3, "tabelas_financeiro_vet", [
+        """CREATE TABLE IF NOT EXISTS honorarios_vet (
+            id              {pk},
+            vet_id          INTEGER NOT NULL,
+            fazenda_owner_id INTEGER NOT NULL,
+            visita_id       INTEGER DEFAULT NULL,
+            data_lancamento TEXT NOT NULL,
+            descricao       TEXT NOT NULL,
+            tipo            TEXT NOT NULL DEFAULT 'consulta',
+            valor           REAL NOT NULL DEFAULT 0,
+            status          TEXT NOT NULL DEFAULT 'pendente',
+            data_pagamento  TEXT DEFAULT NULL,
+            forma_pagamento TEXT DEFAULT NULL,
+            observacoes     TEXT DEFAULT ''
+        )""",
+        """CREATE TABLE IF NOT EXISTS honorarios_itens (
+            id              {pk},
+            honorario_id    INTEGER NOT NULL,
+            descricao       TEXT NOT NULL,
+            quantidade      REAL NOT NULL DEFAULT 1,
+            valor_unitario  REAL NOT NULL DEFAULT 0,
+            valor_total     REAL NOT NULL DEFAULT 0
+        )""",
+    ]),
+    (4, "tabelas_comunic_camp_coords", [
+        """CREATE TABLE IF NOT EXISTS mensagens_vet (
+            id              {pk},
+            remetente_id    INTEGER NOT NULL,
+            destinatario_id INTEGER NOT NULL,
+            assunto         TEXT NOT NULL DEFAULT '',
+            corpo           TEXT NOT NULL,
+            lida            INTEGER NOT NULL DEFAULT 0,
+            criado_em       TEXT NOT NULL,
+            tipo            TEXT NOT NULL DEFAULT 'mensagem'
+        )""",
+        """CREATE TABLE IF NOT EXISTS campanhas_vacinacao (
+            id              {pk},
+            vet_id          INTEGER NOT NULL,
+            nome            TEXT NOT NULL,
+            vacina          TEXT NOT NULL,
+            safra           TEXT NOT NULL,
+            data_inicio     TEXT NOT NULL,
+            data_fim        TEXT NOT NULL,
+            meta_cobertura  REAL NOT NULL DEFAULT 100,
+            status          TEXT NOT NULL DEFAULT 'ativa',
+            observacoes     TEXT DEFAULT '',
+            criado_em       TEXT NOT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS campanha_lotes (
+            id              {pk},
+            campanha_id     INTEGER NOT NULL,
+            lote_id         INTEGER NOT NULL,
+            meta_animais    INTEGER NOT NULL DEFAULT 0,
+            vacinados       INTEGER NOT NULL DEFAULT 0,
+            status          TEXT NOT NULL DEFAULT 'pendente',
+            data_execucao   TEXT DEFAULT NULL
+        )""",
+        """CREATE TABLE IF NOT EXISTS fazendas_coords (
+            id              {pk},
+            owner_id        INTEGER NOT NULL UNIQUE,
+            latitude        REAL NOT NULL,
+            longitude       REAL NOT NULL,
+            cidade          TEXT DEFAULT '',
+            estado          TEXT DEFAULT ''
+        )""",
+    ]),
+    (5, "colunas_extras_vacinas_agenda", [
+        "ALTER TABLE vacinas_agenda ADD COLUMN IF NOT EXISTS medicamento_id INTEGER DEFAULT NULL",
+        "ALTER TABLE vacinas_agenda ADD COLUMN IF NOT EXISTS quantidade_dose REAL DEFAULT 0",
+        "ALTER TABLE vacinas_agenda ADD COLUMN IF NOT EXISTS agendado_por INTEGER DEFAULT NULL",
+        "ALTER TABLE vacinas_agenda ADD COLUMN IF NOT EXISTS confirmado_por INTEGER DEFAULT NULL",
+        "ALTER TABLE vacinas_agenda ADD COLUMN IF NOT EXISTS animal_id INTEGER DEFAULT NULL",
+    ]),
+    (6, "coluna_crmv_usuarios", [
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS crmv TEXT DEFAULT NULL",
+    ]),
+]
+
+
+def _criar_tabela_schema_version():
+    """Cria tabela de controle de versao do schema."""
+    pk = "SERIAL PRIMARY KEY" if _usar_postgres() else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS _schema_version (
+                version    INTEGER PRIMARY KEY,
+                nome       TEXT NOT NULL,
+                applied_at TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+
+
+def _versoes_aplicadas():
+    """Retorna conjunto de versions ja aplicadas."""
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT version FROM _schema_version")
+            return {r[0] for r in cur.fetchall()}
+    except Exception:
+        return set()
+
+
+def _registrar_versao(version, nome):
+    """Marca uma migration como aplicada."""
+    from datetime import datetime
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO _schema_version (version, nome, applied_at) "
+            f"VALUES ({p}, {p}, {p})",
+            (version, nome, datetime.utcnow().isoformat())
+        )
+        conn.commit()
+
+
+def aplicar_migrations():
+    """Aplica todas as migrations pendentes. Chamada uma vez no boot."""
+    _criar_tabela_schema_version()
+    aplicadas = _versoes_aplicadas()
+    pk_type = "SERIAL PRIMARY KEY" if _usar_postgres() else "INTEGER PRIMARY KEY AUTOINCREMENT"
+
+    n_aplicadas = 0
+    for version, nome, sqls in _MIGRATIONS:
+        if version in aplicadas:
+            continue
+        _log_db.info("Aplicando migration %d: %s", version, nome)
+        try:
+            for sql_template in sqls:
+                sql = sql_template.replace("{pk}", pk_type)
+                # SQLite nao suporta ADD COLUMN IF NOT EXISTS
+                if not _usar_postgres() and "ADD COLUMN IF NOT EXISTS" in sql:
+                    sql = sql.replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN")
+                try:
+                    with _conexao() as conn:
+                        cur = conn.cursor()
+                        cur.execute(sql)
+                        conn.commit()
+                except Exception as e:
+                    # ALTER TABLE pode falhar se coluna ja existe no SQLite
+                    if "ADD COLUMN" in sql.upper() and "duplicate" in str(e).lower():
+                        continue
+                    if "ADD COLUMN" in sql.upper() and "already exists" in str(e).lower():
+                        continue
+                    _log_db.warning("SQL falhou em migration %d: %s — %s",
+                                   version, sql[:60], e)
+            _registrar_versao(version, nome)
+            n_aplicadas += 1
+            _log_db.info("Migration %d aplicada com sucesso", version)
+        except Exception as e:
+            _log_db.error("Erro ao aplicar migration %d: %s", version, e)
+            raise
+    return n_aplicadas
+
+
+# Compatibilidade retroativa: funcoes antigas viram no-op
+# (migrations rodam uma vez no boot, nao precisam mais ser chamadas)
+def _garantir_tabelas_vet():
+    """No-op apos migrations. Mantida para compatibilidade."""
+    pass
+
+
+def _garantir_colunas_vacinas_agenda():
+    """No-op apos migrations. Mantida para compatibilidade."""
+    pass
+
+
+def _garantir_coluna_crmv():
+    """No-op apos migrations. Mantida para compatibilidade."""
+    pass
+
+
 def inicializar_banco():
     pg = _usar_postgres()
 
@@ -197,8 +479,12 @@ def inicializar_banco():
         ja_existe = cur.fetchone()[0] > 0
 
     if ja_existe:
-        # Banco ja inicializado - apenas migrar colunas novas
+        # Banco ja inicializado - apenas migrar colunas novas + migrations versionadas
         _migrar_banco()
+        try:
+            aplicar_migrations()
+        except Exception as _e_mig:
+            _log_db.error("Falha ao aplicar migrations: %s", _e_mig)
         return
 
     serial = "SERIAL" if pg else "INTEGER"
@@ -381,6 +667,12 @@ def inicializar_banco():
                 cur.execute(stmt)
 
         conn.commit()
+
+    # Aplicar migrations versionadas
+    try:
+        aplicar_migrations()
+    except Exception as _e_mig:
+        _log_db.error("Falha ao aplicar migrations no boot: %s", _e_mig)
     print("Banco inicializado com sucesso.")
     _migrar_banco()
     _garantir_colunas_vacinas_agenda()
@@ -925,12 +1217,57 @@ def listar_tratamentos_vencidos(owner_id=None):
 
 # ── USUARIOS ─────────────────────────────────────────────────────────────────
 def _hash_senha(senha, salt):
+    """Hash legado SHA256. Mantido para verificacao de senhas antigas."""
     return hashlib.sha256((salt + senha).encode()).hexdigest()
 
+
+# ─── BCRYPT — novo sistema de hash ───────────────────────────────────────────
+def _bcrypt_hash(senha):
+    """Gera hash bcrypt com salt embutido. Retorna string."""
+    try:
+        import bcrypt
+        h = bcrypt.hashpw(senha.encode("utf-8"), bcrypt.gensalt(rounds=12))
+        return h.decode("utf-8")
+    except ImportError:
+        # Fallback se bcrypt nao estiver instalado
+        import secrets
+        s = secrets.token_hex(16)
+        return f"SHA256${s}${_hash_senha(senha, s)}"
+
+
+def _bcrypt_verify(senha, hash_armazenado):
+    """Verifica senha contra hash bcrypt. Retorna bool."""
+    if not hash_armazenado:
+        return False
+    try:
+        import bcrypt
+        # Bcrypt hashes comecam com $2a$, $2b$, $2y$
+        if hash_armazenado.startswith("$2"):
+            return bcrypt.checkpw(
+                senha.encode("utf-8"),
+                hash_armazenado.encode("utf-8")
+            )
+    except ImportError:
+        pass
+    # Fallback SHA256 ($SHA256$salt$hash)
+    if hash_armazenado.startswith("SHA256$"):
+        try:
+            _, salt, hash_esperado = hash_armazenado.split("$", 2)
+            return _hash_senha(senha, salt) == hash_esperado
+        except Exception:
+            return False
+    return False
+
+
+def _is_bcrypt_hash(hash_str):
+    """Detecta se string e hash bcrypt."""
+    return bool(hash_str) and str(hash_str).startswith("$2")
+
 def criar_usuario(nome, email, senha, perfil="fazendeiro", fazenda_id=None, owner_id=None):
+    """Cria usuario com hash bcrypt (sistema novo)."""
     p = _ph()
-    salt = secrets.token_hex(16)
-    h = _hash_senha(senha, salt)
+    h = _bcrypt_hash(senha)
+    salt = ""  # bcrypt embute salt no hash
     with _conexao() as conn:
         cur = conn.cursor()
         if _usar_postgres():
@@ -990,8 +1327,8 @@ def usuario_existe():
 
 def alterar_senha(usuario_id, nova_senha):
     p = _ph()
-    salt = secrets.token_hex(16)
-    h = _hash_senha(nova_senha, salt)
+    h = _bcrypt_hash(nova_senha)
+    salt = ""
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(f"UPDATE usuarios SET senha_hash={p},salt={p} WHERE id={p}", (h, salt, usuario_id))
@@ -4500,218 +4837,8 @@ def painel_saude_rebanho(owner_id):
     }
 
 
-def _garantir_tabelas_vet():
-    """Cria tabelas exclusivas do modulo veterinario."""
-    if not _usar_postgres():
-        # SQLite - tipos diferentes
-        pk_type = "INTEGER PRIMARY KEY AUTOINCREMENT"
-    else:
-        pk_type = "SERIAL PRIMARY KEY"
-
-    tabelas = [
-        f"""CREATE TABLE IF NOT EXISTS receitas (
-            id              {pk_type},
-            vet_id          INTEGER NOT NULL,
-            fazenda_owner_id INTEGER NOT NULL,
-            animal_id       INTEGER DEFAULT NULL,
-            lote_id         INTEGER DEFAULT NULL,
-            data_emissao    TEXT NOT NULL,
-            medicamento     TEXT NOT NULL,
-            dose            TEXT NOT NULL,
-            via             TEXT NOT NULL,
-            duracao         TEXT NOT NULL,
-            carencia_dias   INTEGER DEFAULT 0,
-            observacoes     TEXT DEFAULT '',
-            crmv_emissao    TEXT DEFAULT ''
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS protocolos_sanitarios (
-            id              {pk_type},
-            vet_id          INTEGER NOT NULL,
-            nome            TEXT NOT NULL,
-            descricao       TEXT DEFAULT '',
-            categoria       TEXT DEFAULT 'geral',
-            criado_em       TEXT NOT NULL
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS protocolo_itens (
-            id              {pk_type},
-            protocolo_id    INTEGER NOT NULL,
-            ordem           INTEGER NOT NULL,
-            tipo            TEXT NOT NULL,
-            nome            TEXT NOT NULL,
-            dia_offset      INTEGER NOT NULL,
-            observacao      TEXT DEFAULT ''
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS visitas_tecnicas (
-            id              {pk_type},
-            vet_id          INTEGER NOT NULL,
-            fazenda_owner_id INTEGER NOT NULL,
-            data_visita     TEXT NOT NULL,
-            objetivo        TEXT DEFAULT '',
-            duracao_min     INTEGER DEFAULT 60,
-            status          TEXT DEFAULT 'agendada',
-            observacoes     TEXT DEFAULT '',
-            criado_em       TEXT NOT NULL
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS relatorios_visita (
-            id              {pk_type},
-            visita_id       INTEGER DEFAULT NULL,
-            vet_id          INTEGER NOT NULL,
-            fazenda_owner_id INTEGER NOT NULL,
-            data_relatorio  TEXT NOT NULL,
-            animais_inspecionados INTEGER DEFAULT 0,
-            achados         TEXT DEFAULT '',
-            tratamentos     TEXT DEFAULT '',
-            recomendacoes   TEXT DEFAULT '',
-            proxima_visita  TEXT DEFAULT NULL,
-            crmv_emissao    TEXT DEFAULT ''
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS carencias_ativas (
-            id              {pk_type},
-            animal_id       INTEGER NOT NULL,
-            medicamento     TEXT NOT NULL,
-            data_aplicacao  TEXT NOT NULL,
-            carencia_dias   INTEGER NOT NULL,
-            data_liberacao  TEXT NOT NULL,
-            ativo           INTEGER DEFAULT 1
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS exames_laboratoriais (
-            id              {pk_type},
-            animal_id       INTEGER NOT NULL,
-            vet_id          INTEGER NOT NULL,
-            data_coleta     TEXT NOT NULL,
-            tipo_exame      TEXT NOT NULL,
-            laboratorio     TEXT DEFAULT '',
-            resultado       TEXT DEFAULT '',
-            interpretacao   TEXT DEFAULT '',
-            status          TEXT DEFAULT 'aguardando',
-            alerta          INTEGER DEFAULT 0,
-            anexo_url       TEXT DEFAULT NULL,
-            criado_em       TEXT NOT NULL
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS monitoramento_pos_tratamento (
-            id              {pk_type},
-            animal_id       INTEGER NOT NULL,
-            vet_id          INTEGER NOT NULL,
-            receita_id      INTEGER DEFAULT NULL,
-            descricao       TEXT NOT NULL,
-            data_inicio     TEXT NOT NULL,
-            data_retorno    TEXT NOT NULL,
-            status          TEXT DEFAULT 'ativo',
-            evolucoes       TEXT DEFAULT '[]',
-            alerta_enviado  INTEGER DEFAULT 0
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS honorarios_vet (
-            id              {pk_type},
-            vet_id          INTEGER NOT NULL,
-            fazenda_owner_id INTEGER NOT NULL,
-            visita_id       INTEGER DEFAULT NULL,
-            data_lancamento TEXT NOT NULL,
-            descricao       TEXT NOT NULL,
-            tipo            TEXT NOT NULL DEFAULT 'consulta',
-            valor           REAL NOT NULL DEFAULT 0,
-            status          TEXT NOT NULL DEFAULT 'pendente',
-            data_pagamento  TEXT DEFAULT NULL,
-            forma_pagamento TEXT DEFAULT NULL,
-            observacoes     TEXT DEFAULT ''
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS honorarios_itens (
-            id              {pk_type},
-            honorario_id    INTEGER NOT NULL,
-            descricao       TEXT NOT NULL,
-            quantidade      REAL NOT NULL DEFAULT 1,
-            valor_unitario  REAL NOT NULL DEFAULT 0,
-            valor_total     REAL NOT NULL DEFAULT 0
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS mensagens_vet (
-            id              {pk_type},
-            remetente_id    INTEGER NOT NULL,
-            destinatario_id INTEGER NOT NULL,
-            assunto         TEXT NOT NULL DEFAULT '',
-            corpo           TEXT NOT NULL,
-            lida            INTEGER NOT NULL DEFAULT 0,
-            criado_em       TEXT NOT NULL,
-            tipo            TEXT NOT NULL DEFAULT 'mensagem'
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS campanhas_vacinacao (
-            id              {pk_type},
-            vet_id          INTEGER NOT NULL,
-            nome            TEXT NOT NULL,
-            vacina          TEXT NOT NULL,
-            safra           TEXT NOT NULL,
-            data_inicio     TEXT NOT NULL,
-            data_fim        TEXT NOT NULL,
-            meta_cobertura  REAL NOT NULL DEFAULT 100,
-            status          TEXT NOT NULL DEFAULT 'ativa',
-            observacoes     TEXT DEFAULT '',
-            criado_em       TEXT NOT NULL
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS campanha_lotes (
-            id              {pk_type},
-            campanha_id     INTEGER NOT NULL,
-            lote_id         INTEGER NOT NULL,
-            meta_animais    INTEGER NOT NULL DEFAULT 0,
-            vacinados       INTEGER NOT NULL DEFAULT 0,
-            status          TEXT NOT NULL DEFAULT 'pendente',
-            data_execucao   TEXT DEFAULT NULL
-        )""",
-        f"""CREATE TABLE IF NOT EXISTS fazendas_coords (
-            id              {pk_type},
-            owner_id        INTEGER NOT NULL UNIQUE,
-            latitude        REAL NOT NULL,
-            longitude       REAL NOT NULL,
-            cidade          TEXT DEFAULT '',
-            estado          TEXT DEFAULT ''
-        )""",
-    ]
-
-    for sql in tabelas:
-        try:
-            with _conexao() as conn:
-                cur = conn.cursor()
-                cur.execute(sql)
-                conn.commit()
-        except Exception:
-            pass
 
 
-def _garantir_coluna_crmv():
-    """Adiciona coluna crmv na tabela usuarios (migracao segura)."""
-    if not _usar_postgres():
-        return
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                "ALTER TABLE usuarios "
-                "ADD COLUMN IF NOT EXISTS crmv TEXT DEFAULT NULL"
-            )
-            conn.commit()
-    except Exception:
-        pass  # Coluna ja existe
-
-
-def _garantir_colunas_vacinas_agenda():
-    """Adiciona colunas novas na vacinas_agenda se nao existirem.
-    Cada coluna em conexao separada para evitar InFailedSqlTransaction."""
-    if not _usar_postgres():
-        return
-    for col, tipo in [
-        ("medicamento_id",  "INTEGER DEFAULT NULL"),
-        ("quantidade_dose", "REAL DEFAULT 0"),
-        ("agendado_por",    "INTEGER DEFAULT NULL"),
-        ("confirmado_por",  "INTEGER DEFAULT NULL"),
-        ("animal_id",       "INTEGER DEFAULT NULL"),
-    ]:
-        try:
-            with _conexao() as conn:
-                cur = conn.cursor()
-                cur.execute(
-                    f"ALTER TABLE vacinas_agenda "
-                    f"ADD COLUMN IF NOT EXISTS {col} {tipo}"
-                )
-                conn.commit()
-        except Exception:
-            pass  # Coluna ja existe ou erro ignoravel
 
 
 def _garantir_owner_id_medicamentos():
