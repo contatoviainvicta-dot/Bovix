@@ -257,7 +257,7 @@ def page_inicio(u):
                     if _tags: st.warning(" | ".join(_tags))
                     else:     st.caption("Sem alertas")
                     if st.button("Ver lote", key=f"btn_lote_{l[0]}",
-                                 use_container_width=True):
+                                 width='stretch'):
                         st.session_state.menu = "Workspace do Lote"
                         st.session_state["ws_lote_id"] = l[0]
                         st.rerun()
@@ -281,7 +281,7 @@ def page_inicio(u):
                     unsafe_allow_html=True
                 )
                 if st.button(_label, key=f"grid_btn_{_bi}",
-                             use_container_width=True):
+                             width='stretch'):
                     st.session_state.menu = _menu; st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -392,7 +392,7 @@ def page_inicio(u):
                         with cc2:
                             if st.button(
                                 "Abrir", key=f"vet_lote_{_fl[0]}",
-                                use_container_width=True
+                                width='stretch'
                             ):
                                 st.session_state.menu = "Workspace do Lote"
                                 st.session_state["ws_lote_id"] = _fl[0]
