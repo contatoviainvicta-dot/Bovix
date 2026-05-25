@@ -4799,7 +4799,8 @@ with st.sidebar:
             for nome_item, desc in itens:
                 ativo = st.session_state.menu == nome_item
                 label = f"**{nome_item}**" if ativo else nome_item
-                if st.button(label, key=f"menu_{nome_item}",
+                _key_menu = f"menu_{grupo}_{nome_item}".replace(" ","_")
+                if st.button(label, key=_key_menu,
                              width='stretch', help=desc):
                     st.session_state.menu = nome_item
             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
@@ -4814,7 +4815,8 @@ with st.sidebar:
             for nome_item, desc in itens:
                 ativo = st.session_state.menu == nome_item
                 label = f"**✦ {nome_item}**" if ativo else nome_item
-                if st.button(label, key=f"menu_{nome_item}",
+                _key_menu2 = f"menu_{grupo}_{nome_item}".replace(" ","_")
+                if st.button(label, key=_key_menu2,
                              width='stretch', help=desc):
                     st.session_state.menu = nome_item
                     st.rerun()
