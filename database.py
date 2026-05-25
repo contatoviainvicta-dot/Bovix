@@ -876,8 +876,10 @@ def listar_lotes(owner_id=None):
         if owner_id is not None:
             cur.execute(
                 f"SELECT id,nome,descricao,data_entrada,qtd_comprada,"
-                f"qtd_recebida,transporte,tipo_alimentacao,tipo_dieta,"
-                f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),owner_id "
+                f"qtd_recebida,transporte,"
+                f"COALESCE(tipo_alimentacao,''),COALESCE(tipo_dieta,''),"
+                f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),"
+                f"COALESCE(owner_id,0) "
                 f"FROM lotes WHERE owner_id={p}"
                 f" ORDER BY data_entrada DESC,id DESC",
                 (owner_id,),
@@ -885,16 +887,17 @@ def listar_lotes(owner_id=None):
         else:
             cur.execute(
                 "SELECT id,nome,descricao,data_entrada,qtd_comprada,"
-                "qtd_recebida,transporte,tipo_alimentacao,tipo_dieta,"
-                "COALESCE(preco_por_animal,0),COALESCE(data_venda,''),owner_id "
+                "qtd_recebida,transporte,"
+                "COALESCE(tipo_alimentacao,''),COALESCE(tipo_dieta,''),"
+                "COALESCE(preco_por_animal,0),COALESCE(data_venda,''),"
+                "COALESCE(owner_id,0) "
                 "FROM lotes ORDER BY data_entrada DESC,id DESC"
             )
-        rows = _fetch(cur)
+        # Usar fetchall() com indices posicionais para evitar KeyError
+        rows = cur.fetchall()
         return [
-            (r["id"],r["nome"],r["descricao"],r["data_entrada"],
-             r["qtd_comprada"],r["qtd_recebida"],r["transporte"],
-             r["tipo_alimentacao"],r["tipo_dieta"],
-             r["preco_por_animal"],r["data_venda"],r["owner_id"])
+            (r[0],r[1],r[2],r[3],r[4],r[5],r[6],
+             r[7],r[8],float(r[9] or 0),str(r[10] or ''),r[11])
             for r in rows
         ]
 
@@ -904,18 +907,20 @@ def obter_lote(lote_id):
         cur = conn.cursor()
         cur.execute(
             f"SELECT id,nome,descricao,data_entrada,qtd_comprada,qtd_recebida,"
-            f"transporte,tipo_alimentacao,tipo_dieta,"
-            f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),owner_id "
+            f"transporte,"
+            f"COALESCE(tipo_alimentacao,''),COALESCE(tipo_dieta,''),"
+            f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),"
+            f"COALESCE(owner_id,0) "
             f"FROM lotes WHERE id={p}",
             (lote_id,)
         )
-        r = _fetchone(cur)
+        r = cur.fetchone()
+        if not r:
+            return None
         return (
-            r["id"],r["nome"],r["descricao"],r["data_entrada"],
-            r["qtd_comprada"],r["qtd_recebida"],r["transporte"],
-            r["tipo_alimentacao"],r["tipo_dieta"],
-            r["preco_por_animal"],r["data_venda"],r["owner_id"]
-        ) if r else None
+            r[0],r[1],r[2],r[3],r[4],r[5],r[6],
+            r[7],r[8],float(r[9] or 0),str(r[10] or ''),r[11]
+        )
 
 def atualizar_lote(lote_id, nome, descricao, data_entrada, qtd_comprada, qtd_recebida, transporte, preco_por_animal=None):
     p = _ph()
