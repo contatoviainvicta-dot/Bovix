@@ -37,17 +37,7 @@ def _cor_margem(pct):
 
 
 def page_dashboard_executivo(u):
-    # Tentar owner_id, id e fazenda_id para garantir que encontra os lotes
-    _oid_raw   = u.get("owner_id") or u["id"]
-    _uid       = u["id"]
-
-    # Testar qual owner_id retorna lotes
-    from database import listar_lotes as _ll
-    oid = _oid_raw
-    if not _ll(owner_id=oid):
-        # Tentar com u["id"] diretamente
-        if _ll(owner_id=_uid):
-            oid = _uid
+    oid = u.get("owner_id") or u["id"]
 
     st.title("Dashboard Executivo")
     st.caption("Visão financeira completa da sua operação")
@@ -56,16 +46,9 @@ def page_dashboard_executivo(u):
         dados = dashboard_financeiro_fazendeiro(oid)
 
     if not dados["lotes"]:
-        # Debug para diagnóstico
-        todos = _ll(owner_id=None)
-        owners_disponiveis = list(set(l[11] for l in todos if len(l) > 11))
         st.info(
             "Nenhum lote encontrado. Cadastre lotes e animais para ver "
             "os indicadores financeiros."
-        )
-        st.caption(
-            f"Debug: seu ID={_uid}, owner_id={_oid_raw}, "
-            f"owners com lotes={owners_disponiveis[:5]}"
         )
         return
 
