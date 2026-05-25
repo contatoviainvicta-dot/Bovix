@@ -874,29 +874,48 @@ def listar_lotes(owner_id=None):
     with _conexao() as conn:
         cur = conn.cursor()
         if owner_id is not None:
-            # Comparacao direta: so retorna lotes onde owner_id = valor exato
-            # Nao usa COALESCE para evitar que lotes sem owner_id vazem
             cur.execute(
-                f"SELECT id,nome,descricao,data_entrada,qtd_comprada,qtd_recebida,transporte"
-                f" FROM lotes WHERE owner_id={p}"
+                f"SELECT id,nome,descricao,data_entrada,qtd_comprada,"
+                f"qtd_recebida,transporte,tipo_alimentacao,tipo_dieta,"
+                f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),owner_id "
+                f"FROM lotes WHERE owner_id={p}"
                 f" ORDER BY data_entrada DESC,id DESC",
                 (owner_id,),
             )
         else:
             cur.execute(
-                "SELECT id,nome,descricao,data_entrada,qtd_comprada,qtd_recebida,transporte"
-                " FROM lotes ORDER BY data_entrada DESC,id DESC"
+                "SELECT id,nome,descricao,data_entrada,qtd_comprada,"
+                "qtd_recebida,transporte,tipo_alimentacao,tipo_dieta,"
+                "COALESCE(preco_por_animal,0),COALESCE(data_venda,''),owner_id "
+                "FROM lotes ORDER BY data_entrada DESC,id DESC"
             )
         rows = _fetch(cur)
-        return [(r["id"],r["nome"],r["descricao"],r["data_entrada"],r["qtd_comprada"],r["qtd_recebida"],r["transporte"]) for r in rows]
+        return [
+            (r["id"],r["nome"],r["descricao"],r["data_entrada"],
+             r["qtd_comprada"],r["qtd_recebida"],r["transporte"],
+             r["tipo_alimentacao"],r["tipo_dieta"],
+             r["preco_por_animal"],r["data_venda"],r["owner_id"])
+            for r in rows
+        ]
 
 def obter_lote(lote_id):
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
-        cur.execute(f"SELECT id,nome,descricao,data_entrada,qtd_comprada,qtd_recebida,transporte FROM lotes WHERE id={p}", (lote_id,))
+        cur.execute(
+            f"SELECT id,nome,descricao,data_entrada,qtd_comprada,qtd_recebida,"
+            f"transporte,tipo_alimentacao,tipo_dieta,"
+            f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),owner_id "
+            f"FROM lotes WHERE id={p}",
+            (lote_id,)
+        )
         r = _fetchone(cur)
-        return (r["id"],r["nome"],r["descricao"],r["data_entrada"],r["qtd_comprada"],r["qtd_recebida"],r["transporte"]) if r else None
+        return (
+            r["id"],r["nome"],r["descricao"],r["data_entrada"],
+            r["qtd_comprada"],r["qtd_recebida"],r["transporte"],
+            r["tipo_alimentacao"],r["tipo_dieta"],
+            r["preco_por_animal"],r["data_venda"],r["owner_id"]
+        ) if r else None
 
 def atualizar_lote(lote_id, nome, descricao, data_entrada, qtd_comprada, qtd_recebida, transporte, preco_por_animal=None):
     p = _ph()
@@ -4432,7 +4451,34 @@ def dashboard_financeiro_fazendeiro(owner_id):
     """Consolida todos os indicadores financeiros do fazendeiro.
     Retorna dict com KPIs, lotes e alertas."""
     from datetime import date
+    p = _ph()
+
+    # Buscar lotes: tenta owner_id direto, depois busca por fazenda_id
     lotes = listar_lotes(owner_id=owner_id)
+
+    if not lotes:
+        # Fallback: buscar lotes onde fazenda_id aponta para uma fazenda do owner
+        try:
+            with _conexao() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    f"SELECT id,nome,descricao,data_entrada,qtd_comprada,"
+                    f"qtd_recebida,transporte,tipo_alimentacao,tipo_dieta,"
+                    f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),owner_id "
+                    f"FROM lotes WHERE owner_id={p} OR id IN ("
+                    f"  SELECT id FROM lotes WHERE owner_id IS NULL"
+                    f") ORDER BY data_entrada DESC",
+                    (owner_id,)
+                )
+                rows = cur.fetchall()
+                lotes = [
+                    (r[0],r[1],r[2],r[3],r[4],r[5],r[6],
+                     r[7],r[8],float(r[9]),str(r[10]),r[11])
+                    for r in rows if r[11] == owner_id or r[11] is None
+                ]
+        except Exception:
+            pass
+
     if not lotes:
         return {"lotes": [], "kpis": {}, "alertas": [], "dre": {}}
 
