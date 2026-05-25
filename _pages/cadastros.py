@@ -554,10 +554,10 @@ def page_editar_animal(u):
             # Botoes rapidos de selecao
             _bc1, _bc2, _bc3 = st.columns(3)
             if _bc1.button("Selecionar todos", key="ex_sel_todos",
-                           use_container_width=True):
+                           width='stretch'):
                 st.session_state["ex_todos_flag"] = True
             if _bc2.button("Desmarcar todos", key="ex_desel_todos",
-                           use_container_width=True):
+                           width='stretch'):
                 st.session_state["ex_todos_flag"] = False
             _bc3.caption(f"{len(_anim_filtrados)} animais no lote")
 
@@ -579,7 +579,7 @@ def page_editar_animal(u):
                     "Idade":  st.column_config.TextColumn("Idade",  disabled=True),
                 },
                 hide_index=True,
-                use_container_width=True,
+                width='stretch',
                 key="ex_data_editor"
             )
 
