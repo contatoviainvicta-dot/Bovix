@@ -880,8 +880,10 @@ def listar_lotes(owner_id=None):
                 f"COALESCE(tipo_alimentacao,''),COALESCE(tipo_dieta,''),"
                 f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),"
                 f"COALESCE(owner_id,0) "
-                f"FROM lotes WHERE owner_id={p}"
-                f" ORDER BY data_entrada DESC,id DESC",
+                f"FROM lotes WHERE owner_id={p} "
+                f"AND COALESCE(ativo,1)=1 "
+                f"AND COALESCE(status,'ativo') NOT IN ('encerrado','vendido') "
+                f"ORDER BY data_entrada DESC,id DESC",
                 (owner_id,),
             )
         else:
@@ -2297,6 +2299,168 @@ def lote_ja_vendido(lote_id):
             return total > 0 and ativos == 0
         except Exception:
             return False
+
+
+# ── CICLO DE VIDA: VENDA E ENCERRAMENTO ──────────────────────
+def marcar_animal_vendido(animal_id, data_venda=None, preco_kg=0,
+                          peso_abate=0, observacao=""):
+    """Marca animal como VENDIDO. Registra dados de abate."""
+    from datetime import date
+    p  = _ph()
+    dt = str(data_venda or date.today())
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE animais SET status='VENDIDO', ativo=0 WHERE id={p}",
+            (animal_id,)
+        )
+        conn.commit()
+    # Registrar ocorrencia no prontuario
+    try:
+        desc = f"Animal vendido em {dt}"
+        if peso_abate:
+            desc += f" | Peso abate: {peso_abate}kg"
+        if preco_kg:
+            desc += f" | Preco: R${preco_kg:.2f}/kg"
+        if observacao:
+            desc += f" | {observacao}"
+        adicionar_ocorrencia(
+            animal_id=animal_id, data=dt,
+            tipo="Venda", descricao=desc,
+            gravidade="Baixa", custo=0,
+            dias_recuperacao=0, status="Resolvido"
+        )
+    except Exception:
+        pass
+    return True
+
+
+def encerrar_lote(lote_id, data_encerramento=None, motivo="venda_total"):
+    """Encerra lote: marca todos animais como VENDIDO e lote como encerrado."""
+    from datetime import date
+    p  = _ph()
+    dt = str(data_encerramento or date.today())
+
+    # Marcar todos os animais ativos como vendidos
+    animais = listar_animais_por_lote(lote_id)
+    for a in animais:
+        if a and len(a) > 0:
+            try:
+                marcar_animal_vendido(a[0], data_venda=dt)
+            except Exception:
+                pass
+
+    # Encerrar o lote
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"UPDATE lotes SET status='encerrado', ativo=0, "
+            f"data_venda={p} WHERE id={p}",
+            (dt, lote_id)
+        )
+        conn.commit()
+    return True
+
+
+def venda_parcial_lote(lote_id, animal_ids, preco_kg=0,
+                       peso_total=0, frigorifico="",
+                       data_venda=None, observacao=""):
+    """Venda parcial: marca animais selecionados como VENDIDO.
+    Registra a venda proporcional. Lote continua ativo."""
+    from datetime import date
+    dt = str(data_venda or date.today())
+
+    # Marcar cada animal como vendido
+    for aid in animal_ids:
+        marcar_animal_vendido(
+            aid, data_venda=dt,
+            preco_kg=preco_kg,
+            observacao=f"Venda parcial | {frigorifico or ''}"
+        )
+
+    # Registrar venda (proporcional)
+    n = len(animal_ids)
+    if peso_total > 0 and preco_kg > 0:
+        registrar_venda_lote(
+            lote_id=lote_id,
+            preco_venda_kg=preco_kg,
+            peso_total_kg=peso_total,
+            n_animais_vendidos=n,
+            frigorifico=frigorifico or "",
+            data_venda=dt,
+            observacao=f"Venda parcial ({n} animais) | {observacao or ''}"
+        )
+
+    # Verificar se restaram animais ativos — se nao, encerrar lote
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT COUNT(*) FROM animais "
+            f"WHERE lote_id={p} AND ativo=1",
+            (lote_id,)
+        )
+        restantes = cur.fetchone()[0]
+
+    if restantes == 0:
+        encerrar_lote(lote_id, data_encerramento=dt, motivo="venda_total")
+
+    return {"n_vendidos": n, "restantes": restantes}
+
+
+def listar_lotes_historico(owner_id):
+    """Lista lotes encerrados/vendidos para historico."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT id,nome,descricao,data_entrada,qtd_comprada,"
+            f"qtd_recebida,transporte,"
+            f"COALESCE(tipo_alimentacao,''),COALESCE(tipo_dieta,''),"
+            f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),"
+            f"COALESCE(owner_id,0) "
+            f"FROM lotes "
+            f"WHERE owner_id={p} "
+            f"AND (status='encerrado' OR status='vendido' OR ativo=0) "
+            f"ORDER BY data_venda DESC",
+            (owner_id,)
+        )
+        rows = cur.fetchall()
+        return [
+            (r[0],r[1],r[2],r[3],r[4],r[5],r[6],
+             r[7],r[8],float(r[9] or 0),str(r[10] or ''),r[11])
+            for r in rows
+        ]
+
+
+def listar_animais_por_lote_status(lote_id, status=None):
+    """Lista animais do lote filtrado por status (None=todos, VENDIDO, ATIVO)."""
+    p = _ph()
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if status == 'VENDIDO':
+            cur.execute(
+                f"SELECT id,identificacao,raca,sexo,idade,peso_entrada,"
+                f"peso_alvo,status,ativo FROM animais "
+                f"WHERE lote_id={p} AND status='VENDIDO' ORDER BY identificacao",
+                (lote_id,)
+            )
+        elif status == 'ATIVO':
+            cur.execute(
+                f"SELECT id,identificacao,raca,sexo,idade,peso_entrada,"
+                f"peso_alvo,status,ativo FROM animais "
+                f"WHERE lote_id={p} AND ativo=1 AND status!='VENDIDO' "
+                f"ORDER BY identificacao",
+                (lote_id,)
+            )
+        else:
+            cur.execute(
+                f"SELECT id,identificacao,raca,sexo,idade,peso_entrada,"
+                f"peso_alvo,status,ativo FROM animais "
+                f"WHERE lote_id={p} ORDER BY identificacao",
+                (lote_id,)
+            )
+        return cur.fetchall()
 
 
 def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg,
