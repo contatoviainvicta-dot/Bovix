@@ -970,7 +970,9 @@ def page_status_do_lote(u):
         st.warning("Nenhum lote cadastrado.")
         st.stop()
 
-    tab_lotes, tab_animais = st.tabs(["Status dos Lotes", "Status dos Animais"])
+    tab_lotes, tab_animais, tab_vendidos = st.tabs([
+        "Status dos Lotes", "Status dos Animais", "Vendidos / Encerrados"
+    ])
 
     with tab_lotes:
         st.subheader("Status atual dos lotes")
@@ -1051,3 +1053,49 @@ def page_status_do_lote(u):
     # ============================================================
     # WORKSPACE DO LOTE
     # ============================================================
+
+
+    with tab_vendidos:
+        st.subheader("Animais Vendidos e Lotes Encerrados")
+        st.caption(
+            "Histórico completo de animais marcados como VENDIDO "
+            "e lotes encerrados."
+        )
+
+        from database import listar_animais_por_lote_status, listar_lotes_historico
+
+        oid_v = owner_id()
+
+        # Lotes encerrados
+        lotes_enc = listar_lotes_historico(oid_v or u["id"])
+        if lotes_enc:
+            st.markdown("**Lotes encerrados**")
+            import pandas as pd
+            df_enc = pd.DataFrame([{
+                "Lote":      l[1],
+                "Entrada":   "/".join(reversed(str(l[3])[:10].split("-"))),
+                "Encerrado": "/".join(reversed(str(l[10])[:10].split("-")))
+                              if l[10] and str(l[10]) not in ("","None") else "-",
+                "Animais comprados": l[4],
+            } for l in lotes_enc])
+            st.dataframe(df_enc, hide_index=True, width="stretch")
+        else:
+            st.info("Nenhum lote encerrado ainda.")
+
+        st.divider()
+
+        # Animais vendidos por lote
+        st.markdown("**Animais vendidos**")
+        # Mostrar todos os lotes (ativos + encerrados)
+        todos_lotes = lotes + lotes_enc if lotes_enc else lotes
+        for l in todos_lotes[:20]:
+            vendidos = listar_animais_por_lote_status(l[0], status='VENDIDO')
+            if vendidos:
+                with st.expander(
+                    f"🏷 {l[1]} — {len(vendidos)} animal(is) vendido(s)"
+                ):
+                    for av in vendidos:
+                        st.caption(
+                            f"• {av[1]} | {av[2] or '-'} | {av[3] or '-'} "
+                            f"| Status: VENDIDO"
+                        )
