@@ -4840,6 +4840,7 @@ from _pages.sistema    import (page_inicio, page_buscar_animal, page_notificacoe
 from _pages.crescimento import (page_importar_csv, page_onboarding,
     page_planos, page_notificacoes_email)
 from _pages.dashboard_exec import page_dashboard_executivo
+from _pages.admin_painel   import page_painel_admin
 
 try:
     from exports import gerar_excel_lote, gerar_excel_sanitario, gerar_pdf_relatorio
