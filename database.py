@@ -4578,6 +4578,32 @@ def dashboard_financeiro_fazendeiro(owner_id):
     }
 
 
+def _gmd_animal(pesagens):
+    """Calcula GMD medio de um animal a partir de lista de pesagens."""
+    from datetime import datetime
+    if len(pesagens) < 2:
+        return 0.0
+    try:
+        # Ordenar por data
+        pares = []
+        for p in pesagens:
+            try:
+                dt = datetime.strptime(str(p[3])[:10], "%Y-%m-%d")
+                pares.append((dt, float(p[2])))
+            except Exception:
+                continue
+        pares.sort(key=lambda x: x[0])
+        if len(pares) < 2:
+            return 0.0
+        dias = (pares[-1][0] - pares[0][0]).days
+        if dias <= 0:
+            return 0.0
+        gmd = (pares[-1][1] - pares[0][1]) / dias
+        return gmd if 0 < gmd <= 3.0 else 0.0
+    except Exception:
+        return 0.0
+
+
 def calendario_abate(owner_id):
     """Previsão de abate para todos os lotes ativos do fazendeiro."""
     from datetime import date, timedelta
@@ -4590,26 +4616,27 @@ def calendario_abate(owner_id):
         if not animais:
             continue
 
-        datas_prev = []
+        datas_prev   = []
         pesos_atuais = []
 
         for a in animais:
             peso_alvo = float(a[7] or 450) if len(a) > 7 else 450
             pes = listar_pesagens(a[0])
+            if not pes:
+                continue
+
+            peso_ult = float(pes[-1][2])
+            pesos_atuais.append(peso_ult)
+
             if len(pes) >= 2:
-                try:
-                    gmd = calcular_gmd_temporal(a[0])
-                    if gmd and gmd > 0:
-                        peso_ult = float(pes[-1][2])
-                        pesos_atuais.append(peso_ult)
-                        kg_faltam = max(0, peso_alvo - peso_ult)
-                        dias = int(kg_faltam / gmd)
-                        data_prev = date.today() + timedelta(days=dias)
-                        datas_prev.append(data_prev)
-                except Exception:
-                    pass
+                gmd = _gmd_animal(pes)
+                if gmd > 0:
+                    kg_faltam = max(0, peso_alvo - peso_ult)
+                    dias      = int(kg_faltam / gmd)
+                    data_prev = date.today() + timedelta(days=dias)
+                    datas_prev.append(data_prev)
             elif pes:
-                pesos_atuais.append(float(pes[-1][2]))
+                pesos_atuais.append(peso_ult)
 
         if not datas_prev:
             continue
