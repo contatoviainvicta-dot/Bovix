@@ -13,12 +13,16 @@ from database import (
     adicionar_custo_lote,
     listar_custos_lote,
     listar_lotes,
+    listar_lotes_historico,
     margem_bruta_lote,
     registrar_venda_lote,
     listar_todas_vendas,
     listar_vendas_lote,
     dre_por_periodo,
     curva_resultado_mensal,
+    encerrar_lote,
+    venda_parcial_lote,
+    listar_animais_por_lote_status,
 )
 from rules import owner_id as get_oid
 
@@ -392,84 +396,190 @@ def page_dashboard_executivo(u):
 
     # ── ABA 6: REGISTRAR VENDA ───────────────────────────────────────────
     with t6:
-        st.subheader("Registrar Venda de Lote")
-        st.caption(
-            "Registre a venda no frigorífico para calcular a margem real e "
-            "atualizar o DRE."
-        )
+        st.subheader("Registrar Venda")
 
         lotes_v  = listar_lotes(owner_id=oid)
         dict_lv  = {l[1]: l[0] for l in lotes_v}
 
-        with st.form("form_venda_lote"):
-            v1, v2 = st.columns(2)
-            with v1:
-                lote_venda   = st.selectbox("Lote *", list(dict_lv.keys()))
-                frigorifico  = st.text_input("Frigorífico",
-                                            placeholder="Ex: JBS, Minerva, Marfrig")
-                data_venda_  = st.date_input("Data da venda *",
-                                            value=date.today())
-            with v2:
-                preco_kg     = st.number_input("Preço por kg (@) R$ *",
-                                              min_value=0.0, value=0.0,
-                                              step=0.5, format="%.2f",
-                                              help="Preço por arroba (15kg)")
-                peso_total   = st.number_input("Peso total (kg) *",
-                                              min_value=0.0, value=0.0,
-                                              step=10.0, format="%.1f")
-                n_anim_vend  = st.number_input("Nº de animais vendidos *",
-                                              min_value=1, value=1, step=1)
+        if not dict_lv:
+            st.info("Nenhum lote ativo. Lotes encerrados estão no histórico abaixo.")
+        else:
+            tipo_venda = st.radio(
+                "Tipo de venda",
+                ["Venda total do lote", "Venda parcial (selecionar animais)"],
+                horizontal=True, key="tipo_venda_radio"
+            )
 
-            obs_venda = st.text_input("Observações")
+            # Campos comuns
+            lote_venda = st.selectbox("Lote *", list(dict_lv.keys()),
+                                     key="lote_venda_sel")
+            lote_id_v  = dict_lv[lote_venda]
 
-            # Preview do valor líquido
-            if preco_kg > 0 and peso_total > 0:
-                valor_liq = preco_kg * peso_total
-                st.info(
-                    f"Valor líquido estimado: **{_brl(valor_liq)}** "
-                    f"({_brl(valor_liq/n_anim_vend if n_anim_vend else 0)}/animal)"
+            cv1, cv2 = st.columns(2)
+            with cv1:
+                frigorifico = st.text_input("Frigorífico",
+                    placeholder="Ex: JBS, Minerva, Marfrig")
+                data_venda_ = st.date_input("Data da venda *",
+                                           value=date.today())
+            with cv2:
+                preco_kg  = st.number_input("Preço por @ (R$) *",
+                    min_value=0.0, value=0.0, step=0.5, format="%.2f",
+                    help="Preço por arroba (15 kg)")
+                peso_tot  = st.number_input("Peso total (kg) *",
+                    min_value=0.0, value=0.0, step=10.0, format="%.1f")
+
+            obs_v = st.text_input("Observações", key="obs_venda")
+
+            # Preview valor líquido
+            if preco_kg > 0 and peso_tot > 0:
+                vliq = preco_kg * peso_tot
+                st.info(f"Valor líquido estimado: **{_brl(vliq)}**")
+
+            # ── VENDA TOTAL ────────────────────────────────────────────
+            if tipo_venda == "Venda total do lote":
+                animais_lote = listar_animais_por_lote_status(
+                    lote_id_v, status='ATIVO'
+                )
+                n_ativos = len(animais_lote)
+                st.warning(
+                    f"**Venda total:** {n_ativos} animal(is) serão marcados "
+                    f"como VENDIDO e o lote será **encerrado** (sairá do menu "
+                    f"principal mas ficará no histórico)."
                 )
 
-            if st.form_submit_button("Registrar Venda", type="primary"):
-                if preco_kg <= 0 or peso_total <= 0:
-                    st.error("Informe preço/kg e peso total.")
-                else:
-                    resultado_venda = registrar_venda_lote(
-                        lote_id=dict_lv[lote_venda],
-                        preco_venda_kg=preco_kg,
-                        peso_total_kg=peso_total,
-                        n_animais_vendidos=int(n_anim_vend),
-                        frigorifico=frigorifico or "",
-                        data_venda=str(data_venda_),
-                        observacao=obs_venda or ""
-                    )
-                    st.success(
-                        f"Venda registrada! Valor líquido: "
-                        f"**{_brl(resultado_venda['valor_liquido'])}**"
-                    )
-                    st.rerun()
+                if st.button("Confirmar venda total", type="primary",
+                            key="btn_venda_total"):
+                    if preco_kg <= 0 or peso_tot <= 0:
+                        st.error("Informe preço/kg e peso total.")
+                    else:
+                        # Registrar venda financeira
+                        registrar_venda_lote(
+                            lote_id=lote_id_v,
+                            preco_venda_kg=preco_kg,
+                            peso_total_kg=peso_tot,
+                            n_animais_vendidos=n_ativos,
+                            frigorifico=frigorifico or "",
+                            data_venda=str(data_venda_),
+                            observacao=obs_v or ""
+                        )
+                        # Encerrar lote e marcar animais
+                        encerrar_lote(lote_id_v, str(data_venda_))
+                        vliq = preco_kg * peso_tot
+                        st.success(
+                            f"Venda total registrada! "
+                            f"Valor líquido: **{_brl(vliq)}** | "
+                            f"{n_ativos} animais marcados como VENDIDO | "
+                            f"Lote **{lote_venda}** encerrado."
+                        )
+                        st.rerun()
 
-        # Histórico de vendas
+            # ── VENDA PARCIAL ──────────────────────────────────────────
+            else:
+                animais_ativos = listar_animais_por_lote_status(
+                    lote_id_v, status='ATIVO'
+                )
+                if not animais_ativos:
+                    st.warning("Nenhum animal ativo neste lote.")
+                else:
+                    st.caption(
+                        f"{len(animais_ativos)} animal(is) ativo(s) — "
+                        f"selecione os que serão vendidos:"
+                    )
+                    # Checkboxes por animal
+                    selecionados = []
+                    for an in animais_ativos:
+                        brinco = an[1]
+                        info   = f"{an[2] or ''} | {an[3] or ''}"
+                        if st.checkbox(
+                            f"{brinco} — {info}",
+                            key=f"chk_vend_{an[0]}"
+                        ):
+                            selecionados.append(an[0])
+
+                    if selecionados:
+                        st.info(
+                            f"{len(selecionados)} animal(is) selecionado(s). "
+                            f"O lote continuará ativo com os restantes."
+                        )
+
+                    if st.button("Confirmar venda parcial", type="primary",
+                                key="btn_venda_parcial"):
+                        if not selecionados:
+                            st.error("Selecione pelo menos 1 animal.")
+                        elif preco_kg <= 0 or peso_tot <= 0:
+                            st.error("Informe preço/kg e peso total.")
+                        else:
+                            res = venda_parcial_lote(
+                                lote_id=lote_id_v,
+                                animal_ids=selecionados,
+                                preco_kg=preco_kg,
+                                peso_total=peso_tot,
+                                frigorifico=frigorifico or "",
+                                data_venda=str(data_venda_),
+                                observacao=obs_v or ""
+                            )
+                            vliq = preco_kg * peso_tot
+                            msg  = (
+                                f"{res['n_vendidos']} animal(is) marcado(s) "
+                                f"como VENDIDO | Valor: **{_brl(vliq)}**"
+                            )
+                            if res["restantes"] == 0:
+                                msg += " | Lote encerrado (sem animais ativos)"
+                            else:
+                                msg += (
+                                    f" | {res['restantes']} animal(is) "
+                                    f"ainda ativo(s) no lote"
+                                )
+                            st.success(msg)
+                            st.rerun()
+
+            # Animais vendidos no lote (status VENDIDO)
+            vendidos_lote = listar_animais_por_lote_status(
+                lote_id_v, status='VENDIDO'
+            )
+            if vendidos_lote:
+                with st.expander(
+                    f"Animais já vendidos neste lote ({len(vendidos_lote)})"
+                ):
+                    for av in vendidos_lote:
+                        st.caption(
+                            f"🏷 {av[1]} — {av[2] or ''} {av[3] or ''} "
+                            f"| Status: VENDIDO"
+                        )
+
+        # Histórico de lotes encerrados
+        st.divider()
+        st.subheader("Histórico de Lotes Encerrados")
+        lotes_enc = listar_lotes_historico(oid)
+        if lotes_enc:
+            df_enc = pd.DataFrame([{
+                "Lote":      l[1],
+                "Entrada":   "/".join(reversed(str(l[3])[:10].split("-"))),
+                "Encerrado": "/".join(reversed(str(l[10])[:10].split("-"))) if l[10] else "-",
+                "Animais":   l[4],
+            } for l in lotes_enc])
+            st.dataframe(df_enc, hide_index=True, width="stretch")
+        else:
+            st.info("Nenhum lote encerrado ainda.")
+
+        # Histórico financeiro de todas as vendas
         st.divider()
         st.subheader("Histórico de Vendas")
         vendas = listar_todas_vendas(oid)
         if vendas:
             df_vend = pd.DataFrame([{
-                "Data":       "/".join(reversed(str(v[3])[:10].split("-"))),
-                "Lote":       v[2],
-                "Frigorífico":v[6] or "-",
-                "Preço/kg":   f"R$ {float(v[4]):.2f}",
-                "Peso total": f"{float(v[5]):.0f} kg",
-                "Valor liq.": _brl(v[8]),
+                "Data":        "/".join(reversed(str(v[3])[:10].split("-"))),
+                "Lote":        v[2],
+                "Frigorífico": v[6] or "-",
+                "Preço/@":     f"R$ {float(v[4]):.2f}",
+                "Peso":        f"{float(v[5]):.0f} kg",
+                "Valor liq.":  _brl(v[8]),
             } for v in vendas])
             st.dataframe(df_vend, hide_index=True, width="stretch")
             total_vend = sum(float(v[8]) for v in vendas)
             st.metric("Total recebido de vendas", _brl(total_vend))
         else:
-            st.info(
-                "Nenhuma venda registrada ainda. "
-                "Registre a venda do lote após o abate no frigorífico."
-            )
+            st.info("Nenhuma venda registrada ainda.")
 
     # ── ABA 7: DRE POR PERÍODO ───────────────────────────────────────────
     with t7:
