@@ -4676,6 +4676,226 @@ def calendario_abate(owner_id):
     return sorted(resultado, key=lambda x: x["data_abate"])
 
 
+# ── VENDAS DE LOTE ───────────────────────────────────────────
+def registrar_venda_lote(lote_id, preco_venda_kg, peso_total_kg,
+                         n_animais_vendidos, frigorifico="",
+                         data_venda=None, observacao=""):
+    """Registra venda do lote. Calcula valor liquido automaticamente."""
+    _garantir_tabelas_vet()
+    from datetime import date
+    p  = _ph()
+    dt = str(data_venda or date.today())
+    valor_liquido = round(preco_venda_kg * peso_total_kg, 2)
+
+    with _conexao() as conn:
+        cur = conn.cursor()
+        if _usar_postgres():
+            cur.execute(
+                f"INSERT INTO vendas_lote "
+                f"(lote_id,data_venda,preco_venda_kg,peso_total_kg,"
+                f"frigorific,observacao) "
+                f"VALUES({p},{p},{p},{p},{p},{p}) RETURNING id",
+                (lote_id, dt, float(preco_venda_kg),
+                 float(peso_total_kg), frigorifico or "", observacao or "")
+            )
+            vid = cur.fetchone()[0]
+        else:
+            cur.execute(
+                f"INSERT INTO vendas_lote "
+                f"(lote_id,data_venda,preco_venda_kg,peso_total_kg,"
+                f"frigorific,observacao) "
+                f"VALUES({p},{p},{p},{p},{p},{p})",
+                (lote_id, dt, float(preco_venda_kg),
+                 float(peso_total_kg), frigorifico or "", observacao or "")
+            )
+            vid = cur.lastrowid
+        conn.commit()
+
+    # Atualizar status do lote para "vendido"
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE lotes SET status='vendido', data_venda={p} "
+                f"WHERE id={p}",
+                (dt, lote_id)
+            )
+            conn.commit()
+    except Exception:
+        pass
+
+    return {
+        "id":             vid,
+        "valor_liquido":  valor_liquido,
+        "preco_venda_kg": preco_venda_kg,
+        "peso_total_kg":  peso_total_kg,
+        "n_animais":      n_animais_vendidos,
+        "data_venda":     dt,
+    }
+
+
+def listar_vendas_lote(lote_id):
+    """Lista vendas registradas para um lote."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT id,lote_id,data_venda,preco_venda_kg,"
+                f"peso_total_kg,frigorific,observacao "
+                f"FROM vendas_lote WHERE lote_id={p} ORDER BY data_venda DESC",
+                (lote_id,)
+            )
+            return cur.fetchall()
+    except Exception:
+        return []
+
+
+def listar_todas_vendas(owner_id):
+    """Lista todas as vendas do fazendeiro."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT v.id, v.lote_id, l.nome, v.data_venda,"
+                f"v.preco_venda_kg, v.peso_total_kg, v.frigorific,"
+                f"v.observacao, "
+                f"(v.preco_venda_kg * v.peso_total_kg) as valor_liquido "
+                f"FROM vendas_lote v "
+                f"JOIN lotes l ON l.id=v.lote_id "
+                f"WHERE l.owner_id={p} ORDER BY v.data_venda DESC",
+                (owner_id,)
+            )
+            return cur.fetchall()
+    except Exception:
+        return []
+
+
+# ── DRE POR PERÍODO ───────────────────────────────────────────
+def dre_por_periodo(owner_id, ano=None, mes=None):
+    """DRE filtrado por período (ano e/ou mês).
+    Retorna dict com receitas, custos e margem do período."""
+    from datetime import date
+    import calendar
+
+    hoje  = date.today()
+    _ano  = ano  or hoje.year
+    _mes  = mes  # None = ano inteiro
+
+    # Montar filtro de data
+    if _mes:
+        dt_ini = f"{_ano}-{_mes:02d}-01"
+        ultimo_dia = calendar.monthrange(_ano, _mes)[1]
+        dt_fim = f"{_ano}-{_mes:02d}-{ultimo_dia:02d}"
+    else:
+        dt_ini = f"{_ano}-01-01"
+        dt_fim = f"{_ano}-12-31"
+
+    p = _ph()
+
+    # Receitas de venda no período
+    receitas_venda = 0.0
+    n_vendas = 0
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT COALESCE(SUM(v.preco_venda_kg * v.peso_total_kg),0),"
+                f"COUNT(*) "
+                f"FROM vendas_lote v "
+                f"JOIN lotes l ON l.id=v.lote_id "
+                f"WHERE l.owner_id={p} "
+                f"AND v.data_venda BETWEEN {p} AND {p}",
+                (owner_id, dt_ini, dt_fim)
+            )
+            row = cur.fetchone()
+            receitas_venda = float(row[0] or 0)
+            n_vendas       = int(row[1] or 0)
+    except Exception:
+        pass
+
+    # Custo de compra dos lotes com entrada no período
+    custo_compra = 0.0
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT COALESCE(SUM("
+                f"COALESCE(preco_por_animal,0) * "
+                f"COALESCE(qtd_recebida,qtd_comprada,0)"
+                f"),0) "
+                f"FROM lotes "
+                f"WHERE owner_id={p} "
+                f"AND data_entrada BETWEEN {p} AND {p}",
+                (owner_id, dt_ini, dt_fim)
+            )
+            custo_compra = float(cur.fetchone()[0] or 0)
+    except Exception:
+        pass
+
+    # Custos variáveis lançados no período
+    custos_var  = 0.0
+    custos_cats = {}
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT cl.categoria, COALESCE(SUM(cl.valor),0) "
+                f"FROM custos_lote cl "
+                f"JOIN lotes l ON l.id=cl.lote_id "
+                f"WHERE l.owner_id={p} "
+                f"AND cl.data_lancamento BETWEEN {p} AND {p} "
+                f"GROUP BY cl.categoria",
+                (owner_id, dt_ini, dt_fim)
+            )
+            for row in cur.fetchall():
+                custos_cats[row[0]] = float(row[1])
+            custos_var = sum(custos_cats.values())
+    except Exception:
+        pass
+
+    custo_total  = custo_compra + custos_var
+    margem_bruta = receitas_venda - custo_total
+    margem_pct   = round(100 * margem_bruta / max(receitas_venda, 1), 1)
+
+    return {
+        "periodo":       f"{_mes:02d}/{_ano}" if _mes else str(_ano),
+        "dt_ini":        dt_ini,
+        "dt_fim":        dt_fim,
+        "receita_venda": receitas_venda,
+        "n_vendas":      n_vendas,
+        "custo_compra":  custo_compra,
+        "custos_var":    custos_var,
+        "custos_cats":   custos_cats,
+        "custo_total":   custo_total,
+        "margem_bruta":  margem_bruta,
+        "margem_pct":    margem_pct,
+    }
+
+
+def curva_resultado_mensal(owner_id, ano=None):
+    """Retorna resultado mensal para gráficos.
+    Lista de 12 dicts com receita, custo e margem por mês."""
+    from datetime import date
+    _ano = ano or date.today().year
+    meses = []
+    acum  = 0.0
+
+    for m in range(1, 13):
+        dre = dre_por_periodo(owner_id, ano=_ano, mes=m)
+        acum += dre["margem_bruta"]
+        meses.append({
+            "mes":         f"{m:02d}/{_ano}",
+            "mes_num":     m,
+            "receita":     dre["receita_venda"],
+            "custo":       dre["custo_total"],
+            "margem":      dre["margem_bruta"],
+            "margem_acum": acum,
+        })
+    return meses
+
+
 def buscar_usuario_por_email(email):
     """Busca usuario por email. Retorna dict ou None."""
     p = _ph()
