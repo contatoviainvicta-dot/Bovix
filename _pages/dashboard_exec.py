@@ -14,6 +14,11 @@ from database import (
     listar_custos_lote,
     listar_lotes,
     margem_bruta_lote,
+    registrar_venda_lote,
+    listar_todas_vendas,
+    listar_vendas_lote,
+    dre_por_periodo,
+    curva_resultado_mensal,
 )
 from rules import owner_id as get_oid
 
@@ -94,9 +99,10 @@ def page_dashboard_executivo(u):
     st.divider()
 
     # ── ABAS PRINCIPAIS ──────────────────────────────────────────────────
-    t1, t2, t3, t4, t5 = st.tabs([
+    t1, t2, t3, t4, t5, t6, t7 = st.tabs([
         "DRE", "Ranking Lotes", "Projeção de Abate",
-        "Lançar Custo", "Detalhes por Lote"
+        "Lançar Custo", "Detalhes por Lote",
+        "Registrar Venda", "DRE por Período"
     ])
 
     # ── ABA 1: DRE ───────────────────────────────────────────────────────
@@ -383,3 +389,213 @@ def page_dashboard_executivo(u):
                 )
                 df_cv["Total"] = df_cv["Total"].apply(_brl)
                 st.dataframe(df_cv, hide_index=True, width="stretch")
+
+    # ── ABA 6: REGISTRAR VENDA ───────────────────────────────────────────
+    with t6:
+        st.subheader("Registrar Venda de Lote")
+        st.caption(
+            "Registre a venda no frigorífico para calcular a margem real e "
+            "atualizar o DRE."
+        )
+
+        lotes_v  = listar_lotes(owner_id=oid)
+        dict_lv  = {l[1]: l[0] for l in lotes_v}
+
+        with st.form("form_venda_lote"):
+            v1, v2 = st.columns(2)
+            with v1:
+                lote_venda   = st.selectbox("Lote *", list(dict_lv.keys()))
+                frigorifico  = st.text_input("Frigorífico",
+                                            placeholder="Ex: JBS, Minerva, Marfrig")
+                data_venda_  = st.date_input("Data da venda *",
+                                            value=date.today())
+            with v2:
+                preco_kg     = st.number_input("Preço por kg (@) R$ *",
+                                              min_value=0.0, value=0.0,
+                                              step=0.5, format="%.2f",
+                                              help="Preço por arroba (15kg)")
+                peso_total   = st.number_input("Peso total (kg) *",
+                                              min_value=0.0, value=0.0,
+                                              step=10.0, format="%.1f")
+                n_anim_vend  = st.number_input("Nº de animais vendidos *",
+                                              min_value=1, value=1, step=1)
+
+            obs_venda = st.text_input("Observações")
+
+            # Preview do valor líquido
+            if preco_kg > 0 and peso_total > 0:
+                valor_liq = preco_kg * peso_total
+                st.info(
+                    f"Valor líquido estimado: **{_brl(valor_liq)}** "
+                    f"({_brl(valor_liq/n_anim_vend if n_anim_vend else 0)}/animal)"
+                )
+
+            if st.form_submit_button("Registrar Venda", type="primary"):
+                if preco_kg <= 0 or peso_total <= 0:
+                    st.error("Informe preço/kg e peso total.")
+                else:
+                    resultado_venda = registrar_venda_lote(
+                        lote_id=dict_lv[lote_venda],
+                        preco_venda_kg=preco_kg,
+                        peso_total_kg=peso_total,
+                        n_animais_vendidos=int(n_anim_vend),
+                        frigorifico=frigorifico or "",
+                        data_venda=str(data_venda_),
+                        observacao=obs_venda or ""
+                    )
+                    st.success(
+                        f"Venda registrada! Valor líquido: "
+                        f"**{_brl(resultado_venda['valor_liquido'])}**"
+                    )
+                    st.rerun()
+
+        # Histórico de vendas
+        st.divider()
+        st.subheader("Histórico de Vendas")
+        vendas = listar_todas_vendas(oid)
+        if vendas:
+            df_vend = pd.DataFrame([{
+                "Data":       "/".join(reversed(str(v[3])[:10].split("-"))),
+                "Lote":       v[2],
+                "Frigorífico":v[6] or "-",
+                "Preço/kg":   f"R$ {float(v[4]):.2f}",
+                "Peso total": f"{float(v[5]):.0f} kg",
+                "Valor liq.": _brl(v[8]),
+            } for v in vendas])
+            st.dataframe(df_vend, hide_index=True, width="stretch")
+            total_vend = sum(float(v[8]) for v in vendas)
+            st.metric("Total recebido de vendas", _brl(total_vend))
+        else:
+            st.info(
+                "Nenhuma venda registrada ainda. "
+                "Registre a venda do lote após o abate no frigorífico."
+            )
+
+    # ── ABA 7: DRE POR PERÍODO ───────────────────────────────────────────
+    with t7:
+        st.subheader("DRE por Período")
+
+        # Seletores
+        dc1, dc2, dc3 = st.columns(3)
+        with dc1:
+            ano_dre = st.selectbox(
+                "Ano",
+                list(range(date.today().year - 2, date.today().year + 1)),
+                index=2,
+                key="dre_ano"
+            )
+        with dc2:
+            mes_opts = {"Ano inteiro": None,
+                       "Janeiro":1,"Fevereiro":2,"Março":3,"Abril":4,
+                       "Maio":5,"Junho":6,"Julho":7,"Agosto":8,
+                       "Setembro":9,"Outubro":10,"Novembro":11,"Dezembro":12}
+            mes_sel  = st.selectbox("Mês", list(mes_opts.keys()),
+                                   key="dre_mes")
+            mes_dre  = mes_opts[mes_sel]
+        with dc3:
+            st.caption(" ")
+            btn_calc = st.button("Calcular DRE", type="primary",
+                                key="btn_dre_calc")
+
+        if btn_calc or True:  # sempre calcular
+            with st.spinner("Calculando..."):
+                dre_p = dre_por_periodo(oid, ano=int(ano_dre), mes=mes_dre)
+
+            # Cards do período
+            dp1, dp2, dp3, dp4 = st.columns(4)
+            dp1.metric("Receita de vendas", _brl(dre_p["receita_venda"]),
+                      delta=f"{dre_p['n_vendas']} venda(s)")
+            dp2.metric("Custo de compra",   _brl(dre_p["custo_compra"]))
+            dp3.metric("Custos variáveis",  _brl(dre_p["custos_var"]))
+            dp4.metric("Margem bruta",      _brl(dre_p["margem_bruta"]),
+                      delta=f"{dre_p['margem_pct']}%",
+                      delta_color="normal" if dre_p["margem_pct"] >= 0
+                                  else "inverse")
+
+            # DRE em tabela
+            st.divider()
+            import streamlit.components.v1 as _comp
+            linhas_p = [
+                ("(+) Receita de vendas",  dre_p["receita_venda"],  False, True),
+                ("(-) Custo de compra",    dre_p["custo_compra"],   False, False),
+                ("(-) Custos variáveis",   dre_p["custos_var"],     False, False),
+                ("(=) Margem bruta",       dre_p["margem_bruta"],   True,  True),
+            ]
+            rec_ref = max(dre_p["receita_venda"], 1)
+            html_p  = """<table style='width:100%;border-collapse:collapse;
+                font-family:sans-serif;font-size:13px'>
+                <tr style='background:#f5f5f5'>
+                    <th style='text-align:left;padding:10px 12px;
+                        border-bottom:2px solid #1D9E75'>Item</th>
+                    <th style='text-align:right;padding:10px 12px;
+                        border-bottom:2px solid #1D9E75'>Valor</th>
+                    <th style='text-align:right;padding:10px 12px;
+                        border-bottom:2px solid #1D9E75'>% Receita</th>
+                </tr>"""
+            for desc, val, bold, dest in linhas_p:
+                pct  = round(100 * val / rec_ref, 1)
+                cor  = "#1D9E75" if val >= 0 else "#E24B4A"
+                fw   = "700" if bold else "400"
+                bg   = "#E1F5EE" if dest and val >= 0 else                        "#FCEBEB" if dest else "white"
+                bdr  = "2px solid #1D9E75" if dest else "0.5px solid #f0f0f0"
+                sinal = "-" if desc.startswith("(-)") else ""
+                html_p += f"""<tr style='background:{bg};border-bottom:{bdr}'>
+                    <td style='padding:10px 12px;font-weight:{fw}'>{desc}</td>
+                    <td style='padding:10px 12px;text-align:right;
+                        font-weight:{fw};color:{cor}'>
+                        {sinal}R$ {abs(val):,.0f}</td>
+                    <td style='padding:10px 12px;text-align:right;
+                        color:#777;font-size:11px'>{pct}%</td>
+                </tr>"""
+
+            # Detalhamento custos variáveis
+            if dre_p["custos_cats"]:
+                for cat, val in dre_p["custos_cats"].items():
+                    html_p += f"""<tr style='background:#fafafa;
+                        border-bottom:0.5px solid #f0f0f0'>
+                        <td style='padding:6px 12px 6px 28px;
+                            color:#888;font-size:12px'>• {cat}</td>
+                        <td style='padding:6px 12px;text-align:right;
+                            color:#888;font-size:12px'>
+                            -R$ {val:,.0f}</td>
+                        <td style='padding:6px 12px;text-align:right;
+                            color:#bbb;font-size:11px'>
+                            {round(100*val/rec_ref,1)}%</td>
+                    </tr>"""
+
+            html_p += "</table>"
+            _comp.html(html_p, height=240 + len(dre_p["custos_cats"]) * 32)
+
+            # Curva de resultado mensal (apenas para ano inteiro)
+            if not mes_dre:
+                st.divider()
+                st.subheader(f"Evolução Mensal — {ano_dre}")
+                with st.spinner("Calculando curva mensal..."):
+                    curva = curva_resultado_mensal(oid, ano=int(ano_dre))
+
+                df_curva = pd.DataFrame(curva)
+
+                # Gráfico de barras: receita x custo x margem
+                st.caption("Receita × Custo × Margem por mês")
+                df_barras = df_curva[["mes","receita","custo","margem"]].copy()
+                df_barras = df_barras.set_index("mes")
+                df_barras.columns = ["Receita","Custo","Margem"]
+                st.bar_chart(df_barras)
+
+                # Gráfico de linha: margem acumulada
+                st.caption("Margem acumulada no ano")
+                df_linha = df_curva[["mes","margem_acum"]].copy()
+                df_linha = df_linha.set_index("mes")
+                df_linha.columns = ["Margem Acumulada"]
+                st.line_chart(df_linha)
+
+                # Tabela resumo anual
+                st.divider()
+                df_tab = pd.DataFrame([{
+                    "Mês":       c["mes"],
+                    "Receita":   _brl(c["receita"]),
+                    "Custo":     _brl(c["custo"]),
+                    "Margem":    _brl(c["margem"]),
+                    "Acumulada": _brl(c["margem_acum"]),
+                } for c in curva])
+                st.dataframe(df_tab, hide_index=True, width="stretch")
