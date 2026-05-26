@@ -5739,6 +5739,7 @@ _ROTAS = {
     "Planos":               page_planos,
     "Email Alertas":        page_notificacoes_email,
     "Dashboard Financeiro": page_dashboard_executivo,
+    "Painel Admin":         page_painel_admin,
 }
 
 
