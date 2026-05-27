@@ -12,7 +12,7 @@ from reportlab.platypus import (
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
 
 
-# Paleta de cores BOVIX
+# Paleta de cores Auroque
 _VERDE       = colors.HexColor("#1B4332")
 _VERDE_CLARO = colors.HexColor("#40916C")
 _BEGE        = colors.HexColor("#F5F0E8")
@@ -64,10 +64,10 @@ def _estilos():
 
 
 def _cabecalho(story, styles, nome_vet, crmv, subtitulo=""):
-    """Cabecalho padrao com logo BOVIX + dados do vet."""
-    # Logo texto BOVIX
+    """Cabecalho padrao com logo Auroque + dados do vet."""
+    # Logo texto Auroque
     story.append(Paragraph(
-        "<font color='#1B4332'><b>🐄 BOVIX</b></font> "
+        "<font color='#1B4332'><b>🐄 Auroque</b></font> "
         "<font color='#40916C'>Sistema de Gestao Pecuaria</font>",
         styles["SubtituloDoc"]
     ))
@@ -113,7 +113,7 @@ def _rodape(story, styles, doc_tipo, doc_id):
         color=_CINZA, spaceBefore=4
     ))
     story.append(Paragraph(
-        f"Documento gerado pelo BOVIX em {date.today().strftime('%d/%m/%Y')} | "
+        f"Documento gerado pelo Auroque em {date.today().strftime('%d/%m/%Y')} | "
         f"{doc_tipo} #{doc_id} | "
         "Este documento tem validade informativa. "
         "Para fins legais, confirme com o veterinario responsavel.",
