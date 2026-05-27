@@ -1,5 +1,5 @@
 """
-bovix_logging.py — Configuracao centralizada de logs do BOVIX.
+bovix_logging.py — Configuracao centralizada de logs do Auroque.
 
 Uso:
     from bovix_logging import get_logger
@@ -14,11 +14,11 @@ import sys
 from datetime import datetime
 
 _CONFIGURED = False
-_LOG_DIR    = os.environ.get("BOVIX_LOG_DIR", "/tmp/bovix_logs")
+_LOG_DIR    = os.environ.get("Auroque_LOG_DIR", "/tmp/auroque_logs")
 
 
 def configurar_logs(nivel=logging.INFO, arquivo=True, console=True):
-    """Configura o sistema de logs do BOVIX.
+    """Configura o sistema de logs do Auroque.
     Chamada uma vez no boot. Idempotente."""
     global _CONFIGURED
     if _CONFIGURED:
@@ -31,7 +31,7 @@ def configurar_logs(nivel=logging.INFO, arquivo=True, console=True):
         pass
 
     # Logger raiz da aplicacao
-    root = logging.getLogger("bovix")
+    root = logging.getLogger("auroque")
     root.setLevel(nivel)
 
     # Remover handlers anteriores (Streamlit pode reinjetar)
@@ -74,7 +74,7 @@ def configurar_logs(nivel=logging.INFO, arquivo=True, console=True):
               logging.getLevelName(nivel), arquivo, console)
 
 
-def get_logger(nome="bovix"):
+def get_logger(nome="auroque"):
     """Retorna logger nomeado. Configura sistema se necessario."""
     if not _CONFIGURED:
         configurar_logs()
