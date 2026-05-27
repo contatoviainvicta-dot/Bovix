@@ -2,6 +2,16 @@
 _pages/crescimento.py — Sprint B: Importacao CSV, Onboarding, Planos
 """
 import streamlit as st
+try:
+    from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
+                            toast_aviso, empty_state, erro_com_acao)
+except ImportError:
+    def aplicar_css_global(): pass
+    def toast_ok(m): st.success(m)
+    def toast_erro(m): st.error(m)
+    def toast_aviso(m): st.warning(m)
+    def empty_state(t, d, **k): st.info(f"{t} — {d}"); return False
+    def erro_com_acao(e, a=""): st.error(str(e))
 import io
 import csv
 from datetime import date, datetime
@@ -137,7 +147,7 @@ def page_importar_csv(u):
                                 lote_id, linhas
                             )
                         if n_ok:
-                            st.success(f"{n_ok} animal(is) importado(s) com sucesso!")
+                            toast_ok("{n_ok} animal(is) importado(s) com sucesso!")
                             marcar_passo_onboarding(oid, "animais")
                         if n_err:
                             st.warning(f"{n_err} linha(s) com erro:")
@@ -286,7 +296,7 @@ def _passos_ui(u, oid, prog):
                     if is_vet() and crmv_p:
                         atualizar_crmv(u["id"], crmv_p)
                     marcar_passo_onboarding(oid, "perfil")
-                    st.success("Perfil salvo!")
+                    toast_ok("Perfil salvo!")
                     st.rerun()
     else:
         st.caption("Perfil configurado")
@@ -686,7 +696,7 @@ def page_notificacoes_email(u):
                             u.get("nome",""), dest_email, alertas_lista
                         )
                     if ok:
-                        st.success("Email enviado!")
+                        toast_ok("Email enviado!")
                     else:
                         st.error(f"Erro: {msg}")
                         st.info(
@@ -705,7 +715,7 @@ def page_notificacoes_email(u):
                     obter_plano(oid).get("plano_key","free")
                 )
             if ok:
-                st.success(f"Email enviado para {email}!")
+                toast_ok("Email enviado para {email}!")
             else:
                 st.error(f"Falha: {msg}")
 
@@ -747,6 +757,6 @@ from_email  = "seuemail@gmail.com"
                 "Auroque: SMTP configurado corretamente."
             )
             if ok:
-                st.success("Email de teste enviado com sucesso!")
+                toast_ok("Email de teste enviado com sucesso!")
             else:
                 st.error(f"Falha: {msg}")
