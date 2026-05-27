@@ -5637,14 +5637,25 @@ def enviar_email_boas_vindas(nome, email, plano="free"):
     info  = _PLANOS.get(plano, _PLANOS["free"])
     html  = f"""
     <html><body style='font-family:sans-serif;max-width:600px;margin:auto'>
-    <div style='background:#1B4332;padding:20px;text-align:center'>
-        <h1 style='color:white;margin:0'>🐄 BOVIX</h1>
-        <p style='color:#40916C;margin:5px 0'>Sistema de Gestao Pecuaria</p>
+    <div style='background:#1B4332;padding:18px 28px;display:flex;
+         align-items:center;gap:14px'>
+        <svg width='34' height='34' viewBox='0 0 44 44' xmlns='http://www.w3.org/2000/svg'>
+          <polygon points='22,3 39,13 39,31 22,41 5,31 5,13' fill='none' stroke='#F5F0E8' stroke-width='2'/>
+          <text x='22' y='30' font-family='sans-serif' font-size='19'
+                font-weight='300' fill='#F5F0E8' text-anchor='middle'>A</text>
+          <line x1='13' y1='34' x2='31' y2='34' stroke='#40916C' stroke-width='1.8'/>
+        </svg>
+        <div>
+          <div style='font-family:Georgia,serif;font-size:20px;font-weight:700;
+               color:#F5F0E8;letter-spacing:2px'>Auroque</div>
+          <div style='font-size:8px;color:#40916C;letter-spacing:4px;
+               margin-top:2px'>GESTÃO PECUÁRIA INTELIGENTE</div>
+        </div>
     </div>
     <div style='padding:30px;background:#f9f9f9'>
         <h2 style='color:#1B4332'>Bem-vindo(a), {nome}!</h2>
         <p>Sua conta foi criada com sucesso no plano <strong>{info['nome']}</strong>.</p>
-        <p>Com o BOVIX voce pode:</p>
+        <p>Com o Auroque voce pode:</p>
         <ul>
             <li>Gerenciar animais, pesagens e lotes</li>
             <li>Acompanhar o calendario sanitario</li>
@@ -5659,8 +5670,8 @@ def enviar_email_boas_vindas(nome, email, plano="free"):
     </div>
     </body></html>
     """
-    txt = f"Bem-vindo(a) ao BOVIX, {nome}! Plano: {info['nome']}."
-    return enviar_email(email, "Bem-vindo ao BOVIX!", html, txt)
+    txt = f"Bem-vindo(a) ao Auroque, {nome}! Plano: {info['nome']}."
+    return enviar_email(email, "Bem-vindo ao Auroque!", html, txt)
 
 
 def enviar_email_alerta_diario(nome, email, alertas):
@@ -5674,8 +5685,16 @@ def enviar_email_alerta_diario(nome, email, alertas):
     )
     html = f"""
     <html><body style='font-family:sans-serif;max-width:600px;margin:auto'>
-    <div style='background:#1B4332;padding:20px;text-align:center'>
-        <h1 style='color:white;margin:0'>🐄 BOVIX</h1>
+    <div style='background:#1B4332;padding:16px 28px;display:flex;
+         align-items:center;gap:12px'>
+        <svg width='28' height='28' viewBox='0 0 44 44' xmlns='http://www.w3.org/2000/svg'>
+          <polygon points='22,3 39,13 39,31 22,41 5,31 5,13' fill='none' stroke='#F5F0E8' stroke-width='2'/>
+          <text x='22' y='30' font-family='sans-serif' font-size='19'
+                font-weight='300' fill='#F5F0E8' text-anchor='middle'>A</text>
+          <line x1='13' y1='34' x2='31' y2='34' stroke='#40916C' stroke-width='1.8'/>
+        </svg>
+        <div style='font-family:Georgia,serif;font-size:18px;
+             font-weight:700;color:#F5F0E8;letter-spacing:2px'>Auroque</div>
     </div>
     <div style='padding:30px'>
         <h2 style='color:#1B4332'>Ola, {nome}!</h2>
@@ -5684,14 +5703,14 @@ def enviar_email_alerta_diario(nome, email, alertas):
             {itens_html}
         </ul>
         <p style='color:#888;font-size:12px'>
-            Voce recebe este email porque tem alertas ativos no BOVIX.
+            Voce recebe este email porque tem alertas ativos no Auroque.
         </p>
     </div>
     </body></html>
     """
-    txt = f"BOVIX Alertas - {nome}:\n" + "\n".join(f"- {a}" for a in alertas)
+    txt = f"Auroque Alertas - {nome}:\n" + "\n".join(f"- {a}" for a in alertas)
     return enviar_email(
-        email, f"BOVIX — {len(alertas)} alerta(s) hoje", html, txt
+        email, f"Auroque — {len(alertas)} alerta(s) hoje", html, txt
     )
 
 
