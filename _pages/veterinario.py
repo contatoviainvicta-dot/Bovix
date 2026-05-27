@@ -1,5 +1,15 @@
 # _pages/veterinario.py -- Telas exclusivas do perfil veterinario
 import streamlit as st
+try:
+    from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
+                            toast_aviso, empty_state, erro_com_acao)
+except ImportError:
+    def aplicar_css_global(): pass
+    def toast_ok(m): st.success(m)
+    def toast_erro(m): st.error(m)
+    def toast_aviso(m): st.warning(m)
+    def empty_state(t, d, **k): st.info(f"{t} — {d}"); return False
+    def erro_com_acao(e, a=""): st.error(str(e))
 import pandas as pd
 import json
 import io
@@ -66,7 +76,7 @@ def page_meu_crmv(u):
     crmv_atual = obter_crmv_usuario(u["id"])
 
     if crmv_atual:
-        st.success(f"CRMV cadastrado: **{crmv_atual}**")
+        toast_ok("CRMV cadastrado: **{crmv_atual}**")
     else:
         st.info("Nenhum CRMV cadastrado ainda.")
 
@@ -83,7 +93,7 @@ def page_meu_crmv(u):
                 else:
                     try:
                         atualizar_crmv(u["id"], novo_crmv.strip())
-                        st.success(f"CRMV **{novo_crmv.strip()}** salvo!")
+                        toast_ok("CRMV **{novo_crmv.strip()}** salvo!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Erro: {e}")
@@ -289,7 +299,7 @@ def page_protocolos(u):
                     pid = adicionar_protocolo(u["id"], nome_proto,
                                              desc_proto or "", cat_proto)
                     st.session_state["_proto_recem_criado"] = pid
-                    st.success(f"Protocolo criado! Adicione itens abaixo.")
+                    toast_ok("Protocolo criado! Adicione itens abaixo.")
                     st.rerun()
 
         # Se acabou de criar, mostrar form para adicionar itens
@@ -1106,7 +1116,7 @@ def page_exames_laboratoriais(u):
                                 eid, novo_res, novo_interp,
                                 "concluido", 1 if novo_alt else 0
                             )
-                            st.success("Exame atualizado!")
+                            toast_ok("Exame atualizado!")
                             st.rerun()
 
 
@@ -1394,7 +1404,7 @@ def page_gestao_financeira_vet(u):
                                         type="primary"):
                                 registrar_pagamento_honorario(hid, forma)
                                 limpar_cache()
-                                st.success("Pagamento registrado!")
+                                toast_ok("Pagamento registrado!")
                                 st.rerun()
                         with ac3:
                             if st.button("Cancelar lançamento",
