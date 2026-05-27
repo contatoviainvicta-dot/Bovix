@@ -161,6 +161,38 @@ def _conexao():
         finally:
             conn.close()
 
+# ── CACHE DE DADOS (TTL 60s) ─────────────────────────────────
+import functools as _functools
+import time as _time
+
+_cache_store = {}
+
+def _cached(fn, ttl=60):
+    """Decorator de cache simples com TTL para funções de listagem."""
+    @_functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        key = (fn.__name__, args, tuple(sorted(kwargs.items())))
+        now = _time.time()
+        if key in _cache_store:
+            val, ts = _cache_store[key]
+            if now - ts < ttl:
+                return val
+        result = fn(*args, **kwargs)
+        _cache_store[key] = (result, now)
+        return result
+    return wrapper
+
+
+def invalidar_cache(prefixo=None):
+    """Invalida cache — chamar após escrita no banco."""
+    global _cache_store
+    if prefixo:
+        _cache_store = {k: v for k, v in _cache_store.items()
+                       if not str(k[0]).startswith(prefixo)}
+    else:
+        _cache_store = {}
+
+
 def _ph():
     # placeholder: %s para postgres, ? para sqlite
     return "%s" if _usar_postgres() else "?"
@@ -1890,6 +1922,8 @@ def registrar_vacina_realizada(vacina_id, data_realizada,
             dias_recuperacao=0, status="Resolvido"
         )
 
+    invalidar_cache("listar_animais")
+    invalidar_cache("listar_lotes")
     return True
 
 def listar_vacinas_agenda(lote_id=None):
@@ -2406,6 +2440,7 @@ def encerrar_lote(lote_id, data_encerramento=None, motivo="venda_total"):
             (dt, lote_id)
         )
         conn.commit()
+    invalidar_cache("listar_lotes")
     return True
 
 
@@ -3529,6 +3564,7 @@ def atualizar_crmv(user_id, crmv):
             (crmv, user_id)
         )
         conn.commit()
+    invalidar_cache("listar_lotes")
     return True
 
 
