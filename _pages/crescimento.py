@@ -242,14 +242,14 @@ def page_onboarding(u):
     total      = len(_PASSOS_ONBOARDING)
     pct        = int(100 * concluidos / total)
 
-    st.title("Configure o BOVIX")
-    st.caption("Complete os passos abaixo para aproveitar tudo que o BOVIX oferece")
+    st.title("Configure o Auroque")
+    st.caption("Complete os passos abaixo para aproveitar tudo que o Auroque oferece")
     st.progress(pct / 100)
     st.caption(f"{concluidos} de {total} passos concluidos ({pct}%)")
 
     if concluidos == total:
         st.success(
-            "Configuracao completa! Voce ja pode usar todos os recursos do BOVIX."
+            "Configuracao completa! Voce ja pode usar todos os recursos do Auroque."
         )
         if st.button("Ir para o inicio", type="primary"):
             st.session_state["_page"] = "Inicio"
@@ -296,7 +296,7 @@ def _passos_ui(u, oid, prog):
     if not prog["fazenda"]:
         with st.expander("Configurar agora", expanded=True):
             st.info(
-                "Sua conta ja representa sua fazenda no BOVIX. "
+                "Sua conta ja representa sua fazenda no Auroque. "
                 "Verifique se os dados de cadastro estao corretos."
             )
             if st.button("Confirmar e continuar", key="ob_faz"):
@@ -369,7 +369,7 @@ def _passos_ui(u, oid, prog):
     if not prog["alertas"]:
         with st.expander("Configurar agora", expanded=True):
             st.info(
-                "Os alertas do BOVIX funcionam automaticamente: "
+                "Os alertas do Auroque funcionam automaticamente: "
                 "vacinas pendentes, medicamentos em baixo estoque "
                 "e partos previstos aparecem na sua tela inicial."
             )
@@ -385,7 +385,7 @@ def _passos_ui(u, oid, prog):
                         from database import enviar_email_boas_vindas
                         enviar_email_boas_vindas(u.get("nome",""), email_al)
                     st.balloons()
-                    st.success("Configuracao concluida! Bem-vindo ao BOVIX!")
+                    st.success("Configuracao concluida! Bem-vindo ao Auroque!")
                     st.rerun()
             with c2:
                 if st.button("Pular", key="ob_alerta_skip"):
@@ -416,7 +416,7 @@ def page_planos(u):
     plano_atual = obter_plano(oid)
     atual, lim, _pode = verificar_limite_animais(oid)
 
-    st.title("Planos BOVIX")
+    st.title("Planos Auroque")
     st.caption("Escolha o plano ideal para sua operacao")
 
     # Status atual
@@ -606,7 +606,7 @@ def page_planos(u):
     )
     cc1, cc2 = st.columns(2)
     with cc1:
-        st.markdown("📧 **contato@bovix.com.br**")
+        st.markdown("📧 **contato@auroque.com.br**")
     with cc2:
         st.markdown("📱 **WhatsApp: (11) 99999-9999**")
 
@@ -742,9 +742,9 @@ from_email  = "seuemail@gmail.com"
             from database import enviar_email
             ok, msg = enviar_email(
                 test_email,
-                "BOVIX — Teste de configuracao SMTP",
+                "Auroque — Teste de configuracao SMTP",
                 "<h2>Funcionou!</h2><p>Seu SMTP esta configurado corretamente.</p>",
-                "BOVIX: SMTP configurado corretamente."
+                "Auroque: SMTP configurado corretamente."
             )
             if ok:
                 st.success("Email de teste enviado com sucesso!")
