@@ -1236,11 +1236,21 @@ def adicionar_pesagem(animal_id, peso, data):
     with _conexao() as conn:
         cur = conn.cursor()
         if _usar_postgres():
-            cur.execute(f"INSERT INTO pesagens (animal_id,peso,data) VALUES({p},{p},{p}) RETURNING id", (animal_id, peso, data))
-            return cur.fetchone()[0]
+            cur.execute(
+                f"INSERT INTO pesagens (animal_id,peso,data) "
+                f"VALUES({p},{p},{p}) RETURNING id",
+                (animal_id, float(peso), str(data))
+            )
+            rid = cur.fetchone()[0]
         else:
-            cur.execute(f"INSERT INTO pesagens (animal_id,peso,data) VALUES({p},{p},{p})", (animal_id, peso, data))
-            return cur.lastrowid
+            cur.execute(
+                f"INSERT INTO pesagens (animal_id,peso,data) "
+                f"VALUES({p},{p},{p})",
+                (animal_id, float(peso), str(data))
+            )
+            rid = cur.lastrowid
+        conn.commit()
+    return rid
 
 def listar_pesagens(animal_id):
     p = _ph()
@@ -2714,25 +2724,7 @@ def calcular_gmd_temporal(lote_id, janela_dias=14):
 
 
 # ── IMPORTACAO CSV ─────────────────────────────────────────────────────────────
-def importar_pesagens_csv(linhas, lote_id):
-    ok = erros = criados = 0
-    msgs = []
-    existentes = {a[1]:a[0] for a in listar_animais_por_lote(lote_id)}
-    for i, linha in enumerate(linhas, 1):
-        try:
-            ident = str(linha.get("identificacao","")).strip()
-            peso  = float(str(linha.get("peso","0")).replace(",","."))
-            data  = str(linha.get("data","")).strip()
-            if not ident or not data or peso <= 0:
-                erros += 1; msgs.append(f"Linha {i}: invalido"); continue
-            if ident not in existentes:
-                existentes[ident] = adicionar_animal(ident, 0, lote_id); criados += 1
-            adicionar_pesagem(existentes[ident], peso, data); ok += 1
-        except Exception as e:
-            erros += 1; msgs.append(f"Linha {i}: {e}")
-    if criados > 0:
-        atualizar_qtd_lote(lote_id)
-    return dict(importados=ok, erros=erros, animais_criados=criados, mensagens=msgs)
+
 
 def importar_animais_csv(linhas, lote_id):
     ok = erros = 0; msgs = []
