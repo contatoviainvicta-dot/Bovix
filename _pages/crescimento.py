@@ -124,8 +124,10 @@ def page_importar_csv(u):
         if arquivo:
             try:
                 conteudo = arquivo.read().decode("utf-8-sig")
-                reader   = csv.DictReader(io.StringIO(conteudo))
-                linhas   = list(reader)
+                _sep_a = ";" if conteudo[:200].count(";") > conteudo[:200].count(",") else ","
+                reader   = csv.DictReader(io.StringIO(conteudo), delimiter=_sep_a)
+                linhas   = [{k.strip().lower(): v for k, v in l.items()}
+                            for l in reader]
 
                 if not linhas:
                     st.warning("Arquivo vazio.")
@@ -201,29 +203,54 @@ BOI-002,Angus,F,14,240
         if arquivo_p:
             try:
                 conteudo_p = arquivo_p.read().decode("utf-8-sig")
-                reader_p   = csv.DictReader(io.StringIO(conteudo_p))
-                linhas_p   = list(reader_p)
+
+                # Detectar separador automaticamente (virgula ou ponto-e-virgula)
+                _sep = ";" if conteudo_p[:200].count(";") > conteudo_p[:200].count(",") else ","
+                reader_p = csv.DictReader(io.StringIO(conteudo_p),
+                                         delimiter=_sep)
+                linhas_p = list(reader_p)
 
                 if not linhas_p:
                     st.warning("Arquivo vazio.")
                 else:
-                    st.caption(f"{len(linhas_p)} pesagem(ns) encontrada(s)")
-                    import pandas as pd
-                    df_prev_p = pd.DataFrame(linhas_p[:5])
-                    st.dataframe(df_prev_p, hide_index=True)
+                    # Normalizar nomes de colunas (remover espaços, lowercase)
+                    linhas_p = [
+                        {k.strip().lower(): v for k, v in l.items()}
+                        for l in linhas_p
+                    ]
+                    colunas = list(linhas_p[0].keys()) if linhas_p else []
+                    st.caption(
+                        f"{len(linhas_p)} linha(s) | "
+                        f"Separador: '{_sep}' | "
+                        f"Colunas: {', '.join(colunas)}"
+                    )
 
-                    if st.button("Confirmar importacao", type="primary",
-                                key="btn_imp_pesagens"):
-                        with st.spinner("Importando..."):
-                            n_ok, n_err, erros = importar_pesagens_csv(
-                                linhas_p, oid
-                            )
-                        if n_ok:
-                            st.success(f"{n_ok} pesagem(ns) importada(s)!")
-                        if n_err:
-                            st.warning(f"{n_err} linha(s) com erro:")
-                            for e in erros[:10]:
-                                st.caption(f"  - {e}")
+                    # Verificar colunas obrigatórias
+                    faltam = [c for c in ['identificacao','data','peso']
+                              if c not in colunas]
+                    if faltam:
+                        st.error(
+                            f"Colunas obrigatórias faltando: "
+                            f"{', '.join(faltam)}. "
+                            f"Colunas encontradas: {', '.join(colunas)}"
+                        )
+                    else:
+                        import pandas as pd
+                        df_prev_p = pd.DataFrame(linhas_p[:5])
+                        st.dataframe(df_prev_p, hide_index=True)
+
+                        if st.button("Confirmar importacao", type="primary",
+                                    key="btn_imp_pesagens"):
+                            with st.spinner("Importando..."):
+                                n_ok, n_err, erros = importar_pesagens_csv(
+                                    linhas_p, oid
+                                )
+                            if n_ok:
+                                st.success(f"{n_ok} pesagem(ns) importada(s)!")
+                            if n_err:
+                                st.warning(f"{n_err} linha(s) com erro:")
+                                for e in erros[:10]:
+                                    st.caption(f"  - {e}")
 
             except Exception as e:
                 st.error(f"Erro ao ler arquivo: {e}")
