@@ -96,8 +96,11 @@ def page_importar_csv(u):
 
         with col_i:
             # Verificar limite
-            atual, limite, pode = verificar_limite_animais(oid)
-            vagos = limite - atual
+            _lim_res = verificar_limite_animais(oid)
+            atual  = _lim_res["atual"]
+            limite = _lim_res["limite"]
+            pode   = _lim_res["ok"]
+            vagos  = _lim_res["disponiveis"]
             if not pode:
                 st.error(
                     f"Limite de animais atingido ({atual}/{limite}). "
