@@ -55,6 +55,7 @@ def _usar_postgres():
         url = db.get("url", "")
         return url.startswith("postgresql://") or url.startswith("postgres://")
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return False
 
 def _diagnostico_banco():
@@ -80,6 +81,7 @@ def _get_pg_url():
         import streamlit as st
         return st.secrets["database"]["url"]
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return os.environ.get("DATABASE_URL", "")
 
 def _date_add(dias, sinal="+"):
@@ -111,6 +113,7 @@ def _get_pool():
         _pg_pool = psycopg2.pool.ThreadedConnectionPool(1, 5, url, connect_timeout=15)
         return _pg_pool
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return None
 
 @contextmanager
@@ -189,10 +192,14 @@ def _fetchone(cur):
 # ═══════════════════════════════════════════════════════════════════════════
 try:
     from bovix_logging import get_logger
-    _log_db = get_logger("bovix.db.migrations")
+    _log_db  = get_logger("bovix.db.migrations")
+    _log_err = get_logger("bovix.db.error")
+    _log_war = get_logger("bovix.db.warning")
 except ImportError:
     import logging
-    _log_db = logging.getLogger("bovix.db.migrations")
+    _log_db  = logging.getLogger("bovix.db.migrations")
+    _log_err = logging.getLogger("bovix.db.error")
+    _log_war = logging.getLogger("bovix.db.warning")
 
 # Cada migration tem: version (int), nome, SQL. Aplicadas em ordem.
 # IMPORTANTE: nunca alterar uma migration existente — sempre criar nova.
@@ -480,6 +487,7 @@ def _versoes_aplicadas():
             cur.execute("SELECT version FROM _schema_version")
             return {r[0] for r in cur.fetchall()}
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return set()
 
 
@@ -802,8 +810,8 @@ def _migrar_banco():
                         cur.execute(
                             f"ALTER TABLE {tabela} ADD COLUMN IF NOT EXISTS {coluna} {definicao}"
                         )
-                    except Exception:
-                        pass
+                    except Exception as _ew:
+                        _log_war.debug("excecao ignorada: %s", _ew)
         else:
             for tabela, coluna, definicao in [
                 ('lotes',    'status',      "TEXT DEFAULT 'ATIVO'"),
@@ -817,8 +825,8 @@ def _migrar_banco():
             ]:
                 try:
                     cur.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {definicao}")
-                except Exception:
-                    pass
+                except Exception as _ew:
+                    _log_war.debug("excecao ignorada: %s", _ew)
             cur.execute("""CREATE TABLE IF NOT EXISTS movimentacoes_animais (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, animal_id INTEGER NOT NULL,
                 lote_origem INTEGER NOT NULL, lote_destino INTEGER NOT NULL,
@@ -850,8 +858,8 @@ def _migrar_banco():
                     cur.execute(
                         f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {col} {defn}"
                     )
-                except Exception:
-                    pass
+                except Exception as _ew:
+                    _log_war.debug("excecao ignorada: %s", _ew)
         else:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS vet_fazenda_acesso (
@@ -873,8 +881,8 @@ def _migrar_banco():
             ]:
                 try:
                     cur.execute(f"ALTER TABLE usuarios ADD COLUMN {col} {defn}")
-                except Exception:
-                    pass
+                except Exception as _ew:
+                    _log_war.debug("excecao ignorada: %s", _ew)
         conn.commit()
 
 
@@ -984,29 +992,23 @@ def excluir_lote(lote_id):
                     cur = conn.cursor()
                     cur.execute(f"DELETE FROM {tbl} WHERE animal_id={p}", (aid,))
                     conn.commit()
-            except Exception:
-                pass
-
-    # Passo 3: excluir animais
+            except Exception as _ew:
+                _log_war.debug("excecao ignorada: %s", _ew)
     try:
         with _conexao() as conn:
             cur = conn.cursor()
             cur.execute(f"DELETE FROM animais WHERE lote_id={p}", (lote_id,))
             conn.commit()
-    except Exception:
-        pass
-
-    # Passo 4: excluir dependencias do lote
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
     for tbl in ['vacinas_agenda', 'reproducao', 'vendas_lote']:
         try:
             with _conexao() as conn:
                 cur = conn.cursor()
                 cur.execute(f"DELETE FROM {tbl} WHERE lote_id={p}", (lote_id,))
                 conn.commit()
-        except Exception:
-            pass
-
-    # Passo 5: excluir o lote
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(f"DELETE FROM lotes WHERE id={p}", (lote_id,))
@@ -1323,8 +1325,8 @@ def listar_tratamentos_vencidos(owner_id=None):
                 dt_alta = dt_oc + datetime.timedelta(days=int(r["dias_recuperacao"] or 0))
                 if dt_alta < _date.today():
                     vencidos.append(tuple(r.values()))
-            except Exception:
-                pass
+            except Exception as _ew:
+                _log_war.debug("excecao ignorada: %s", _ew)
         return vencidos
 
 
@@ -1368,6 +1370,7 @@ def _bcrypt_verify(senha, hash_armazenado):
             _, salt, hash_esperado = hash_armazenado.split("$", 2)
             return _hash_senha(senha, salt) == hash_esperado
         except Exception:
+            _log_war.debug('excecao tratada: %s', exc_info=True)
             return False
     return False
 
@@ -1441,8 +1444,8 @@ def autenticar_usuario(email, senha):
                 (r["id"], "login", _now)
             )
             conn.commit()
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_err.error("erro em autenticar_usuario: %s", _ew)
 
     owner = r.get("owner_id") or r["id"]
     return dict(id=r["id"], nome=r["nome"], email=r["email"],
@@ -1763,10 +1766,8 @@ def adicionar_vacina_agenda(lote_id, nome_vacina, data_prevista, observacao="",
                     "WHERE table_name='vacinas_agenda' AND table_schema='public'"
                 )
                 _cols_existentes = {r[0] for r in cur.fetchall()}
-        except Exception:
-            pass
-
-    # Colunas base (sempre existem)
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
     cols   = ["lote_id", "nome_vacina", "data_prevista", "observacao"]
     vals   = [lote_id, nome_vacina, str(data_prevista), observacao or ""]
 
@@ -1821,10 +1822,8 @@ def registrar_vacina_realizada(vacina_id, data_realizada,
                     "WHERE table_name='vacinas_agenda' AND table_schema='public'"
                 )
                 _cols = {r[0] for r in cur.fetchall()}
-        except Exception:
-            pass
-
-    # Buscar dados da vacina — sempre buscar por nome de coluna, nao por indice
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
     _extras_disp = [c for c in
                     ["medicamento_id","quantidade_dose","agendado_por","animal_id"]
                     if not _cols or c in _cols]
@@ -1873,10 +1872,8 @@ def registrar_vacina_realizada(vacina_id, data_realizada,
     if med_id and qtd_dose > 0:
         try:
             atualizar_estoque(med_id, qtd_dose)
-        except Exception:
-            pass
-
-    # Registrar ocorrencia de vacinacao nos animais
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
     obs_ocorr = f"Vacinacao: {nome_vac}"
     if obs_extra:
         obs_ocorr += f" | {obs_extra}"
@@ -2034,12 +2031,10 @@ def verificar_carencia(animal_id):
                             carencia_dias=r["carencia_dias"],
                             libera_em=str(libera)
                         ))
-                except Exception:
-                    pass
-    except Exception:
-        pass
-
-    # Fonte 2: carencias_ativas (registradas pelo vet ou receituario)
+                except Exception as _ew:
+                    _log_war.debug("excecao ignorada: %s", _ew)
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
     try:
         with _conexao() as conn:
             cur = conn.cursor()
@@ -2056,8 +2051,8 @@ def verificar_carencia(animal_id):
                     carencia_dias=r[2],
                     libera_em=str(r[3])
                 ))
-    except Exception:
-        pass  # Tabela pode nao existir ainda
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
 
     if not meds:
         return dict(em_carencia=False, medicamentos=[], liberado_em=None)
@@ -2351,6 +2346,7 @@ def lote_ja_vendido(lote_id):
             total = cur.fetchone()[0]
             return total > 0 and ativos == 0
         except Exception:
+            _log_war.debug('excecao tratada: %s', exc_info=True)
             return False
 
 
@@ -2383,8 +2379,8 @@ def marcar_animal_vendido(animal_id, data_venda=None, preco_kg=0,
             gravidade="Baixa", custo=0,
             dias_recuperacao=0, status="Resolvido"
         )
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
     return True
 
 
@@ -2400,10 +2396,8 @@ def encerrar_lote(lote_id, data_encerramento=None, motivo="venda_total"):
         if a and len(a) > 0:
             try:
                 marcar_animal_vendido(a[0], data_venda=dt)
-            except Exception:
-                pass
-
-    # Encerrar o lote
+            except Exception as _ew:
+                _log_war.debug("excecao ignorada: %s", _ew)
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -3379,8 +3373,8 @@ def resumo_ia_fazenda(owner_id=None):
                 animais_ativos=rs['ativos'],
                 principal_risco=risco['fatores'][0] if risco['fatores'] else '',
             ))
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
     return sorted(resultado, key=lambda x: x['risco_score'], reverse=True)
 
 
@@ -3406,8 +3400,8 @@ def _garantir_tabela_login_tentativas():
                     )
                 """)
             conn.commit()
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 
 
 def registrar_tentativa_login(email):
@@ -3422,8 +3416,8 @@ def registrar_tentativa_login(email):
                 (email.lower().strip(),)
             )
             conn.commit()
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 
 
 def verificar_bloqueio_login(email):
@@ -3469,6 +3463,7 @@ def verificar_bloqueio_login(email):
                 return (True, n, seg_rest)
             return (False, n, 0)
         except Exception:
+            _log_war.debug('excecao tratada: %s', exc_info=True)
             return (False, 0, 0)
 
 
@@ -3484,8 +3479,8 @@ def limpar_tentativas_login(email):
                 (email.lower().strip(),)
             )
             conn.commit()
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 
 
 def _garantir_status_animal_lote():
@@ -3503,11 +3498,8 @@ def _garantir_status_animal_lote():
                     if col not in cols:
                         cur.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT DEFAULT 'Ativo'")
             conn.commit()
-        except Exception:
-            pass
-
-
-# ============================================================
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 # MODULO VETERINARIO - Funcoes CRUD
 # ============================================================
 
@@ -3522,6 +3514,7 @@ def obter_crmv_usuario(user_id):
             r = cur.fetchone()
             return (r[0] or "") if r else ""
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return ""
 
 
@@ -3604,8 +3597,8 @@ def adicionar_receita(vet_id, fazenda_owner_id, medicamento, dose, via, duracao,
                 dias_recuperacao=0,
                 status="Resolvido"
             )
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 
     return rid
 
@@ -3660,8 +3653,8 @@ def adicionar_exame(animal_id, vet_id, tipo_exame, data_coleta,
             gravidade="Alta" if alerta else "Baixa",
             custo=0, dias_recuperacao=0, status="Resolvido"
         )
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
     return eid
 
 
@@ -3712,8 +3705,8 @@ def atualizar_exame(exame_id, resultado, interpretacao="", status="concluido", a
                     (nova_grav, nova_desc, animal_id, f"%{desc_check}%")
                 )
                 conn.commit()
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 
     return True
 
@@ -3873,8 +3866,8 @@ def listar_monitoramentos(animal_id=None, vet_id=None,
         evols = []
         try:
             evols = json.loads(r[8] or "[]")
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
         result.append({
             "id":           r[0],
             "animal_id":    r[1],
@@ -3986,6 +3979,7 @@ def contar_mensagens_nao_lidas(user_id):
             )
             return cur.fetchone()[0]
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return 0
 
 
@@ -4074,8 +4068,8 @@ def adicionar_lote_campanha(campanha_id, lote_id, meta_animais):
                 observacao=obs,
                 agendado_por=vet_id
             )
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
 
     return True
 
@@ -4151,8 +4145,8 @@ def registrar_vacinacao_campanha(campanha_lote_id, vacinados, data_exec=None):
             vac_row = cur.fetchone()
             if vac_row:
                 vac_pendente = vac_row[0]
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
 
     if vac_pendente:
         # Confirmar vacina ja agendada
@@ -4161,8 +4155,8 @@ def registrar_vacinacao_campanha(campanha_lote_id, vacinados, data_exec=None):
                 vac_pendente, dt,
                 obs_extra=f"Campanha: {nome_camp}"
             )
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
     else:
         # Criar entrada ja como realizada no calendario
         try:
@@ -4183,10 +4177,8 @@ def registrar_vacinacao_campanha(campanha_lote_id, vacinados, data_exec=None):
                         (dt, vid)
                     )
                     conn.commit()
-        except Exception:
-            pass
-
-    # 4. Registrar ocorrencia em todos os animais do lote
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
     animais = listar_animais_por_lote(lote_id)
     for an in animais:
         try:
@@ -4198,8 +4190,8 @@ def registrar_vacinacao_campanha(campanha_lote_id, vacinados, data_exec=None):
                 custo=0, dias_recuperacao=0,
                 status="Resolvido"
             )
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 
     return True
 
@@ -4254,10 +4246,8 @@ def sincronizar_campanha_executada(campanha_lote_id, data_exec=None):
                         (dt, vid)
                     )
                     conn.commit()
-    except Exception:
-        pass
-
-    # Prontuário: criar ocorrências que estão faltando
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
     animais = listar_animais_por_lote(lote_id)
     n_criadas = 0
     for an in animais:
@@ -4278,8 +4268,8 @@ def sincronizar_campanha_executada(campanha_lote_id, data_exec=None):
                     dias_recuperacao=0, status="Resolvido"
                 )
                 n_criadas += 1
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 
     return n_criadas
 
@@ -4592,10 +4582,8 @@ def margem_bruta_lote(lote_id):
             if row:
                 preco_venda_kg = float(row[0])
                 receita_venda  = preco_venda_kg * float(row[1])
-    except Exception:
-        pass
-
-    # Projeção de receita (se não vendido ainda)
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
     receita_projetada = 0.0
     animais = listar_animais_por_lote(lote_id)
     n_ativos = len([a for a in animais if a])
@@ -4698,8 +4686,8 @@ def dashboard_financeiro_fazendeiro(owner_id):
                      r[7],r[8],float(r[9]),str(r[10]),r[11])
                     for r in rows if r[11] == owner_id or r[11] is None
                 ]
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 
     if not lotes:
         return {"lotes": [], "kpis": {}, "alertas": [], "dre": {}}
@@ -4711,8 +4699,8 @@ def dashboard_financeiro_fazendeiro(owner_id):
             m = margem_bruta_lote(l[0])
             if m:
                 margens.append(m)
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
 
     if not margens:
         return {"lotes": [], "kpis": {}, "alertas": [], "dre": {}}
@@ -4808,6 +4796,7 @@ def _gmd_animal(pesagens):
                 dt = datetime.strptime(str(p[3])[:10], "%Y-%m-%d")
                 pares.append((dt, float(p[2])))
             except Exception:
+                _log_war.debug('excecao tratada: %s', exc_info=True)
                 continue
         pares.sort(key=lambda x: x[0])
         if len(pares) < 2:
@@ -4818,6 +4807,7 @@ def _gmd_animal(pesagens):
         gmd = (pares[-1][1] - pares[0][1]) / dias
         return gmd if 0 < gmd <= 3.0 else 0.0
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return 0.0
 
 
@@ -4938,8 +4928,8 @@ def registrar_venda_lote(lote_id, preco_venda_kg, peso_total_kg,
                 (dt, lote_id)
             )
             conn.commit()
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
 
     return {
         "id":             vid,
@@ -4965,6 +4955,7 @@ def listar_vendas_lote(lote_id):
             )
             return cur.fetchall()
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return []
 
 
@@ -4986,6 +4977,7 @@ def listar_todas_vendas(owner_id):
             )
             return cur.fetchall()
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return []
 
 
@@ -5029,10 +5021,8 @@ def dre_por_periodo(owner_id, ano=None, mes=None):
             row = cur.fetchone()
             receitas_venda = float(row[0] or 0)
             n_vendas       = int(row[1] or 0)
-    except Exception:
-        pass
-
-    # Custo de compra dos lotes com entrada no período
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
     custo_compra = 0.0
     try:
         with _conexao() as conn:
@@ -5048,10 +5038,8 @@ def dre_por_periodo(owner_id, ano=None, mes=None):
                 (owner_id, dt_ini, dt_fim)
             )
             custo_compra = float(cur.fetchone()[0] or 0)
-    except Exception:
-        pass
-
-    # Custos variáveis lançados no período
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
     custos_var  = 0.0
     custos_cats = {}
     try:
@@ -5069,8 +5057,8 @@ def dre_por_periodo(owner_id, ano=None, mes=None):
             for row in cur.fetchall():
                 custos_cats[row[0]] = float(row[1])
             custos_var = sum(custos_cats.values())
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
 
     custo_total  = custo_compra + custos_var
     margem_bruta = receitas_venda - custo_total
@@ -5240,10 +5228,8 @@ def admin_calcular_mrr():
                 total  = preco * qtd
                 mrr_auto      += total
                 por_plano[plano] = {"qtd": qtd, "preco": preco, "total": total}
-    except Exception:
-        pass
-
-    # Ajustes manuais do mes
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
     mrr_ajuste = 0.0
     ajustes    = []
     try:
@@ -5262,8 +5248,8 @@ def admin_calcular_mrr():
                     "valor":    float(r[2]),
                     "descricao":r[3],
                 })
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
 
     mrr_total = mrr_auto + mrr_ajuste
     arr       = mrr_total * 12
@@ -5351,6 +5337,7 @@ def admin_historico_acessos(user_id=None, dias=7):
                 )
             return cur.fetchall()
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return []
 
 
@@ -5370,8 +5357,8 @@ def admin_registrar_erro(mensagem, stack_trace="", user_id=None, rota=""):
                  stack_trace[:3000] if stack_trace else "", dt)
             )
             conn.commit()
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
 
 
 def admin_listar_erros(dias=7, limit=50):
@@ -5393,6 +5380,7 @@ def admin_listar_erros(dias=7, limit=50):
             )
             return cur.fetchall()
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return []
 
 
@@ -5412,6 +5400,7 @@ def admin_erros_email_log(dias=30, limit=20):
             )
             return cur.fetchall()
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return []
 
 
@@ -5486,6 +5475,7 @@ def obter_plano(user_id):
         dados["status_conta"] = r[5] or "ativo"
         return dados
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return _PLANOS["free"]
 
 
@@ -5524,6 +5514,7 @@ def verificar_limite_animais(user_id):
             atual = cur.fetchone()[0]
         return atual, limite, atual < limite
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return 0, limite, True
 
 
@@ -5549,6 +5540,7 @@ def _smtp_config():
             "from":     cfg.get("from_email", cfg.get("user", "")),
         }
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return {}
 
 
@@ -5635,8 +5627,8 @@ def enviar_email(destinatario, assunto, corpo_html, corpo_txt=""):
                         (erro[:500], log_id)
                     )
                     conn.commit()
-            except Exception:
-                pass
+            except Exception as _ew:
+                _log_war.debug("excecao ignorada: %s", _ew)
         return False, erro
 
 
@@ -5729,6 +5721,7 @@ def obter_progresso_onboarding(user_id):
         return {passo: rows.get(passo, False)
                 for passo, _ in _PASSOS_ONBOARDING}
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return {passo: False for passo, _ in _PASSOS_ONBOARDING}
 
 
@@ -5767,6 +5760,7 @@ def marcar_passo_onboarding(user_id, passo):
                 conn.commit()
         return True
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return False
 
 
@@ -5783,6 +5777,7 @@ def onboarding_completo(user_id):
             r = cur.fetchone()
         return bool(r and r[0])
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return True  # Em caso de erro, nao bloquear
 
 
@@ -5935,8 +5930,8 @@ def lancar_honorario(vet_id, fazenda_owner_id, descricao, valor,
                          qtd, v_un, v_tot)
                     )
                     conn.commit()
-            except Exception:
-                pass
+            except Exception as _ew:
+                _log_err.error("erro em lancar_honorario: %s", _ew)
     return hid
 
 
@@ -6103,6 +6098,7 @@ def sincronizar_ocorrencias_receitas():
             )
             receitas = cur.fetchall()
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return 0
 
     ok = 0
@@ -6141,8 +6137,8 @@ def sincronizar_ocorrencias_receitas():
                     dias_recuperacao=0, status="Resolvido"
                 )
                 ok += 1
-            except Exception:
-                pass
+            except Exception as _ew:
+                _log_war.debug("excecao ignorada: %s", _ew)
     return ok
 
 
@@ -6264,8 +6260,8 @@ def aplicar_protocolo_no_lote(protocolo_id, lote_id, data_inicio, vet_id):
                 agendado_por=vet_id
             )
             n_criados += 1
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
     return n_criados
 
 
@@ -6476,6 +6472,7 @@ def listar_animais_em_carencia_fazendeiro(owner_id):
             )
             return cur.fetchall()
     except Exception:
+        _log_war.debug('excecao tratada: %s', exc_info=True)
         return []
 
 
@@ -6584,6 +6581,7 @@ def _garantir_owner_id_medicamentos():
             conn.commit()
             return True
         except Exception:
+            _log_war.debug('excecao tratada: %s', exc_info=True)
             return False
 
 
@@ -6609,6 +6607,7 @@ def _garantir_coluna_onboarding():
             conn.commit()
             return True
         except Exception:
+            _log_war.debug('excecao tratada: %s', exc_info=True)
             return False
 
 
@@ -6632,8 +6631,8 @@ def marcar_onboarding_completo(uid):
         except Exception as e:
             try:
                 conn.rollback()
-            except Exception:
-                pass
+            except Exception as _ew:
+                _log_war.debug("excecao ignorada: %s", _ew)
             return False
 
 
@@ -6651,6 +6650,7 @@ def onboarding_concluido(uid):
             r = cur.fetchone()
             return bool(r and r[0])
         except Exception:
+            _log_war.debug('excecao tratada: %s', exc_info=True)
             return False
 
 
@@ -6678,8 +6678,8 @@ def criar_dados_exemplo(uid):
                      f"mais 5. Disponiveis: {lim['disponiveis']}. "
                      f"Faca upgrade ou remova animais antes de criar dados de exemplo.")
             )
-    except Exception:
-        pass
+    except Exception as _ew:
+        _log_war.debug("excecao ignorada: %s", _ew)
 
     hoje = _d.today()
     inicio = hoje - _td(days=90)
@@ -6754,10 +6754,8 @@ def remover_dados_exemplo(uid):
                                 f"DELETE FROM {tbl} WHERE animal_id={p}",
                                 (aid,)
                             )
-                        except Exception:
-                            pass
-
-                # 3. Marcar animais como inativos E excluir
+                        except Exception as _ew:
+                            _log_war.debug("excecao ignorada: %s", _ew)
                 if aids:
                     cur.execute(
                         f"UPDATE animais SET ativo=0 WHERE lote_id={p}",
@@ -6775,18 +6773,16 @@ def remover_dados_exemplo(uid):
                         cur.execute(
                             f"DELETE FROM {tbl} WHERE lote_id={p}", (lid,)
                         )
-                    except Exception:
-                        pass
-
-                # 5. Excluir o lote
+                    except Exception as _ew:
+                        _log_war.debug("excecao ignorada: %s", _ew)
                 cur.execute(f"DELETE FROM lotes WHERE id={p}", (lid,))
                 conn.commit()
                 n_removidos += 1
             except Exception as e:
                 try:
                     conn.rollback()
-                except Exception:
-                    pass
+                except Exception as _ew:
+                    _log_war.debug("excecao ignorada: %s", _ew)
     return n_removidos
 
 
@@ -6848,8 +6844,8 @@ def kpis_executivos(owner_id=None, lote_ids=None):
         try:
             r = calcular_risco_sanitario(lid)
             riscos.append(r['score'])
-        except Exception:
-            pass
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada: %s", _ew)
     risco_medio = round(sum(riscos) / len(riscos), 1) if riscos else 0
 
     # ── Lote mais critico ─────────────────────────────────────────────────────
