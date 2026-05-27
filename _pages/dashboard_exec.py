@@ -291,6 +291,9 @@ def page_dashboard_executivo(u):
 
     # ── ABA 4: LANÇAR CUSTO ──────────────────────────────────────────────
     with t4:
+        _msg_custo = st.session_state.pop("_custo_ok", None)
+        if _msg_custo:
+            toast_ok(_msg_custo)
         st.subheader("Lançar Custo Variável")
         st.caption(
             "Registre custos de ração, medicamentos, mão de obra, "
@@ -333,7 +336,7 @@ def page_dashboard_executivo(u):
                             data_lancamento=str(data_lanc),
                             observacoes=obs or ""
                         )
-                        st.success(
+                        st.session_state["_custo_ok"] = (
                             f"Custo de {_brl(valor)} lançado em {lote_sel}!"
                         )
                         st.rerun()
@@ -475,11 +478,10 @@ def page_dashboard_executivo(u):
                         # Encerrar lote e marcar animais
                         encerrar_lote(lote_id_v, str(data_venda_))
                         vliq = preco_kg * peso_tot
-                        st.success(
-                            f"Venda total registrada! "
-                            f"Valor líquido: **{_brl(vliq)}** | "
-                            f"{n_ativos} animais marcados como VENDIDO | "
-                            f"Lote **{lote_venda}** encerrado."
+                        st.session_state["_venda_ok"] = (
+                            f"Venda total: {_brl(vliq)} | "
+                            f"{n_ativos} animais vendidos | "
+                            f"Lote {lote_venda} encerrado"
                         )
                         st.rerun()
 
@@ -540,8 +542,13 @@ def page_dashboard_executivo(u):
                                     f" | {res['restantes']} animal(is) "
                                     f"ainda ativo(s) no lote"
                                 )
-                            st.success(msg)
+                            st.session_state["_venda_ok"] = msg
                             st.rerun()
+
+            # Toast de confirmação de venda
+            _msg_venda = st.session_state.pop("_venda_ok", None)
+            if _msg_venda:
+                toast_ok(_msg_venda)
 
             # Animais vendidos no lote (status VENDIDO)
             vendidos_lote = listar_animais_por_lote_status(
