@@ -5097,21 +5097,22 @@ if "usuario" not in st.session_state:
 
 if st.session_state.usuario is None:
     st.markdown("""
-<div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding:20px 24px;
-     background:linear-gradient(135deg,#1A3C2E 0%,#2E5C46 100%);border-radius:12px">
-  <svg width="52" height="52" viewBox="0 0 48 48" fill="none">
-    <polygon points="24,3 41,12.5 41,31.5 24,41 7,31.5 7,12.5" fill="#4ADE80"/>
-    <rect x="16" y="13" width="4" height="22" rx="1.5" fill="#1A3C2E"/>
-    <path d="M20 13 L27 13 C30.5 13 33 15.5 33 19 C33 22.5 30.5 25 27 25 L20 25"
-          stroke="#1A3C2E" stroke-width="3.5" fill="none" stroke-linecap="round"/>
-    <path d="M20 25 L28 25 C31.5 25 34 27.5 34 31 C34 34.5 31.5 37 28 37 L20 37"
-          stroke="#1A3C2E" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;
+     padding:22px 28px;background:#1B4332;border-radius:12px">
+  <svg width="52" height="52" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="22,3 39,13 39,31 22,41 5,31 5,13"
+             fill="none" stroke="#F5F0E8" stroke-width="2.2"/>
+    <text x="22" y="30" font-family="system-ui,sans-serif"
+          font-size="20" font-weight="300" fill="#F5F0E8"
+          text-anchor="middle">A</text>
+    <line x1="13" y1="34" x2="31" y2="34"
+          stroke="#40916C" stroke-width="1.8"/>
   </svg>
   <div>
-    <div style="font-size:38px;font-weight:700;color:#fff;letter-spacing:-1px;line-height:1">
-      BOV<span style="color:#4ADE80">IX</span></div>
-    <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:2.5px;
-         text-transform:uppercase;margin-top:4px">Gestao Pecuaria</div>
+    <div style="font-family:Georgia,serif;font-size:36px;font-weight:700;
+         color:#F5F0E8;letter-spacing:2px;line-height:1">Auroque</div>
+    <div style="font-size:10px;color:#40916C;letter-spacing:4px;
+         margin-top:5px">GESTÃO PECUÁRIA INTELIGENTE</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
