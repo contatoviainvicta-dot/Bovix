@@ -1,6 +1,19 @@
 # pages/sistema.py -- Telas: Inicio, Buscar Animal, Notificacoes, Log Auditoria, Administracao, Gestao Usuarios
 
 import streamlit as st
+try:
+    from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
+                            toast_aviso, empty_state, skeleton_cards,
+                            erro_com_acao, humanizar_erro)
+except ImportError:
+    def aplicar_css_global(): pass
+    def toast_ok(m): st.success(m)
+    def toast_erro(m): st.error(m)
+    def toast_aviso(m): st.warning(m)
+    def empty_state(t, d, **k): st.info(f"{t} — {d}"); return False
+    def skeleton_cards(n=4): pass
+    def erro_com_acao(e, a=""): st.error(str(e))
+    def humanizar_erro(e): return str(e)
 import pandas as pd
 from datetime import datetime, date
 from database import *
@@ -49,6 +62,7 @@ def hdr(titulo, sub="", desc=""):
     st.divider()
 
 def page_inicio(u):
+    aplicar_css_global()
     hora = datetime.now().hour
     sau  = "Bom dia" if hora < 12 else "Boa tarde" if hora < 18 else "Boa noite"
 
