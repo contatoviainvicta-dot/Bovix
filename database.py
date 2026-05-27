@@ -4540,7 +4540,7 @@ def adicionar_custo_lote(lote_id, categoria, descricao, valor,
                 (lote_id, categoria, descricao, float(valor),
                  str(data_lancamento or date.today()), observacoes or "")
             )
-            return cur.fetchone()[0]
+            rid = cur.fetchone()[0]
         else:
             cur.execute(
                 f"INSERT INTO custos_lote "
@@ -4549,7 +4549,10 @@ def adicionar_custo_lote(lote_id, categoria, descricao, valor,
                 (lote_id, categoria, descricao, float(valor),
                  str(data_lancamento or date.today()), observacoes or "")
             )
-            return cur.lastrowid
+            rid = cur.lastrowid
+        conn.commit()
+    _log_db.info("custo_lote inserido id=%s lote=%s valor=%s", rid, lote_id, valor)
+    return rid
 
 
 def listar_custos_lote(lote_id):
