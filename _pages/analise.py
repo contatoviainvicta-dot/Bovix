@@ -1,6 +1,16 @@
 # pages/analise.py -- Telas: Dashboard Sanitario, Analisar por Lote, Analisar Animal, Score de Saude, GMD Temporal, Comparativo Lotes, Pesquisar Ocorrencias, Risco Sanitario IA, Previsao de Abate IA, Anomalias de Peso, Previsao Abate
 
 import streamlit as st
+try:
+    from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
+                            toast_aviso, empty_state, erro_com_acao)
+except ImportError:
+    def aplicar_css_global(): pass
+    def toast_ok(m): st.success(m)
+    def toast_erro(m): st.error(m)
+    def toast_aviso(m): st.warning(m)
+    def empty_state(t, d, **k): st.info(f"{t} — {d}"); return False
+    def erro_com_acao(e, a=""): st.error(str(e))
 import pandas as pd
 from database import *
 from ui import (
