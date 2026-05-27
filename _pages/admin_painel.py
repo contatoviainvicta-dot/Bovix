@@ -1,5 +1,5 @@
 """
-_pages/admin_painel.py — Painel Admin Completo BOVIX
+_pages/admin_painel.py — Painel Admin Completo Auroque
 MRR, Usuários Ativos, Churn, Erros
 """
 import streamlit as st
@@ -48,7 +48,7 @@ def page_painel_admin(u):
         return
 
     st.title("Painel Admin")
-    st.caption("Visão operacional completa do BOVIX")
+    st.caption("Visão operacional completa do Auroque")
 
     # Carregar dados
     with st.spinner("Carregando métricas..."):
