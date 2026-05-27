@@ -1,6 +1,16 @@
 # pages/cadastros.py -- Telas: Cadastrar Lote, Cadastrar Animal, Registrar Pesagem, Registrar Ocorrencia, Registrar Morte, Importar CSV, Editar Lote, Editar Animal, Editar Pesagens, Gerenciar Ocorrencias, Transferir Animal, Status do Lote
 
 import streamlit as st
+try:
+    from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
+                            toast_aviso, empty_state, erro_com_acao)
+except ImportError:
+    def aplicar_css_global(): pass
+    def toast_ok(m): st.success(m)
+    def toast_erro(m): st.error(m)
+    def toast_aviso(m): st.warning(m)
+    def empty_state(t, d, **k): st.info(f"{t} — {d}"); return False
+    def erro_com_acao(e, a=""): st.error(str(e))
 import pandas as pd
 from datetime import datetime, date
 from database import *
@@ -56,7 +66,7 @@ def page_cadastrar_lote(u):
                                     owner_id=_oid_lote)
                 registrar_auditoria(u["id"], "criar_lote", "lotes", lid, nome)
                 limpar_cache()
-                st.success(f"Lote **{nome}** criado!")
+                toast_ok("Lote **{nome}** criado!")
     with c2:
         st.markdown("#### Dicas")
         st.info("Use um nome facil de identificar, ex: Nelore Jan/25")
@@ -118,7 +128,7 @@ def page_cadastrar_animal(u):
                         if p_alvo > 0: atualizar_animal_detalhes(aid, peso_alvo=p_alvo)
                         registrar_auditoria(u["id"], "cadastro_animal", "animais", aid, ident)
                         limpar_cache()
-                        st.success(f"**{ident}** cadastrado no lote **{lote[1]}**!")
+                        toast_ok("**{ident}** cadastrado no lote **{lote[1]}**!")
                         st.rerun()
 
     # ============================================================
@@ -301,7 +311,7 @@ def page_importar_csv(u):
                     lote_id = adicionar_lote(nome_nl, "", str(data_nl), qtd_c2, qtd_r2, trp_nl, owner_id=u.get("owner_id", u["id"]))
                     registrar_auditoria(u["id"], "criar_lote", "lotes", lote_id, nome_nl)
                     limpar_cache()
-                    st.success(f"Lote '{nome_nl}' criado!")
+                    toast_ok("Lote '{nome_nl}' criado!")
                     st.rerun()
                 else: st.error("Informe o nome.")
         lotes = listar_lotes_usuario()
@@ -353,7 +363,7 @@ def page_importar_csv(u):
                 else:
                     res2 = importar_animais_csv(linhas2, lote_id)
                     registrar_auditoria(u["id"], "import_animais", "animais", lote_id, f"{res2['importados']} importados")
-                    st.success(f"Importados: {res2['importados']} | Erros: {res2['erros']}")
+                    toast_ok("Importados: {res2['importados']} | Erros: {res2['erros']}")
                     for msg in res2["mensagens"]: st.warning(msg)
 
     # ============================================================
@@ -422,7 +432,7 @@ def page_editar_lote(u):
                     atualizar_lote(lote_id, nome_e, desc_e, str(data_e), qtd_comp_e, ativos_reais, transp_e, preco_e)
                     registrar_auditoria(u["id"], "editar_lote", "lotes", lote_id, nome_e)
                     limpar_cache()
-                    st.success(f"Lote **{nome_e}** atualizado! Animais ativos: {ativos_reais}")
+                    toast_ok("Lote **{nome_e}** atualizado! Animais ativos: {ativos_reais}")
                     st.rerun()
 
         with tab_del:
@@ -507,7 +517,7 @@ def page_editar_animal(u):
                                 n_sexo, n_pe, n_palvo, n_obs)
                 registrar_auditoria(u["id"], "editar_animal",
                                    "animais", anim_id, n_ident)
-                st.success(f"Animal {n_ident} atualizado!")
+                toast_ok("Animal {n_ident} atualizado!")
                 limpar_cache(); st.rerun()
 
             st.divider()
@@ -1006,7 +1016,7 @@ def page_status_do_lote(u):
                     if st.button("Salvar", key=f"sl_btn_{lid_s}", type="primary"):
                         atualizar_status_lote(lid_s, novo_status)
                         registrar_auditoria(u["id"], "status_lote", "lotes", lid_s, novo_status)
-                        st.success(f"Status atualizado para {novo_status}")
+                        toast_ok("Status atualizado para {novo_status}")
                         st.rerun()
 
     with tab_animais:
