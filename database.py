@@ -5533,27 +5533,6 @@ def atualizar_plano(user_id, plano_key, expira=None):
     return True
 
 
-def verificar_limite_animais(user_id):
-    """Retorna (atual, limite, pode_adicionar)."""
-    p = _ph()
-    plano = obter_plano(user_id)
-    limite = plano.get("limite_animais", 50)
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"SELECT COUNT(*) FROM animais a "
-                f"JOIN lotes l ON l.id=a.lote_id "
-                f"WHERE l.owner_id={p} AND a.ativo=1",
-                (user_id,)
-            )
-            atual = cur.fetchone()[0]
-        return atual, limite, atual < limite
-    except Exception:
-        _log_war.debug('excecao tratada: %s', exc_info=True)
-        return 0, limite, True
-
-
 def verificar_limite_fazendas(user_id):
     """Retorna (atual, limite, pode_adicionar). Para fazendeiros."""
     plano  = obter_plano(user_id)
