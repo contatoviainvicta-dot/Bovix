@@ -1,6 +1,18 @@
 # pages/gestao.py -- Telas: Calendario Sanitario, Estoque Medicamentos, Controle Reprodutivo, Mapa Piquetes, Workspace do Lote, Prontuario Animal
 
 import streamlit as st
+try:
+    from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
+                            toast_aviso, empty_state, confirmar_acao,
+                            erro_com_acao)
+except ImportError:
+    def aplicar_css_global(): pass
+    def toast_ok(m): st.success(m)
+    def toast_erro(m): st.error(m)
+    def toast_aviso(m): st.warning(m)
+    def empty_state(t, d, **k): st.info(f"{t} — {d}"); return False
+    def confirmar_acao(m, k, **kw): return st.button("Confirmar", key=k)
+    def erro_com_acao(e, a=""): st.error(str(e))
 import pandas as pd
 from datetime import datetime, date, timedelta
 from database import *
@@ -30,7 +42,9 @@ def hdr(titulo, sub="", desc=""):
     if sub: st.caption(f"{sub} - {desc}" if desc else sub)
     st.divider()
 
-def page_calendario_sanitario(u):
+def page_calendario_sanitario(
+u):
+    aplicar_css_global()
     hdr("Calendario Sanitario", "Vacinas e Medicacoes", "Agenda de vacinas e alertas")
 
     if is_vet():
