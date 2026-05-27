@@ -1,4 +1,4 @@
-# rules.py -- Regras de negocio e helpers de contexto do BOVIX
+# rules.py -- Regras de negocio e helpers de contexto do Auroque
 # Centraliza: perfil do usuario, filtros por owner_id, cache de listas
 
 import streamlit as st
