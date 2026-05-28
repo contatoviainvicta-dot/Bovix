@@ -137,14 +137,16 @@ def sel_fazenda_vet(key="vet_faz_global"):
     if len(faz_ids) == 1:
         foid = faz_ids[0]
     else:
-        # Montar opcoes com nome real do fazendeiro + lotes
+        # Montar opcoes: apenas nome do fazendeiro (sem lotes)
         opcoes = {}
         for fid in faz_ids:
-            nome_faz = obter_nome_usuario(fid)  # nome real do fazendeiro
-            lts = listar_lotes(owner_id=fid)
-            nomes_lotes = ", ".join(l[1] for l in lts[:2])
-            if len(lts) > 2: nomes_lotes += f" +{len(lts)-2}"
-            label = f"{nome_faz} | {nomes_lotes}" if nomes_lotes else nome_faz
+            nome_faz = obter_nome_usuario(fid) or f"Fazendeiro {fid}"
+            # Evitar duplicatas de nome
+            label = nome_faz
+            contador = 2
+            while label in opcoes:
+                label = f"{nome_faz} ({contador})"
+                contador += 1
             opcoes[label] = fid
         st.markdown("**Selecione a fazenda:**")
         sel = st.selectbox("Fazenda", list(opcoes.keys()),
