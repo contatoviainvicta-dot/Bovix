@@ -280,63 +280,92 @@ _CSS_AUROQUE = """
     color: white !important;
 }
 
-/* Sidebar — fundo verde escuro */
-[data-testid="stSidebar"] {
+/* ── SIDEBAR AUROQUE ───────────────────────────────────── */
+
+/* Fundo verde em todos os containers da sidebar */
+[data-testid="stSidebar"],
+[data-testid="stSidebar"] > div,
+[data-testid="stSidebar"] > div > div,
+[data-testid="stSidebar"] section {
     background-color: #1B4332 !important;
 }
-/* Todos os textos da sidebar em bege */
-[data-testid="stSidebar"],
-[data-testid="stSidebar"] p,
-[data-testid="stSidebar"] span,
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] div {
+
+/* COR DO TEXTO: forçar bege em TODOS os estados — normal, hover, focus, active */
+[data-testid="stSidebar"] *,
+[data-testid="stSidebar"] *:hover,
+[data-testid="stSidebar"] *:focus,
+[data-testid="stSidebar"] *:active,
+[data-testid="stSidebar"] *:visited {
     color: #F5F0E8 !important;
+    font-size: 16px !important;
+    font-family: system-ui, -apple-system, sans-serif !important;
 }
-/* Botões do menu — tamanho legível, sempre visível */
-[data-testid="stSidebar"] button {
-    color: #F5F0E8 !important;
+
+/* BOTÕES: fundo transparente em TODOS os estados */
+[data-testid="stSidebar"] button,
+[data-testid="stSidebar"] button:link,
+[data-testid="stSidebar"] button:visited,
+[data-testid="stSidebar"] button:focus,
+[data-testid="stSidebar"] button:active {
     background-color: transparent !important;
-    border-color: rgba(255,255,255,0.15) !important;
-    text-align: left !important;
+    background: transparent !important;
+    border: 1px solid rgba(245,240,232,0.2) !important;
+    border-radius: 6px !important;
     width: 100% !important;
-    font-size: 15px !important;
-    padding: 6px 10px !important;
-    min-height: 38px !important;
-}
-[data-testid="stSidebar"] button p,
-[data-testid="stSidebar"] button span,
-[data-testid="stSidebar"] button div {
+    text-align: left !important;
+    padding: 8px 12px !important;
+    margin: 2px 0 !important;
+    min-height: 40px !important;
+    cursor: pointer !important;
     color: #F5F0E8 !important;
-    font-size: 15px !important;
-    line-height: 1.4 !important;
+    font-size: 16px !important;
+    box-shadow: none !important;
+    outline: none !important;
 }
+
+/* HOVER: destaque verde claro */
 [data-testid="stSidebar"] button:hover {
-    background-color: rgba(64,145,108,0.35) !important;
-    border-color: rgba(64,145,108,0.6) !important;
-}
-[data-testid="stSidebar"] button:hover p,
-[data-testid="stSidebar"] button:hover span,
-[data-testid="stSidebar"] button:hover div {
+    background-color: rgba(64,145,108,0.4) !important;
+    background: rgba(64,145,108,0.4) !important;
+    border-color: #40916C !important;
     color: #ffffff !important;
 }
-/* Expander na sidebar — grupo de menus */
-[data-testid="stSidebar"] summary {
-    font-size: 15px !important;
-}
-[data-testid="stSidebar"] summary p,
-[data-testid="stSidebar"] summary span,
-[data-testid="stSidebar"] summary div {
+
+/* EXPANDERS: cabeçalho sempre visível */
+[data-testid="stSidebar"] summary,
+[data-testid="stSidebar"] summary *,
+[data-testid="stSidebar"] details > summary {
     color: #F5F0E8 !important;
-    font-size: 15px !important;
-    font-weight: 600 !important;
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    background-color: transparent !important;
+    cursor: pointer !important;
+    padding: 6px 4px !important;
 }
-/* Garantir que nenhum elemento da sidebar fique com fonte pequena */
-[data-testid="stSidebar"] * {
-    font-size: 15px !important;
+
+/* FORÇAR cor em p, span, div dentro dos botões em qualquer estado */
+[data-testid="stSidebar"] button p,
+[data-testid="stSidebar"] button span,
+[data-testid="stSidebar"] button div,
+[data-testid="stSidebar"] button p *,
+[data-testid="stSidebar"] button span * {
+    color: #F5F0E8 !important;
+    background: transparent !important;
+    font-size: 16px !important;
 }
-/* Exceção: caption e tags pequenas */
-[data-testid="stSidebar"] small,
-[data-testid="stSidebar"] .caption {
+
+/* Garantir que Streamlit não injete fundo branco nos botões */
+[data-testid="stSidebar"] [data-testid="baseButton-secondary"],
+[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:hover,
+[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:focus,
+[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:active {
+    background-color: transparent !important;
+    background: transparent !important;
+    color: #F5F0E8 !important;
+}
+
+/* Labels e captions */
+[data-testid="stSidebar"] small {
     font-size: 12px !important;
 }
 
