@@ -4,7 +4,8 @@ import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, skeleton_cards,
-                            erro_com_acao, humanizar_erro)
+                            erro_com_acao, humanizar_erro,
+                            fmt_brl, fmt_data, fmt_data_hora)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -14,6 +15,21 @@ except ImportError:
     def skeleton_cards(n=4): pass
     def erro_com_acao(e, a=""): st.error(str(e))
     def humanizar_erro(e): return str(e)
+    def fmt_brl(v):
+        try:
+            v=float(v); i=int(abs(v)); c=round((abs(v)-i)*100)
+            s=f"{i:,}".replace(",","."); r=f"R$ {s},{c:02d}"
+            return f"-{r}" if v<0 else r
+        except: return "R$ 0,00"
+    def fmt_data(d):
+        try:
+            m={"01":"jan","02":"fev","03":"mar","04":"abr","05":"mai",
+               "06":"jun","07":"jul","08":"ago","09":"set","10":"out",
+               "11":"nov","12":"dez"}
+            d=str(d)[:10]; p=d.split("-")
+            return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
+        except: return str(d)
+    def fmt_data_hora(d): return fmt_data(d)
 import pandas as pd
 from datetime import datetime, date
 from database import *
@@ -112,7 +128,7 @@ def page_inicio(u):
     # ══════════════════════════════════════════════════════════════════════════
     if _is_faz:
 
-        def _brl(v):
+        def fmt_brl(v):
             try:
                 i, d = f"{float(v):,.2f}".split(".")
                 return f"R$ {i.replace(',','.')},{d}"
@@ -175,11 +191,11 @@ def page_inicio(u):
         ia_c2.metric("Prontos p/ abate",      _prontos_abate,
                      delta="prontos" if _prontos_abate else None,
                      delta_color="normal" if _prontos_abate else "off")
-        ia_c3.metric("Receita total estimada", _brl(_receita_est))
-        ia_c4.metric("Margem total estimada",  _brl(_margem_est))
+        ia_c3.metric("Receita total estimada", fmt_brl(_receita_est))
+        ia_c4.metric("Margem total estimada",  fmt_brl(_margem_est))
 
         ia_c5, ia_c6, ia_c7, ia_c8 = st.columns(4)
-        ia_c5.metric("Custo total estimado",   _brl(_custo_total))
+        ia_c5.metric("Custo total estimado",   fmt_brl(_custo_total))
         ia_c6.metric("Proxima data de abate",  _fmt_dt(_melhor_data))
         ia_c7.metric("Partos proximos 30d",    _n_partos)
         ia_c8.metric("Meds. em alerta",        len(crit),
@@ -243,14 +259,14 @@ def page_inicio(u):
                 st.divider()
                 with st.expander(f"Visitas do veterinario ({len(_visitas_prox)})", expanded=True):
                     for v in _visitas_prox:
-                        dt_f = "/".join(reversed(str(v[3])[:10].split("-")))
+                        dt_f = fmt_data(v[3])
                         st.caption(f"- {dt_f}: {v[4] or 'Visita tecnica'}")
 
             # Receitas recebidas
             if _receitas_receb:
                 with st.expander(f"💊 Receitas do veterinario ({len(_receitas_receb)})", expanded=False):
                     for r in _receitas_receb:
-                        dt_f = "/".join(reversed(str(r[5])[:10].split("-")))
+                        dt_f = fmt_data(r[5])
                         st.caption(f"- {dt_f}: {r[6]} | {r[7]}")
 
         # ══ BLOCO 3: LOTES ═══════════════════════════════════════════════════
