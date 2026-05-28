@@ -5861,50 +5861,98 @@ def importar_pesagens_csv(linhas_csv, owner_id):
     erros = []
     p = _ph()
 
+    # Pre-carregar mapa de identificacao -> animal_id para o owner
+    # Busca ampla: tenta owner_id direto e sem owner_id (lotes legados)
+    mapa_animais = {}
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT a.identificacao, a.id "
+                f"FROM animais a "
+                f"JOIN lotes l ON l.id = a.lote_id "
+                f"WHERE l.owner_id = {p} "
+                f"AND COALESCE(a.ativo, 1) = 1",
+                (owner_id,)
+            )
+            for row in cur.fetchall():
+                mapa_animais[str(row[0]).strip().upper()] = row[1]
+        _log_db.info(
+            "importar_pesagens: mapa carregado com %d animais para owner %s",
+            len(mapa_animais), owner_id
+        )
+    except Exception as e:
+        _log_err.error("importar_pesagens: erro ao carregar mapa: %s", e)
+        erros.append(f"Erro ao carregar animais: {e}")
+        return n_ok, n_erro, erros
+
+    if not mapa_animais:
+        erros.append(
+            f"Nenhum animal encontrado para este usuario (owner_id={owner_id}). "
+            f"Cadastre os animais antes de importar pesagens."
+        )
+        return n_ok, n_erro, erros
+
     for i, linha in enumerate(linhas_csv, 1):
         try:
-            ident = str(linha.get("identificacao", "")).strip()
-            data  = str(linha.get("data", "")).strip()
-            peso  = float(linha.get("peso", 0) or 0)
+            ident = str(linha.get("identificacao", "")
+                        or linha.get("Identificacao", "")
+                        or linha.get("IDENTIFICACAO", "")).strip()
+            data  = str(linha.get("data", "")
+                        or linha.get("Data", "")
+                        or linha.get("DATA", "")).strip()
+            peso_raw = (linha.get("peso", 0)
+                        or linha.get("Peso", 0)
+                        or linha.get("PESO", 0) or 0)
+            peso  = float(str(peso_raw).replace(",", ".") or 0)
 
             if not ident or not data or not peso:
-                erros.append(f"Linha {i}: identificacao, data e peso obrigatorios")
+                erros.append(
+                    f"Linha {i}: campos vazios — "
+                    f"ident='{ident}' data='{data}' peso='{peso_raw}'"
+                )
                 n_erro += 1
                 continue
 
             # Normalizar data
-            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+            data_norm = data
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y",
+                        "%Y/%m/%d", "%m/%d/%Y"):
                 try:
-                    data = datetime.strptime(data, fmt).strftime("%Y-%m-%d")
+                    data_norm = datetime.strptime(data, fmt).strftime("%Y-%m-%d")
                     break
                 except ValueError:
                     continue
 
-            # Buscar animal por identificacao no lote do owner
-            with _conexao() as conn:
-                cur = conn.cursor()
-                cur.execute(
-                    f"SELECT a.id FROM animais a "
-                    f"WHERE a.identificacao={p} "
-                    f"AND a.lote_id IN "
-                    f"(SELECT id FROM lotes WHERE owner_id={p}) "
-                    f"LIMIT 1",
-                    (ident, owner_id)
-                )
-                row = cur.fetchone()
+            # Buscar animal — case insensitive
+            animal_id = (mapa_animais.get(ident.upper())
+                         or mapa_animais.get(ident)
+                         or mapa_animais.get(ident.lower()))
 
-            if not row:
-                erros.append(f"Linha {i}: animal '{ident}' nao encontrado")
+            if not animal_id:
+                erros.append(
+                    f"Linha {i}: animal '{ident}' nao encontrado. "
+                    f"Disponiveis: {', '.join(list(mapa_animais.keys())[:5])}"
+                )
                 n_erro += 1
                 continue
 
-            adicionar_pesagem(row[0], peso, data)
+            adicionar_pesagem(animal_id, peso, data_norm)
             n_ok += 1
+            _log_db.debug(
+                "pesagem importada: animal_id=%s peso=%s data=%s",
+                animal_id, peso, data_norm
+            )
 
         except Exception as e:
             erros.append(f"Linha {i}: {e}")
+            _log_err.error("importar_pesagens linha %s: %s", i, e)
             n_erro += 1
 
+    _log_db.info(
+        "importar_pesagens concluido: ok=%s erro=%s owner=%s",
+        n_ok, n_erro, owner_id
+    )
     return n_ok, n_erro, erros
 
 
