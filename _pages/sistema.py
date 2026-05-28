@@ -67,9 +67,14 @@ def page_inicio(u):
     sau  = "Bom dia" if hora < 12 else "Boa tarde" if hora < 18 else "Boa noite"
 
     # ── Header ────────────────────────────────────────────────────────────────
-    st.markdown(f"## {sau}, **{u['nome']}**")
+    # Extrair apenas o primeiro nome limpo (sem sufixos técnicos)
+    _nome_raw = u.get('nome', '')
+    _nome = _nome_raw.split(' - Nome:')[-1].strip() if ' - Nome:' in _nome_raw else _nome_raw
+    _nome = _nome.split(' — ')[0].strip() if ' — ' in _nome else _nome
+    _nome = _nome.split(' - ')[0].strip() if ' - Fazenda' in _nome else _nome
+
+    st.markdown(f"## {sau}, **{_nome}**")
     st.caption(datetime.now().strftime("%d/%m/%Y - %H:%M"))
-    st.divider()
 
     lotes   = listar_lotes_usuario()
     _oid    = owner_id()
