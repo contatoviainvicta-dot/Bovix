@@ -5,7 +5,8 @@ Dashboard Executivo do Fazendeiro — KPIs + DRE + Ranking + Projeção de Abate
 import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
-                            toast_aviso, empty_state, erro_com_acao)
+                            toast_aviso, empty_state, erro_com_acao,
+                            fmt_brl, fmt_data, fmt_data_hora)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -37,12 +38,12 @@ from database import (
 from rules import owner_id as get_oid
 
 
-def _brl(v):
+def fmt_brl(v):
     """Formata valor em BRL."""
     try:
         v = float(v)
         neg = v < 0
-        s = f"R$ {abs(v):,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        s = fmt_brl(abs(v)).replace(",", "X").replace(".", ",").replace("X", ".")
         return f"-{s}" if neg else s
     except Exception:
         return "R$ 0"
@@ -93,22 +94,22 @@ def page_dashboard_executivo(u):
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Lotes ativos",      kpis["total_lotes"],
               delta=f"{kpis['total_animais']} animais")
-    k2.metric("Total investido",   _brl(kpis["total_investido"]))
-    k3.metric("Receita realizada", _brl(kpis["receita_realizada"]),
+    k2.metric("Total investido",   fmt_brl(kpis["total_investido"]))
+    k3.metric("Receita realizada", fmt_brl(kpis["receita_realizada"]),
               delta=f"{kpis['lotes_vendidos']} lote(s) vendido(s)")
-    k4.metric("Margem bruta",      _brl(kpis["total_margem"]),
+    k4.metric("Margem bruta",      fmt_brl(kpis["total_margem"]),
               delta=f"{kpis['margem_pct']}%",
               delta_color="normal" if kpis["margem_pct"] >= 0 else "inverse")
 
     k5, k6, k7, k8 = st.columns(4)
-    k5.metric("Receita projetada", _brl(kpis["receita_projetada"]),
+    k5.metric("Receita projetada", fmt_brl(kpis["receita_projetada"]),
               help="Receita esperada dos lotes ainda não vendidos")
     k6.metric("Lotes no positivo", kpis["lotes_positivos"],
               delta_color="normal")
     k7.metric("Lotes no negativo", kpis["lotes_negativos"],
               delta_color="inverse" if kpis["lotes_negativos"] > 0 else "off")
     k8.metric("Resultado total",
-              _brl(kpis["receita_realizada"] + kpis["receita_projetada"] - kpis["total_investido"]))
+              fmt_brl(kpis["receita_realizada"] + kpis["receita_projetada"] - kpis["total_investido"]))
 
     st.divider()
 
@@ -194,9 +195,9 @@ def page_dashboard_executivo(u):
                 "Pos":      f"#{i+1}",
                 "Lote":     m["nome"],
                 "Animais":  m["n_animais"],
-                "Investido":_brl(m["custo_total"]),
-                "Receita":  _brl(m["receita"]),
-                "Margem R$":_brl(m["margem_r"]),
+                "Investido":fmt_brl(m["custo_total"]),
+                "Receita":  fmt_brl(m["receita"]),
+                "Margem R$":fmt_brl(m["margem_r"]),
                 "Margem %": f"{m['margem_pct']}%",
                 "Status":   "Vendido" if m["vendido"] else "Ativo",
                 "Dias":     m["dias_confinamento"],
@@ -215,14 +216,14 @@ def page_dashboard_executivo(u):
                 st.caption("Melhor lote")
                 melhor = ranking[0]
                 st.metric(melhor["nome"],
-                         _brl(melhor["margem_r"]),
+                         fmt_brl(melhor["margem_r"]),
                          delta=f"{melhor['margem_pct']}%")
             with col_b:
                 if len(ranking) > 1:
                     st.caption("Pior lote")
                     pior = ranking[-1]
                     st.metric(pior["nome"],
-                             _brl(pior["margem_r"]),
+                             fmt_brl(pior["margem_r"]),
                              delta=f"{pior['margem_pct']}%",
                              delta_color="inverse" if pior["margem_pct"] < 0 else "normal")
 
@@ -259,7 +260,7 @@ def page_dashboard_executivo(u):
                     ca1.metric("Animais",      c["n_animais"])
                     ca2.metric("Peso atual",   f"{c['peso_atual']} kg")
                     ca3.metric("Peso alvo",    f"{c['peso_alvo']} kg")
-                    ca4.metric("Receita proj.",_brl(c["receita_proj"]),
+                    ca4.metric("Receita proj.",fmt_brl(c["receita_proj"]),
                               help=f"Cotação: R$ {c['cotacao']:.2f}/@ ")
 
                     # Barra de progresso peso
@@ -281,13 +282,13 @@ def page_dashboard_executivo(u):
                 "Abate previsto":"/".join(reversed(c["data_abate"].split("-"))),
                 "Dias restantes":c["dias_restantes"],
                 "Peso atual":    f"{c['peso_atual']} kg",
-                "Receita proj.": _brl(c["receita_proj"]),
+                "Receita proj.": fmt_brl(c["receita_proj"]),
             } for c in cal])
             st.dataframe(df_cal, hide_index=True, width="stretch")
 
             total_proj = sum(c["receita_proj"] for c in cal)
             st.metric("Receita total projetada (todos os lotes)",
-                     _brl(total_proj))
+                     fmt_brl(total_proj))
 
     # ── ABA 4: LANÇAR CUSTO ──────────────────────────────────────────────
     with t4:
@@ -337,7 +338,7 @@ def page_dashboard_executivo(u):
                             observacoes=obs or ""
                         )
                         st.session_state["_custo_ok"] = (
-                            f"Custo de {_brl(valor)} lançado em {lote_sel}!"
+                            f"Custo de {fmt_brl(valor)} lançado em {lote_sel}!"
                         )
                         st.rerun()
 
@@ -362,7 +363,7 @@ def page_dashboard_executivo(u):
                     width="stretch"
                 )
                 total_c = sum(float(c[4]) for c in custos)
-                st.metric("Total de custos variáveis", _brl(total_c))
+                st.metric("Total de custos variáveis", fmt_brl(total_c))
             else:
                 st.info("Nenhum custo lançado neste lote ainda.")
 
@@ -380,9 +381,9 @@ def page_dashboard_executivo(u):
             st.warning("Sem dados para este lote.")
         else:
             d1, d2, d3, d4 = st.columns(4)
-            d1.metric("Custo de compra",  _brl(det["custo_compra"]))
-            d2.metric("Custos variáveis", _brl(det["total_custos_var"]))
-            d3.metric("Custo por animal", _brl(det["custo_ua"]))
+            d1.metric("Custo de compra",  fmt_brl(det["custo_compra"]))
+            d2.metric("Custos variáveis", fmt_brl(det["total_custos_var"]))
+            d3.metric("Custo por animal", fmt_brl(det["custo_ua"]))
             d4.metric("Dias confinado",   det["dias_confinamento"])
 
             d5, d6, d7, d8 = st.columns(4)
@@ -391,9 +392,9 @@ def page_dashboard_executivo(u):
             d6.metric("Peso médio alvo",
                      f"{det['peso_medio_alvo']} kg")
             d7.metric("Receita projetada",
-                     _brl(det["receita_projetada"]))
+                     fmt_brl(det["receita_projetada"]))
             d8.metric("Margem bruta",
-                     _brl(det["margem_r"]),
+                     fmt_brl(det["margem_r"]),
                      delta=f"{det['margem_pct']}%",
                      delta_color="normal" if det["margem_pct"] >= 0 else "inverse")
 
@@ -446,7 +447,7 @@ def page_dashboard_executivo(u):
             # Preview valor líquido
             if preco_kg > 0 and peso_tot > 0:
                 vliq = preco_kg * peso_tot
-                st.info(f"Valor líquido estimado: **{_brl(vliq)}**")
+                st.info(f"Valor líquido estimado: **{fmt_brl(vliq)}**")
 
             # ── VENDA TOTAL ────────────────────────────────────────────
             if tipo_venda == "Venda total do lote":
@@ -479,7 +480,7 @@ def page_dashboard_executivo(u):
                         encerrar_lote(lote_id_v, str(data_venda_))
                         vliq = preco_kg * peso_tot
                         st.session_state["_venda_ok"] = (
-                            f"Venda total: {_brl(vliq)} | "
+                            f"Venda total: {fmt_brl(vliq)} | "
                             f"{n_ativos} animais vendidos | "
                             f"Lote {lote_venda} encerrado"
                         )
@@ -533,7 +534,7 @@ def page_dashboard_executivo(u):
                             vliq = preco_kg * peso_tot
                             msg  = (
                                 f"{res['n_vendidos']} animal(is) marcado(s) "
-                                f"como VENDIDO | Valor: **{_brl(vliq)}**"
+                                f"como VENDIDO | Valor: **{fmt_brl(vliq)}**"
                             )
                             if res["restantes"] == 0:
                                 msg += " | Lote encerrado (sem animais ativos)"
@@ -571,8 +572,8 @@ def page_dashboard_executivo(u):
         if lotes_enc:
             df_enc = pd.DataFrame([{
                 "Lote":      l[1],
-                "Entrada":   "/".join(reversed(str(l[3])[:10].split("-"))),
-                "Encerrado": "/".join(reversed(str(l[10])[:10].split("-"))) if l[10] else "-",
+                "Entrada":   fmt_data(l[3]),
+                "Encerrado": fmt_data(l[10]) if l[10] else "-",
                 "Animais":   l[4],
             } for l in lotes_enc])
             st.dataframe(df_enc, hide_index=True, width="stretch")
@@ -585,16 +586,16 @@ def page_dashboard_executivo(u):
         vendas = listar_todas_vendas(oid)
         if vendas:
             df_vend = pd.DataFrame([{
-                "Data":        "/".join(reversed(str(v[3])[:10].split("-"))),
+                "Data":        fmt_data(v[3]),
                 "Lote":        v[2],
                 "Frigorífico": v[6] or "-",
-                "Preço/@":     f"R$ {float(v[4]):.2f}",
+                "Preço/@":     fmt_brl(float(v[4])),
                 "Peso":        f"{float(v[5]):.0f} kg",
-                "Valor liq.":  _brl(v[8]),
+                "Valor liq.":  fmt_brl(v[8]),
             } for v in vendas])
             st.dataframe(df_vend, hide_index=True, width="stretch")
             total_vend = sum(float(v[8]) for v in vendas)
-            st.metric("Total recebido de vendas", _brl(total_vend))
+            st.metric("Total recebido de vendas", fmt_brl(total_vend))
         else:
             st.info("Nenhuma venda registrada ainda.")
 
@@ -630,11 +631,11 @@ def page_dashboard_executivo(u):
 
             # Cards do período
             dp1, dp2, dp3, dp4 = st.columns(4)
-            dp1.metric("Receita de vendas", _brl(dre_p["receita_venda"]),
+            dp1.metric("Receita de vendas", fmt_brl(dre_p["receita_venda"]),
                       delta=f"{dre_p['n_vendas']} venda(s)")
-            dp2.metric("Custo de compra",   _brl(dre_p["custo_compra"]))
-            dp3.metric("Custos variáveis",  _brl(dre_p["custos_var"]))
-            dp4.metric("Margem bruta",      _brl(dre_p["margem_bruta"]),
+            dp2.metric("Custo de compra",   fmt_brl(dre_p["custo_compra"]))
+            dp3.metric("Custos variáveis",  fmt_brl(dre_p["custos_var"]))
+            dp4.metric("Margem bruta",      fmt_brl(dre_p["margem_bruta"]),
                       delta=f"{dre_p['margem_pct']}%",
                       delta_color="normal" if dre_p["margem_pct"] >= 0
                                   else "inverse")
@@ -720,9 +721,9 @@ def page_dashboard_executivo(u):
                 st.divider()
                 df_tab = pd.DataFrame([{
                     "Mês":       c["mes"],
-                    "Receita":   _brl(c["receita"]),
-                    "Custo":     _brl(c["custo"]),
-                    "Margem":    _brl(c["margem"]),
-                    "Acumulada": _brl(c["margem_acum"]),
+                    "Receita":   fmt_brl(c["receita"]),
+                    "Custo":     fmt_brl(c["custo"]),
+                    "Margem":    fmt_brl(c["margem"]),
+                    "Acumulada": fmt_brl(c["margem_acum"]),
                 } for c in curva])
                 st.dataframe(df_tab, hide_index=True, width="stretch")
