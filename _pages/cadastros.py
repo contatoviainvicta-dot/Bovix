@@ -3,7 +3,8 @@
 import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
-                            toast_aviso, empty_state, erro_com_acao)
+                            toast_aviso, empty_state, erro_com_acao,
+                            fmt_brl, fmt_data, fmt_data_hora)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -72,7 +73,7 @@ def page_cadastrar_lote(u):
         st.info("Use um nome facil de identificar, ex: Nelore Jan/25")
         st.info("Qtd recebida pode ser menor que a comprada se houve perdas no transporte")
         if qtd_comp > 0 and preco_anim > 0:
-            st.metric("Custo total estimado", f"R$ {preco_anim*qtd_comp:,.2f}")
+            st.metric("Custo total estimado", fmt_brl(preco_anim*qtd_comp))
 
     # ============================================================
     # CADASTRAR ANIMAL
@@ -278,7 +279,7 @@ def page_registrar_morte(u):
             if morts:
                 df_m = pd.DataFrame(morts, columns=["ID","Animal ID","Animal","Data","Causa","Descricao","Custo Perda"])
                 st.dataframe(df_m, width='stretch')
-                st.metric("Custo total perdas", f"R$ {sum(m[6] for m in morts if m[6]):.2f}")
+                st.metric("Custo total perdas", fmt_brl(sum(m[6] for m in morts if m[6])))
             else:
                 st.success("Nenhuma morte registrada.")
 
@@ -660,7 +661,7 @@ def page_editar_pesagens(u):
                 if modo == "Todas do lote" and "nomes_map" in dir():
                     df_ps["Animal"] = df_ps["Animal ID"].map(nomes_map)
                     df_ps = df_ps[["ID","Animal","Peso (kg)","Data"]]
-                df_ps["Data"] = pd.to_datetime(df_ps["Data"]).dt.strftime("%d/%m/%Y")
+                df_ps["Data"] = pd.to_datetime(df_ps["Data"]).dt
                 st.dataframe(df_ps, width='stretch')
 
                 st.divider()
@@ -1083,8 +1084,8 @@ def page_status_do_lote(u):
             import pandas as pd
             df_enc = pd.DataFrame([{
                 "Lote":      l[1],
-                "Entrada":   "/".join(reversed(str(l[3])[:10].split("-"))),
-                "Encerrado": "/".join(reversed(str(l[10])[:10].split("-")))
+                "Entrada":   fmt_data(l[3]),
+                "Encerrado": fmt_data(l[10])
                               if l[10] and str(l[10]) not in ("","None") else "-",
                 "Animais comprados": l[4],
             } for l in lotes_enc])
