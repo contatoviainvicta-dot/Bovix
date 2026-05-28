@@ -67,7 +67,7 @@ def page_dashboard_sanitario(u):
     k1.metric("Animais", total_a)
     k2.metric("Com ocorrencia", c_oc)
     k3.metric("Incidencia", f"{inc:.1f}%", delta="Alta" if inc>20 else None, delta_color="inverse" if inc>20 else "normal")
-    k4.metric("Custo sanitario", f"R$ {custo_oc:.2f}")
+    k4.metric("Custo sanitario", fmt_brl(custo_oc))
 
     st.divider()
 
@@ -167,17 +167,17 @@ def page_analisar_por_lote(u):
 
         st.subheader("Resultado Economico")
         re1,re2,re3,re4 = st.columns(4)
-        re1.metric("Receita estimada", f"R$ {receita:,.2f}")
-        re2.metric("Custo operacional", f"R$ {custo_op:,.2f}")
-        re3.metric("Custo sanitario",  f"R$ {custo_san:,.2f}")
-        re4.metric("Lucro / Prejuizo", f"R$ {lucro:,.2f}", delta="Lucro" if lucro>=0 else "Prejuizo", delta_color="normal" if lucro>=0 else "inverse")
+        re1.metric("Receita estimada", fmt_brl(receita))
+        re2.metric("Custo operacional", fmt_brl(custo_op))
+        re3.metric("Custo sanitario",  fmt_brl(custo_san))
+        re4.metric("Lucro / Prejuizo", fmt_brl(lucro), delta="Lucro" if lucro>=0 else "Prejuizo", delta_color="normal" if lucro>=0 else "inverse")
 
         st.metric("GMD medio do lote", f"{gmd_m:.3f} kg/dia")
         if gmd_m < 0.5: st.warning("Baixo desempenho")
         elif gmd_m > 0: st.success("Bom desempenho")
 
         lucro_anim = lucro/len(animais) if animais else 0
-        st.metric("Lucro por animal", f"R$ {lucro_anim:,.2f}")
+        st.metric("Lucro por animal", fmt_brl(lucro_anim))
 
         # Ranking GMD
         # Usar gmds calculados em batch
@@ -259,7 +259,7 @@ def page_analisar_animal(u):
                     df_oc["data"] = pd.to_datetime(df_oc["data"])
                     st.dataframe(df_oc[["data","tipo","gravidade","descricao","custo","status"]], width='stretch')
                     custo_tot = df_oc["custo"].fillna(0).sum()
-                    st.metric("Custo total tratamentos", f"R$ {custo_tot:.2f}")
+                    st.metric("Custo total tratamentos", fmt_brl(custo_tot))
                 else:
                     st.success("Nenhuma ocorrencia registrada.")
 
@@ -436,7 +436,7 @@ def page_pesquisar_ocorrencias(u):
         p1,p2,p3,p4 = st.columns(4)
         p1.metric("Ocorrencias",   len(df_oc))
         p2.metric("Animais afetados", df_oc["animal_id"].nunique())
-        p3.metric("Custo total",   f"R$ {df_oc['custo'].fillna(0).sum():.2f}")
+        p3.metric("Custo total",   fmt_brl(df_oc['custo'].fillna(0).sum()))
         p4.metric("Gravidade Alta", len(df_oc[df_oc["gravidade"]=="Alta"]))
         t1,t2 = st.tabs(["Registros","Graficos"])
         with t1: st.dataframe(df_oc[["data","tipo","gravidade","descricao","custo","status"]], width='stretch')
@@ -563,8 +563,8 @@ def page_previsao_de_abate_ia(u):
                      cor='#1B5E20' if prontos else '#546E7A'),
                 dict(titulo="Proximos (30d)",   valor=len(proximos),
                      cor='#E65100' if proximos else '#546E7A'),
-                dict(titulo="Receita estimada", valor=f"R$ {sum(p['receita_prevista'] or 0 for p in com_prev):,.0f}"),
-                dict(titulo="Margem estimada",  valor=f"R$ {sum(p['margem_estimada'] or 0 for p in com_prev):,.0f}",
+                dict(titulo="Receita estimada", valor=fmt_brl(sum(p['receita_prevista'] or 0 for p in com_prev))),
+                dict(titulo="Margem estimada",  valor=fmt_brl(sum(p['margem_estimada'] or 0 for p in com_prev)),
                      cor='#1B5E20'),
             ])
 
@@ -705,7 +705,7 @@ def page_previsao_abate(u):
             st.dataframe(df_prev, width='stretch')
             pr1,pr2 = st.columns(2)
             pr1.metric("Animais analisados", len(resultados))
-            pr2.metric("Receita total estimada", f"R$ {sum(r['Receita Est.'] for r in resultados):,.2f}")
+            pr2.metric("Receita total estimada", fmt_brl(sum(r['Receita Est.'] for r in resultados)))
             st.bar_chart(df_prev.set_index("Animal")["Dias Rest."])
             for r in resultados:
                 if r["Dias Rest."] == 0:   st.success(f"{r['Animal']}: atingiu o peso alvo!")
