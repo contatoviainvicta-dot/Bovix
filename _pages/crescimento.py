@@ -240,7 +240,6 @@ BOI-002,Angus,F,14,240
                         st.dataframe(df_prev_p, hide_index=True)
 
                         # Mostrar animais disponíveis para cruzamento
-                        from database import listar_lotes, listar_animais_por_lote
                         _lotes_disp = listar_lotes(owner_id=oid)
                         _animais_disp = []
                         for _l in _lotes_disp:
