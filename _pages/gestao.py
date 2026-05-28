@@ -4,7 +4,7 @@ import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, confirmar_acao,
-                            erro_com_acao)
+                            erro_com_acao, fmt_brl, fmt_data, fmt_data_hora)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -13,6 +13,18 @@ except ImportError:
     def empty_state(t, d, **k): st.info(f"{t} — {d}"); return False
     def confirmar_acao(m, k, **kw): return st.button("Confirmar", key=k)
     def erro_com_acao(e, a=""): st.error(str(e))
+    def fmt_brl(v):
+        try:
+            v=float(v); i=int(abs(v)); c=round((abs(v)-i)*100)
+            s=f"{i:,}".replace(",","."); r=f"R$ {s},{c:02d}"
+            return f"-{r}" if v<0 else r
+        except: return "R$ 0,00"
+    def fmt_data(d):
+        m={"01":"jan","02":"fev","03":"mar","04":"abr","05":"mai","06":"jun",
+           "07":"jul","08":"ago","09":"set","10":"out","11":"nov","12":"dez"}
+        try: d=str(d)[:10]; p=d.split("-"); return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
+        except: return str(d)
+    def fmt_data_hora(d): return fmt_data(d)
 import pandas as pd
 from datetime import datetime, date, timedelta
 from database import *
