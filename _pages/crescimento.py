@@ -4,7 +4,8 @@ _pages/crescimento.py — Sprint B: Importacao CSV, Onboarding, Planos
 import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
-                            toast_aviso, empty_state, erro_com_acao)
+                            toast_aviso, empty_state, erro_com_acao,
+                            fmt_brl, fmt_data, fmt_data_hora)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -478,7 +479,10 @@ def page_planos(u):
     """Tela de planos e assinaturas."""
     oid         = u.get("owner_id") or u["id"]
     plano_atual = obter_plano(oid)
-    atual, lim, _pode = verificar_limite_animais(oid)
+    _lim = verificar_limite_animais(oid)
+    atual = _lim["atual"]
+    lim   = _lim["limite"]
+    _pode = _lim["ok"]
 
     st.title("Planos Auroque")
     st.caption("Escolha o plano ideal para sua operacao")
