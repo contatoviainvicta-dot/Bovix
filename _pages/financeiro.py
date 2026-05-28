@@ -1,6 +1,7 @@
 # pages/financeiro.py -- Telas: Painel de Decisao, Dashboard Executivo, Margem Real, Cotacao Cepea, Rastreabilidade GTA
 
 import streamlit as st
+from ux_helpers import fmt_brl, fmt_data, fmt_data_hora
 import pandas as pd
 from database import *
 from ui import (
@@ -318,7 +319,7 @@ def page_margem_real(u):
                         st.session_state["msg_venda_ok"] = (
                             f"Venda registrada! {n_baixa} animal(is) vendido(s). "
                             f"{peso_v:.0f} kg x R$ {pr_kg:.2f}/kg = "
-                            f"R$ {peso_v*pr_kg:,.2f}"
+                            f"{fmt_brl(peso_v*pr_kg)}"
                         )
                         st.rerun()
 
