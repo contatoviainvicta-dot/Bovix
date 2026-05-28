@@ -282,91 +282,79 @@ _CSS_AUROQUE = """
 
 /* ── SIDEBAR AUROQUE ───────────────────────────────────── */
 
-/* Fundo verde em todos os containers da sidebar */
-[data-testid="stSidebar"],
-[data-testid="stSidebar"] > div,
-[data-testid="stSidebar"] > div > div,
-[data-testid="stSidebar"] section {
-    background-color: #1B4332 !important;
-}
+/* 1. Fundo verde */
+[data-testid="stSidebar"] { background-color: #1B4332 !important; }
+[data-testid="stSidebar"] > div:first-child { background-color: #1B4332 !important; }
 
-/* COR DO TEXTO: forçar bege em TODOS os estados — normal, hover, focus, active */
-[data-testid="stSidebar"] *,
-[data-testid="stSidebar"] *:hover,
-[data-testid="stSidebar"] *:focus,
-[data-testid="stSidebar"] *:active,
-[data-testid="stSidebar"] *:visited {
+/* 2. Texto bege — apenas em elementos de texto, NÃO em * para não quebrar ícones */
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span:not([data-testid]),
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] div.stMarkdown p {
     color: #F5F0E8 !important;
     font-size: 16px !important;
-    font-family: system-ui, -apple-system, sans-serif !important;
 }
 
-/* BOTÕES: fundo transparente em TODOS os estados */
-[data-testid="stSidebar"] button,
-[data-testid="stSidebar"] button:link,
-[data-testid="stSidebar"] button:visited,
-[data-testid="stSidebar"] button:focus,
-[data-testid="stSidebar"] button:active {
-    background-color: transparent !important;
-    background: transparent !important;
-    border: 1px solid rgba(245,240,232,0.2) !important;
+/* 3. Botões: fundo transparente SEMPRE — usar !important em todos os estados */
+[data-testid="stSidebar"] button {
+    background-color: #1B4332 !important;
+    border: 1px solid rgba(245,240,232,0.25) !important;
     border-radius: 6px !important;
+    color: #F5F0E8 !important;
+    font-size: 16px !important;
     width: 100% !important;
     text-align: left !important;
     padding: 8px 12px !important;
     margin: 2px 0 !important;
     min-height: 40px !important;
-    cursor: pointer !important;
+    box-shadow: none !important;
+}
+[data-testid="stSidebar"] button:hover {
+    background-color: #40916C !important;
+    border-color: #52b788 !important;
+    color: #ffffff !important;
+}
+[data-testid="stSidebar"] button:focus,
+[data-testid="stSidebar"] button:active {
+    background-color: #1B4332 !important;
     color: #F5F0E8 !important;
-    font-size: 16px !important;
     box-shadow: none !important;
     outline: none !important;
 }
 
-/* HOVER: destaque verde claro */
-[data-testid="stSidebar"] button:hover {
-    background-color: rgba(64,145,108,0.4) !important;
-    background: rgba(64,145,108,0.4) !important;
-    border-color: #40916C !important;
+/* 4. Texto dentro dos botões */
+[data-testid="stSidebar"] button > div,
+[data-testid="stSidebar"] button > div > p,
+[data-testid="stSidebar"] button > div > span {
+    color: #F5F0E8 !important;
+    font-size: 16px !important;
+    background: transparent !important;
+}
+[data-testid="stSidebar"] button:hover > div,
+[data-testid="stSidebar"] button:hover > div > p,
+[data-testid="stSidebar"] button:hover > div > span {
     color: #ffffff !important;
 }
 
-/* EXPANDERS: cabeçalho sempre visível */
-[data-testid="stSidebar"] summary,
-[data-testid="stSidebar"] summary *,
-[data-testid="stSidebar"] details > summary {
+/* 5. Expanders do menu — usar data-testid correto do Streamlit */
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    background-color: #1B4332 !important;
+    border: 1px solid rgba(245,240,232,0.15) !important;
+    border-radius: 6px !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+    background-color: #1B4332 !important;
     color: #F5F0E8 !important;
     font-size: 16px !important;
-    font-weight: 700 !important;
-    background-color: transparent !important;
-    cursor: pointer !important;
-    padding: 6px 4px !important;
+    font-weight: 600 !important;
 }
-
-/* FORÇAR cor em p, span, div dentro dos botões em qualquer estado */
-[data-testid="stSidebar"] button p,
-[data-testid="stSidebar"] button span,
-[data-testid="stSidebar"] button div,
-[data-testid="stSidebar"] button p *,
-[data-testid="stSidebar"] button span * {
+[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {
+    background-color: #40916C !important;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary > span,
+[data-testid="stSidebar"] [data-testid="stExpander"] summary > p {
     color: #F5F0E8 !important;
-    background: transparent !important;
     font-size: 16px !important;
-}
-
-/* Garantir que Streamlit não injete fundo branco nos botões */
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"],
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:hover,
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:focus,
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:active {
-    background-color: transparent !important;
-    background: transparent !important;
-    color: #F5F0E8 !important;
-}
-
-/* Labels e captions */
-[data-testid="stSidebar"] small {
-    font-size: 12px !important;
 }
 
 /* Expander geral — borda sutil */
