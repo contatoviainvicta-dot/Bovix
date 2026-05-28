@@ -77,7 +77,7 @@ u):
             ])
             for col in ["Previsto","Realizado"]:
                 df_v[col] = df_v[col].apply(lambda x:
-                    "/".join(reversed(str(x)[:10].split("-")))
+                    fmt_data(x)
                     if x and str(x) not in ("None","") else ""
                 )
             df_v[""] = df_v["Status"].apply(
@@ -180,7 +180,7 @@ u):
             st.warning(f"{len(pendentes)} vacina(s) pendente(s)")
             for vac in pendentes:
                 vid, _, nome_v, prev_v, _, _, obs_v = vac
-                _prev_fmt = "/".join(reversed(str(prev_v)[:10].split("-")))
+                _prev_fmt = fmt_data(prev_v)
 
                 # Descobrir se a vacina foi agendada para animal especifico
                 # (buscar animal_id da vacina, se existir a coluna)
@@ -671,7 +671,7 @@ def page_workspace_do_lote(u):
         dict(titulo="Mortalidade",       valor=f"{mort_ws['taxa']}%",
              subtitulo=f"{mort_ws['mortos']} morte(s)",
              cor='#B71C1C' if mort_ws['taxa'] > 2 else '#1F5C2E'),
-        dict(titulo="Custo Sanitario",   valor=f"R$ {rs_ws['custo_sanitario']:.0f}",
+        dict(titulo="Custo Sanitario",   valor=fmt_brl(rs_ws['custo_sanitario']),
              subtitulo=f"{rs_ws['ocorrencias']} ocorrencia(s)"),
         dict(titulo="Vacinas Pendentes", valor=rs_ws['vacinas_pendentes'],
              cor='#E65100' if rs_ws['vacinas_pendentes'] > 0 else '#1F5C2E'),
@@ -861,14 +861,14 @@ def page_workspace_do_lote(u):
                         )
                         preco_u = float(_cur.fetchone()[0] or 0)
                     custo_aq = preco_u * rs_ws['total_animais']
-                    st.metric("Custo total de compra", f"R$ {custo_aq:,.0f}")
-                    st.metric("Preco por animal", f"R$ {preco_u:,.0f}")
+                    st.metric("Custo total de compra", fmt_brl(custo_aq))
+                    st.metric("Preco por animal", fmt_brl(preco_u))
                 except Exception:
                     pass
 
-            st.metric("Custo sanitario", f"R$ {rs_ws['custo_sanitario']:,.0f}")
+            st.metric("Custo sanitario", fmt_brl(rs_ws['custo_sanitario']))
             custo_total = custo_aq + rs_ws['custo_sanitario']
-            st.metric("Custo total estimado", f"R$ {custo_total:,.0f}")
+            st.metric("Custo total estimado", fmt_brl(custo_total))
 
         with col_f2:
             st.subheader("Venda e margem")
@@ -877,8 +877,8 @@ def page_workspace_do_lote(u):
                 v = vendas_ws[0]
                 receita = v[3] * v[4]
                 margem = receita - custo_aq - rs_ws['custo_sanitario']
-                st.metric("Receita", f"R$ {receita:,.0f}")
-                st.metric("Margem", f"R$ {margem:,.0f}",
+                st.metric("Receita", fmt_brl(receita))
+                st.metric("Margem", fmt_brl(margem),
                           delta=f"{(margem/custo_aq*100 if custo_aq else 0):.1f}%")
                 st.caption(f"Venda em {v[2]} | {v[3]} kg | {v[5]}")
             else:
@@ -886,7 +886,7 @@ def page_workspace_do_lote(u):
                 custo_diar = st.number_input("Custo diario/animal (R$)", 0.0, value=8.0, key="ws_cd")
                 dias_ws2 = (date.today() - pd.to_datetime(lote_ws[3] if lote_ws else date.today()).date()).days
                 custo_op = custo_diar * rs_ws['ativos'] * max(dias_ws2, 1)
-                st.metric("Custo operacional estimado", f"R$ {custo_op:,.0f}",
+                st.metric("Custo operacional estimado", fmt_brl(custo_op),
                           help=f"Baseado em {dias_ws2} dias no lote")
 
     # ── ABA RELATORIOS ────────────────────────────────────────────────────────
@@ -1116,7 +1116,7 @@ def page_prontuario_animal(u):
         for i, ev in enumerate(eventos):
             cor_key = ev["cor"]
             cor_borda, cor_fundo, _ = COR_MAP.get(cor_key, ("#555","#F5F5F5",""))
-            data_str = ev["data"].strftime("%d/%m/%Y")
+            data_str = ev["data"]
             icone_str = ICONE_MAP.get(ev["icone"], ev["icone"])[:2].upper()
             is_last = (i == len(eventos)-1)
 
@@ -1228,7 +1228,7 @@ def page_prontuario_animal(u):
                     df_oc = pd.DataFrame(ocs, columns=["ID","Animal","Data","Tipo","Desc","Grav","Custo","Dias","Status"])
                     df_oc["Data"] = pd.to_datetime(df_oc["Data"])
                     st.dataframe(df_oc[["Data","Tipo","Grav","Desc","Custo","Status"]], width='stretch')
-                    st.metric("Custo total tratamentos", f"R$ {sum(o[6] for o in ocs if o[6]):.2f}")
+                    st.metric("Custo total tratamentos", fmt_brl(sum(o[6] for o in ocs if o[6])))
                 else: st.success("Nenhuma ocorrencia registrada.")
                 repros = listar_reproducao(animal_id)
                 if repros:
@@ -1247,7 +1247,7 @@ def page_prontuario_animal(u):
         st.subheader("Monitoramentos Pos-Tratamento")
         for m in mons_anim:
             venc_ic = "🔴" if (m["vencido"] and m["status"]=="ativo") else ("✅" if m["status"]=="encerrado" else "🟢")
-            dt_ret = "/".join(reversed(str(m["data_retorno"])[:10].split("-")))
+            dt_ret = fmt_data(m["data_retorno"])
             with st.expander(
                 f"{venc_ic} {m['descricao'][:60]} | Retorno: {dt_ret} | {m['status'].upper()}"
             ):
