@@ -5466,6 +5466,36 @@ def admin_metricas_produto():
     return metricas
 
 
+_MESES_ABR_DB = {
+    1:"jan",2:"fev",3:"mar",4:"abr",5:"mai",6:"jun",
+    7:"jul",8:"ago",9:"set",10:"out",11:"nov",12:"dez"
+}
+
+def _fmt_dt(d):
+    """Formata data para exibição: 12 jan 2025"""
+    try:
+        if not d or str(d) in ("None","","nan"): return "—"
+        s = str(d)[:10]
+        ano,mes,dia = int(s[:4]),int(s[5:7]),int(s[8:10])
+        return f"{dia:02d} {_MESES_ABR_DB[mes]} {ano}"
+    except Exception:
+        return str(d)[:10] if d else "—"
+
+
+def _brl(v):
+    """Formata valor em BRL: R$ 1.250,00"""
+    try:
+        v = float(v)
+        neg = v < 0
+        inteiro = int(abs(v))
+        centavos = round((abs(v) - inteiro) * 100)
+        s_int = f"{inteiro:,}".replace(",", ".")
+        s = f"R$ {s_int},{centavos:02d}"
+        return f"-{s}" if neg else s
+    except Exception:
+        return "R$ 0,00"
+
+
 def buscar_usuario_por_email(email):
     """Busca usuario por email. Retorna dict ou None."""
     p = _ph()
