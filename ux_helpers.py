@@ -8,7 +8,7 @@ import streamlit as st
 # ── TOAST HELPERS ─────────────────────────────────────────────
 def toast_ok(msg):
     """Toast de sucesso — desaparece sozinho."""
-    st.toast(f"✅ {msg}", icon="✅")
+    st.toast(f"✅ {msg}", icon="ok")
 
 
 def toast_erro(msg):
@@ -160,20 +160,36 @@ _CSS_AUROQUE = """
     font-family: system-ui, -apple-system, sans-serif;
 }
 
-/* Cabeçalhos das seções */
-[data-testid="stMarkdownContainer"] h2 {
+/* Cabeçalhos das seções — linha verde Auroque */
+[data-testid="stMarkdownContainer"] h2,
+[data-testid="stMarkdownContainer"] h2 *,
+section[data-testid="stMain"] h2,
+.main h2 {
     font-size: 18px !important;
     font-weight: 600 !important;
     color: #1B4332 !important;
     padding-bottom: 6px !important;
     border-bottom: 2px solid #40916C !important;
     margin-bottom: 16px !important;
+    margin-top: 8px !important;
 }
 
-[data-testid="stMarkdownContainer"] h3 {
+[data-testid="stMarkdownContainer"] h3,
+section[data-testid="stMain"] h3,
+.main h3 {
     font-size: 15px !important;
     font-weight: 600 !important;
     color: #1B4332 !important;
+    margin-top: 6px !important;
+}
+
+/* Subheader do Streamlit (st.subheader) */
+[data-testid="stHeadingWithActionElements"] h2,
+[data-testid="stHeadingWithActionElements"] h3 {
+    color: #1B4332 !important;
+    border-bottom: 2px solid #40916C !important;
+    padding-bottom: 6px !important;
+    margin-bottom: 12px !important;
 }
 
 /* Botão primário — verde Auroque */
@@ -213,15 +229,34 @@ _CSS_AUROQUE = """
 [data-testid="stSidebar"] * {
     color: #F5F0E8 !important;
 }
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"] {
-    background-color: transparent !important;
-    border-color: rgba(255,255,255,0.2) !important;
+/* Botões do menu — texto sempre visível */
+[data-testid="stSidebar"] button,
+[data-testid="stSidebar"] button p,
+[data-testid="stSidebar"] button span,
+[data-testid="stSidebar"] [data-testid="baseButton-secondary"],
+[data-testid="stSidebar"] [data-testid="baseButton-secondary"] p,
+[data-testid="stSidebar"] [data-testid="baseButton-secondary"] * {
     color: #F5F0E8 !important;
+    background-color: transparent !important;
+    border-color: rgba(255,255,255,0.15) !important;
     text-align: left !important;
     width: 100% !important;
+    font-size: 13px !important;
 }
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:hover {
-    background-color: rgba(64,145,108,0.3) !important;
+[data-testid="stSidebar"] button:hover,
+[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:hover,
+[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:hover * {
+    background-color: rgba(64,145,108,0.35) !important;
+    color: #ffffff !important;
+    border-color: rgba(64,145,108,0.6) !important;
+}
+/* Expander na sidebar */
+[data-testid="stSidebar"] [data-testid="stExpander"] summary,
+[data-testid="stSidebar"] [data-testid="stExpander"] summary p {
+    color: #F5F0E8 !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+    letter-spacing: 0.5px !important;
 }
 
 /* Expander — borda sutil */
