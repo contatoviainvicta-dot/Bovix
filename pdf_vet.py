@@ -2,6 +2,22 @@
 import io
 from datetime import date
 from reportlab.lib.pagesizes import A4
+
+# Formatação padrão Auroque
+def _fmt_brl(v):
+    try:
+        v=float(v); i=int(abs(v)); c=round((abs(v)-i)*100)
+        s=f"{i:,}".replace(",","."); r=f"R$ {s},{c:02d}"
+        return f"-{r}" if v<0 else r
+    except: return "R$ 0,00"
+
+_MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+def _fmt_dt(d):
+    try:
+        d=str(d)[:10]; p=d.split("-")
+        return f"{int(p[2]):02d} {_MESES[int(p[1])-1]} {p[0]}"
+    except: return str(d)[:10] if d else "—"
+
 from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -396,7 +412,7 @@ def gerar_pdf_historico_animal(dados, nome_vet="", crmv=""):
             f"Ocorrencias Clinicas ({len(ocorrs)})", styles["SecaoTitulo"]
         ))
         for oc in ocorrs:
-            dt_oc = "/".join(reversed(str(oc[2])[:10].split("-")))
+            dt_oc = _fmt_dt(oc[2])
             grav  = oc[5] if len(oc) > 5 else ""
             cor_str = "#DC3545" if grav=="Alta"                     else "#FFC107" if grav=="Media"                     else "#6C757D"
             story.append(Paragraph(
@@ -415,7 +431,7 @@ def gerar_pdf_historico_animal(dados, nome_vet="", crmv=""):
         ))
         ex_data = [["Data","Tipo","Lab","Status","Resultado"]]
         for ex in exames:
-            dt_ex = "/".join(reversed(str(ex[3])[:10].split("-")))
+            dt_ex = _fmt_dt(ex[3])
             ex_data.append([
                 dt_ex, str(ex[4])[:20], str(ex[5] or "-")[:15],
                 str(ex[8]), str(ex[6] or "-")[:40]
@@ -439,7 +455,7 @@ def gerar_pdf_historico_animal(dados, nome_vet="", crmv=""):
         story.append(Spacer(1, 0.4*cm))
         story.append(Paragraph("Carencias Ativas", styles["SecaoTitulo"]))
         for car in carencias:
-            lib = "/".join(reversed(str(car[1])[:10].split("-")))
+            lib = _fmt_dt(car[1])
             story.append(Paragraph(
                 f"ATENCAO: {car[0]} — liberacao em {lib}",
                 styles["Alerta"]
