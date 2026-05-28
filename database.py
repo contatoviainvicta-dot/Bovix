@@ -5516,6 +5516,10 @@ def buscar_usuario_por_email(email):
 
 def obter_plano(user_id):
     """Retorna dados do plano do usuario."""
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return _PLANOS["free"].copy()
     p = _ph()
     try:
         with _conexao() as conn:
@@ -5528,16 +5532,16 @@ def obter_plano(user_id):
             )
             r = cur.fetchone()
         if not r:
-            return _PLANOS["free"]
+            return _PLANOS["free"].copy()
         plano_key = (r[0] or "free").lower()
         dados = _PLANOS.get(plano_key, _PLANOS["free"]).copy()
-        dados["plano_key"]   = plano_key
+        dados["plano_key"]    = plano_key
         dados["plano_expira"] = r[2]
         dados["status_conta"] = r[5] or "ativo"
         return dados
-    except Exception:
-        _log_war.debug('excecao tratada: %s', exc_info=True)
-        return _PLANOS["free"]
+    except Exception as _e:
+        _log_war.warning("obter_plano erro user_id=%s: %s", user_id, _e)
+        return _PLANOS["free"].copy()
 
 
 def atualizar_plano(user_id, plano_key, expira=None):
