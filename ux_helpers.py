@@ -8,7 +8,7 @@ import streamlit as st
 # ── TOAST HELPERS ─────────────────────────────────────────────
 def toast_ok(msg):
     """Toast de sucesso — desaparece sozinho."""
-    st.toast(f"✅ {msg}", icon="ok")
+    st.toast(f"✅ {msg}", icon="✅")
 
 
 def toast_erro(msg):
@@ -160,36 +160,38 @@ _CSS_AUROQUE = """
     font-family: system-ui, -apple-system, sans-serif;
 }
 
-/* Cabeçalhos das seções — linha verde Auroque */
-[data-testid="stMarkdownContainer"] h2,
-[data-testid="stMarkdownContainer"] h2 *,
-section[data-testid="stMain"] h2,
-.main h2 {
+/* Cabeçalhos h2 — linha verde Auroque (apenas um seletor para evitar duplicata) */
+[data-testid="stHeadingWithActionElements"] h2 {
+    color: #1B4332 !important;
     font-size: 18px !important;
     font-weight: 600 !important;
-    color: #1B4332 !important;
-    padding-bottom: 6px !important;
     border-bottom: 2px solid #40916C !important;
-    margin-bottom: 16px !important;
-    margin-top: 8px !important;
+    padding-bottom: 4px !important;
+    margin-bottom: 12px !important;
 }
-
-[data-testid="stMarkdownContainer"] h3,
-section[data-testid="stMain"] h3,
-.main h3 {
-    font-size: 15px !important;
-    font-weight: 600 !important;
-    color: #1B4332 !important;
-    margin-top: 6px !important;
-}
-
-/* Subheader do Streamlit (st.subheader) */
-[data-testid="stHeadingWithActionElements"] h2,
 [data-testid="stHeadingWithActionElements"] h3 {
     color: #1B4332 !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+}
+[data-testid="stMarkdownContainer"] h2 {
+    color: #1B4332 !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
     border-bottom: 2px solid #40916C !important;
-    padding-bottom: 6px !important;
+    padding-bottom: 4px !important;
     margin-bottom: 12px !important;
+}
+[data-testid="stMarkdownContainer"] h3 {
+    color: #1B4332 !important;
+    font-size: 15px !important;
+    font-weight: 600 !important;
+}
+
+/* Remover linhas duplicadas do st.divider perto dos títulos */
+[data-testid="stHeadingWithActionElements"] + hr,
+[data-testid="stHeadingWithActionElements"] hr {
+    display: none !important;
 }
 
 /* Botão primário — verde Auroque */
@@ -222,66 +224,64 @@ section[data-testid="stMain"] h3,
     color: white !important;
 }
 
-/* Sidebar — fundo verde escuro garantido */
+/* Sidebar — fundo verde escuro */
 [data-testid="stSidebar"] {
     background-color: #1B4332 !important;
 }
-[data-testid="stSidebar"] * {
+/* Todos os textos da sidebar em bege */
+[data-testid="stSidebar"],
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] div {
     color: #F5F0E8 !important;
 }
-/* Botões do menu — texto sempre visível */
-[data-testid="stSidebar"] button,
-[data-testid="stSidebar"] button p,
-[data-testid="stSidebar"] button span,
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"],
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"] p,
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"] * {
+/* Botões do menu — tamanho normal, sempre legível */
+[data-testid="stSidebar"] button {
     color: #F5F0E8 !important;
     background-color: transparent !important;
     border-color: rgba(255,255,255,0.15) !important;
     text-align: left !important;
     width: 100% !important;
-    font-size: 13px !important;
 }
-[data-testid="stSidebar"] button:hover,
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:hover,
-[data-testid="stSidebar"] [data-testid="baseButton-secondary"]:hover * {
+[data-testid="stSidebar"] button p,
+[data-testid="stSidebar"] button span {
+    color: #F5F0E8 !important;
+    font-size: 14px !important;
+}
+[data-testid="stSidebar"] button:hover {
     background-color: rgba(64,145,108,0.35) !important;
-    color: #ffffff !important;
     border-color: rgba(64,145,108,0.6) !important;
 }
+[data-testid="stSidebar"] button:hover p,
+[data-testid="stSidebar"] button:hover span {
+    color: #ffffff !important;
+}
 /* Expander na sidebar */
-[data-testid="stSidebar"] [data-testid="stExpander"] summary,
-[data-testid="stSidebar"] [data-testid="stExpander"] summary p {
+[data-testid="stSidebar"] summary p,
+[data-testid="stSidebar"] summary span {
     color: #F5F0E8 !important;
+    font-size: 14px !important;
     font-weight: 600 !important;
-    font-size: 12px !important;
-    letter-spacing: 0.5px !important;
 }
 
-/* Expander — borda sutil */
+/* Expander geral — borda sutil */
 [data-testid="stExpander"] {
     border: 0.5px solid #e0e0e0 !important;
     border-radius: 8px !important;
 }
 
-/* Toast — posição e estilo */
-[data-testid="stToast"] {
-    border-radius: 8px !important;
-}
-
 /* Input focus — verde */
 [data-testid="stTextInput"] input:focus,
-[data-testid="stNumberInput"] input:focus,
-[data-testid="stSelectbox"] select:focus {
+[data-testid="stNumberInput"] input:focus {
     border-color: #40916C !important;
-    box-shadow: 0 0 0 2px rgba(64,145,108,0.2) !important;
+    box-shadow: 0 0 0 2px rgba(64,145,108,0.15) !important;
 }
 
 /* Divider sutil */
 hr {
     border-color: #e8e8e8 !important;
-    margin: 12px 0 !important;
+    margin: 8px 0 !important;
 }
 </style>
 """
