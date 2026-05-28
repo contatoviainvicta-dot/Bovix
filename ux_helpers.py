@@ -5,6 +5,62 @@ Toasts, empty states, confirmações, mensagens humanizadas
 import streamlit as st
 
 
+# ── FORMATAÇÃO GLOBAL ────────────────────────────────────────
+_MESES_ABR = {
+    1:"jan", 2:"fev", 3:"mar", 4:"abr", 5:"mai", 6:"jun",
+    7:"jul", 8:"ago", 9:"set", 10:"out", 11:"nov", 12:"dez"
+}
+
+def fmt_brl(valor):
+    """Formata valor monetário: R$ 1.250,00"""
+    try:
+        v = float(valor)
+        neg = v < 0
+        # Separar inteiro e centavos
+        inteiro = int(abs(v))
+        centavos = round((abs(v) - inteiro) * 100)
+        # Formatar inteiro com ponto de milhar
+        s_int = f"{inteiro:,}".replace(",", ".")
+        s = f"R$ {s_int},{centavos:02d}"
+        return f"-{s}" if neg else s
+    except Exception:
+        return "R$ 0,00"
+
+
+def fmt_data(data, hora=False):
+    """Formata data: 12 jan 2025. Aceita str YYYY-MM-DD, date ou datetime."""
+    try:
+        from datetime import date, datetime
+        if not data or str(data) in ("None", "", "nan"):
+            return "—"
+        if isinstance(data, str):
+            data = data[:10]  # pegar só a parte de data
+            ano, mes, dia = int(data[:4]), int(data[5:7]), int(data[8:10])
+        elif isinstance(data, (date, datetime)):
+            ano, mes, dia = data.year, data.month, data.day
+        else:
+            return str(data)[:10]
+        s = f"{dia:02d} {_MESES_ABR[mes]} {ano}"
+        if hora and hasattr(data, 'hour'):
+            s += f" {data.hour:02d}:{data.minute:02d}"
+        return s
+    except Exception:
+        return str(data)[:10] if data else "—"
+
+
+def fmt_data_hora(data):
+    """Formata data e hora: 12 jan 2025 14:30"""
+    try:
+        from datetime import datetime
+        if isinstance(data, str):
+            # Tentar parsear ISO
+            dt = datetime.fromisoformat(data[:19])
+            return f"{dt.day:02d} {_MESES_ABR[dt.month]} {dt.year} {dt.hour:02d}:{dt.minute:02d}"
+        return fmt_data(data, hora=True)
+    except Exception:
+        return str(data)[:16] if data else "—"
+
+
 # ── TOAST HELPERS ─────────────────────────────────────────────
 def toast_ok(msg):
     """Toast de sucesso — desaparece sozinho."""
