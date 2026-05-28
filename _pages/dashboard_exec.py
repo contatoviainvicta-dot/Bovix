@@ -38,16 +38,6 @@ from database import (
 from rules import owner_id as get_oid
 
 
-def fmt_brl(v):
-    """Formata valor em BRL."""
-    try:
-        v = float(v)
-        neg = v < 0
-        s = fmt_brl(abs(v)).replace(",", "X").replace(".", ",").replace("X", ".")
-        return f"-{s}" if neg else s
-    except Exception:
-        return "R$ 0"
-
 
 def _cor_margem(pct):
     if pct >= 20:   return "#1D9E75"
@@ -356,7 +346,7 @@ def page_dashboard_executivo(u):
                     "ID","LoteID","Categoria","Descrição",
                     "Valor","Data","Obs"
                 ])
-                df_cust["Valor"] = df_cust["Valor"].apply(_brl)
+                df_cust["Valor"] = df_cust["Valor"].apply(fmt_brl)
                 st.dataframe(
                     df_cust[["Data","Categoria","Descrição","Valor","Obs"]],
                     hide_index=True,
@@ -405,7 +395,7 @@ def page_dashboard_executivo(u):
                     list(det["custos_var"].items()),
                     columns=["Categoria", "Total"]
                 )
-                df_cv["Total"] = df_cv["Total"].apply(_brl)
+                df_cv["Total"] = df_cv["Total"].apply(fmt_brl)
                 st.dataframe(df_cv, hide_index=True, width="stretch")
 
     # ── ABA 6: REGISTRAR VENDA ───────────────────────────────────────────
