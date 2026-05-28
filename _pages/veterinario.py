@@ -2,7 +2,8 @@
 import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
-                            toast_aviso, empty_state, erro_com_acao)
+                            toast_aviso, empty_state, erro_com_acao,
+                            fmt_brl, fmt_data, fmt_data_hora)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -60,7 +61,7 @@ def _fmt_dt(d):
     if not d or str(d) in ("None", ""):
         return "-"
     try:
-        return "/".join(reversed(str(d)[:10].split("-")))
+        return fmt_data(d)
     except Exception:
         return str(d)
 
@@ -1291,13 +1292,13 @@ def page_gestao_financeira_vet(u):
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("A receber",
-              f"R$ {res['pendente']:,.2f}",
+              fmt_brl(res['pendente']),
               delta=f"{res['n_pendente']} lançamento(s)")
     c2.metric("Recebido no mês",
-              f"R$ {res['pago']:,.2f}",
+              fmt_brl(res['pago']),
               delta=f"{res['n_pago']} pago(s)")
     c3.metric("Total lançado",
-              f"R$ {res['pendente']+res['pago']:,.2f}")
+              fmt_brl(res['pendente']+res['pago']))
     c4.metric("Período", res["mes"])
 
     st.divider()
@@ -1344,7 +1345,7 @@ def page_gestao_financeira_vet(u):
                 ic = {"pendente": "🟡", "pago": "✅", "cancelado": "❌"}.get(
                     stat_h, "⚪"
                 )
-                dt_fmt = "/".join(reversed(str(dt_lan)[:10].split("-")))
+                dt_fmt = fmt_data(dt_lan)
 
                 with st.expander(
                     f"{ic} {desc_h} | {nome_faz} | "
@@ -1360,7 +1361,7 @@ def page_gestao_financeira_vet(u):
                     with col_d:
                         st.markdown(f"**Valor:** R$ {float(val_h):,.2f}")
                         if dt_pag:
-                            dp_fmt = "/".join(reversed(str(dt_pag)[:10].split("-")))
+                            dp_fmt = fmt_data(dt_pag)
                             st.markdown(f"**Pago em:** {dp_fmt}")
                         if forma_pag:
                             st.markdown(f"**Forma:** {forma_pag}")
@@ -1377,10 +1378,10 @@ def page_gestao_financeira_vet(u):
                             "Valor Unit","Total"
                         ])
                         df_i["Valor Unit"] = df_i["Valor Unit"].apply(
-                            lambda x: f"R$ {float(x):,.2f}"
+                            lambda x: fmt_brl(float(x))
                         )
                         df_i["Total"] = df_i["Total"].apply(
-                            lambda x: f"R$ {float(x):,.2f}"
+                            lambda x: fmt_brl(float(x))
                         )
                         st.dataframe(
                             df_i[["Descricao","Qtd","Valor Unit","Total"]],
@@ -1525,10 +1526,10 @@ def page_gestao_financeira_vet(u):
 
         # Cards do período
         mc1, mc2, mc3 = st.columns(3)
-        mc1.metric("A receber",   f"R$ {res_sel['pendente']:,.2f}")
-        mc2.metric("Recebido",    f"R$ {res_sel['pago']:,.2f}")
+        mc1.metric("A receber",   fmt_brl(res_sel['pendente']))
+        mc2.metric("Recebido",    fmt_brl(res_sel['pago']))
         mc3.metric("Total",
-                   f"R$ {res_sel['pendente']+res_sel['pago']:,.2f}")
+                   fmt_brl(res_sel['pendente']+res_sel['pago']))
 
         # Por fazenda
         if res_sel["por_fazenda"]:
@@ -1538,7 +1539,7 @@ def page_gestao_financeira_vet(u):
             df_faz = pd.DataFrame(
                 [(obter_nome_usuario(r[0]) or f"#{r[0]}",
                   r[1],
-                  f"R$ {float(r[2]):,.2f}")
+                  fmt_brl(float(r[2])))
                  for r in res_sel["por_fazenda"]],
                 columns=["Fazenda","Lançamentos","Total"]
             )
@@ -1571,7 +1572,7 @@ def page_gestao_financeira_vet(u):
             df_ext = pd.DataFrame(
                 [(h[4], obter_nome_usuario(h[2]) or f"#{h[2]}",
                   h[5], h[6],
-                  f"R$ {float(h[7]):,.2f}", h[8].upper())
+                  fmt_brl(float(h[7])), h[8].upper())
                  for h in hons_filt],
                 columns=["Data","Fazenda","Descricao",
                          "Tipo","Valor","Status"]
@@ -1798,7 +1799,7 @@ def page_inbox(u):
             for msg in msgs[:30]:
                 mid, rem_id, _, assunto, corpo, lida, dt, tipo = msg
                 nome_rem = obter_nome_usuario(rem_id) or f"#{rem_id}"
-                dt_fmt   = "/".join(reversed(str(dt)[:10].split("-")))
+                dt_fmt   = fmt_data(dt)
                 icone    = "📬" if not lida else "📭"
                 titulo   = f"{icone} {nome_rem} — {assunto or 'sem assunto'} | {dt_fmt}"
 
@@ -1833,7 +1834,7 @@ def page_inbox(u):
                 for msg in enviadas[:20]:
                     _, _, dest_id, assunto, corpo, _, dt, _ = msg
                     nome_dest = obter_nome_usuario(dest_id) or f"#{dest_id}"
-                    dt_fmt    = "/".join(reversed(str(dt)[:10].split("-")))
+                    dt_fmt    = fmt_data(dt)
                     st.caption(
                         f"📤 Para: {nome_dest} | "
                         f"{assunto or 'sem assunto'} | {dt_fmt}"
@@ -2234,8 +2235,8 @@ def page_dashboard_produtividade(u):
 
     st.divider()
     c5, c6, c7, c8 = st.columns(4)
-    c5.metric("A receber",       f"R$ {res_fin['pendente']:,.2f}")
-    c6.metric("Recebido no mes", f"R$ {res_fin['pago']:,.2f}")
+    c5.metric("A receber",       fmt_brl(res_fin['pendente']))
+    c6.metric("Recebido no mes", fmt_brl(res_fin['pago']))
     c7.metric("Monitoramentos ativos", n_mon_at)
     c8.metric("CRMV", obter_crmv_usuario(u["id"]) or "Nao cadastrado")
 
