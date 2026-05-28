@@ -2072,7 +2072,7 @@ def page_campanhas_vacinacao(u):
         concluidos = [l for l in lotes_camp if l[6] == "concluido"]
 
         if not pendentes:
-            st.success("Todos os lotes desta campanha estao concluidos!")
+            toast_ok("Todos os lotes desta campanha estao concluidos!")
 
         # Botao de sincronizacao para lotes ja concluidos
         if concluidos:
