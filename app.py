@@ -5904,6 +5904,12 @@ if page_fn:
                     st.rerun()
     except Exception:
         pass
+    # CSS global Auroque - aplicado em TODA página, toda navegação
+    try:
+        from ux_helpers import aplicar_css_global as _css_global
+        _css_global()
+    except Exception:
+        pass
     page_fn(u)
 else:
     st.error(f"Tela '{menu}' nao encontrada.")
