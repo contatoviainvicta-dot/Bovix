@@ -239,6 +239,27 @@ BOI-002,Angus,F,14,240
                         df_prev_p = pd.DataFrame(linhas_p[:5])
                         st.dataframe(df_prev_p, hide_index=True)
 
+                        # Mostrar animais disponíveis para cruzamento
+                        from database import listar_lotes, listar_animais_por_lote
+                        _lotes_disp = listar_lotes(owner_id=oid)
+                        _animais_disp = []
+                        for _l in _lotes_disp:
+                            _animais_disp += [
+                                a[1] for a in listar_animais_por_lote(_l[0])
+                            ]
+                        if _animais_disp:
+                            st.caption(
+                                f"Animais disponíveis no sistema "
+                                f"({len(_animais_disp)}): "
+                                f"{', '.join(_animais_disp[:10])}"
+                                f"{'...' if len(_animais_disp) > 10 else ''}"
+                            )
+                        else:
+                            st.error(
+                                "Nenhum animal encontrado para este usuário. "
+                                "Cadastre os animais antes de importar pesagens."
+                            )
+
                         if st.button("Confirmar importacao", type="primary",
                                     key="btn_imp_pesagens"):
                             with st.spinner("Importando..."):
@@ -246,11 +267,15 @@ BOI-002,Angus,F,14,240
                                     linhas_p, oid
                                 )
                             if n_ok:
-                                st.success(f"{n_ok} pesagem(ns) importada(s)!")
+                                st.success(
+                                    f"{n_ok} pesagem(ns) importada(s) com sucesso!"
+                                )
                             if n_err:
                                 st.warning(f"{n_err} linha(s) com erro:")
-                                for e in erros[:10]:
-                                    st.caption(f"  - {e}")
+                                for e in erros[:15]:
+                                    st.caption(f"  ⚠ {e}")
+                            if not n_ok and not n_err:
+                                st.error("Nenhuma pesagem importada. Verifique o arquivo.")
 
             except Exception as e:
                 st.error(f"Erro ao ler arquivo: {e}")
