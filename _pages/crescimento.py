@@ -479,10 +479,13 @@ def page_planos(u):
     """Tela de planos e assinaturas."""
     oid         = u.get("owner_id") or u["id"]
     plano_atual = obter_plano(oid)
-    _lim = verificar_limite_animais(oid)
-    atual = _lim["atual"]
-    lim   = _lim["limite"]
-    _pode = _lim["ok"]
+    try:
+        _lim = verificar_limite_animais(oid) or {}
+        atual = int(_lim.get("atual", 0))
+        lim   = int(_lim.get("limite", 50))
+        _pode = bool(_lim.get("ok", True))
+    except Exception:
+        atual, lim, _pode = 0, 50, True
 
     st.title("Planos Auroque")
     st.caption("Escolha o plano ideal para sua operacao")
@@ -501,7 +504,7 @@ def page_planos(u):
         plano_atual.get("status_conta","ativo").upper()
     )
 
-    st.progress(min(atual / max(lim, 1), 1.0))
+    st.progress(min(int(atual) / max(int(lim), 1), 1.0))
     if atual >= lim * 0.9:
         st.warning(
             f"Voce esta usando {atual}/{lim} animais ({int(100*atual/lim)}%). "
@@ -536,7 +539,7 @@ def page_planos(u):
         "enterprise": ("🏢", "#FAEEDA"),
     }
     _popular    = "pro"
-    plano_key_atual = plano_atual.get("plano_key","free")
+    plano_key_atual = (plano_atual or {}).get("plano_key","free")
 
     _cards_html = ""
     for plano_key in ["free","pro","vet","enterprise"]:
