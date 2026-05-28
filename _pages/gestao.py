@@ -369,7 +369,7 @@ def page_estoque_medicamentos(u):
                     adicionar_medicamento(nome_md, unid_md, estq_md, emin_md,
                                          str(val_md), cust_md, owner_id=_oid)
                     registrar_auditoria(u["id"], "cad_medicamento", "medicamentos", 0, nome_md)
-                    st.success(f"Medicamento '{nome_md}' cadastrado!")
+                    toast_ok("Medicamento '{nome_md}' cadastrado!")
                     st.rerun()
                 else:
                     st.error("Informe o nome do medicamento.")
@@ -565,7 +565,7 @@ def page_mapa_piquetes(u):
             if st.form_submit_button("Cadastrar", type="primary"):
                 if nome_pq:
                     adicionar_piquete(nome_pq, area_pq, cap_pq)
-                    st.success("Piquete cadastrado!"); st.rerun()
+                    toast_ok("Piquete cadastrado!"); st.rerun()
                 else: st.error("Informe o nome.")
     with t3:
         pqs   = listar_piquetes()
@@ -1201,7 +1201,7 @@ def page_prontuario_animal(u):
                         obs_p = st.text_area("Observacoes clinicas", value=det[8] if det else "", height=100)
                     if st.form_submit_button("Salvar", type="primary"):
                         atualizar_animal_detalhes(animal_id, peso_alvo=peso_alvo, observacoes=obs_p)
-                        st.success("Prontuario atualizado!"); st.rerun()
+                        toast_ok("Prontuario atualizado!"); st.rerun()
                 if det and det[7] > 0:
                     prev = calcular_previsao_abate(animal_id)
                     if "erro" not in prev:
