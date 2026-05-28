@@ -292,33 +292,52 @@ _CSS_AUROQUE = """
 [data-testid="stSidebar"] div {
     color: #F5F0E8 !important;
 }
-/* Botões do menu — tamanho normal, sempre legível */
+/* Botões do menu — tamanho legível, sempre visível */
 [data-testid="stSidebar"] button {
     color: #F5F0E8 !important;
     background-color: transparent !important;
     border-color: rgba(255,255,255,0.15) !important;
     text-align: left !important;
     width: 100% !important;
+    font-size: 15px !important;
+    padding: 6px 10px !important;
+    min-height: 38px !important;
 }
 [data-testid="stSidebar"] button p,
-[data-testid="stSidebar"] button span {
+[data-testid="stSidebar"] button span,
+[data-testid="stSidebar"] button div {
     color: #F5F0E8 !important;
-    font-size: 14px !important;
+    font-size: 15px !important;
+    line-height: 1.4 !important;
 }
 [data-testid="stSidebar"] button:hover {
     background-color: rgba(64,145,108,0.35) !important;
     border-color: rgba(64,145,108,0.6) !important;
 }
 [data-testid="stSidebar"] button:hover p,
-[data-testid="stSidebar"] button:hover span {
+[data-testid="stSidebar"] button:hover span,
+[data-testid="stSidebar"] button:hover div {
     color: #ffffff !important;
 }
-/* Expander na sidebar */
+/* Expander na sidebar — grupo de menus */
+[data-testid="stSidebar"] summary {
+    font-size: 15px !important;
+}
 [data-testid="stSidebar"] summary p,
-[data-testid="stSidebar"] summary span {
+[data-testid="stSidebar"] summary span,
+[data-testid="stSidebar"] summary div {
     color: #F5F0E8 !important;
-    font-size: 14px !important;
+    font-size: 15px !important;
     font-weight: 600 !important;
+}
+/* Garantir que nenhum elemento da sidebar fique com fonte pequena */
+[data-testid="stSidebar"] * {
+    font-size: 15px !important;
+}
+/* Exceção: caption e tags pequenas */
+[data-testid="stSidebar"] small,
+[data-testid="stSidebar"] .caption {
+    font-size: 12px !important;
 }
 
 /* Expander geral — borda sutil */
