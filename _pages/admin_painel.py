@@ -5,7 +5,8 @@ MRR, Usuários Ativos, Churn, Erros
 import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
-                            toast_aviso, empty_state, erro_com_acao)
+                            toast_aviso, empty_state, erro_com_acao,
+                            fmt_brl, fmt_data, fmt_data_hora)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -33,11 +34,11 @@ from database import (
 from rules import is_admin
 
 
-def _brl(v):
+def fmt_brl(v):
     try:
         v = float(v)
         neg = v < 0
-        s = f"R$ {abs(v):,.0f}".replace(",","X").replace(".",",").replace("X",".")
+        s = fmt_brl(abs(v)).replace(",","X").replace(".",",").replace("X",".")
         return f"-{s}" if neg else s
     except Exception:
         return "R$ 0"
@@ -75,8 +76,8 @@ def page_painel_admin(u):
     k4.metric("Churn 30d",         metr_u["churn_30d"],
              delta=f"{metr_u['churn_rate']}%",
              delta_color="inverse" if metr_u["churn_rate"] > 5 else "off")
-    k5.metric("MRR",               _brl(mrr_data["mrr_total"]))
-    k6.metric("ARR",               _brl(mrr_data["arr"]))
+    k5.metric("MRR",               fmt_brl(mrr_data["mrr_total"]))
+    k6.metric("ARR",               fmt_brl(mrr_data["arr"]))
 
     st.divider()
 
@@ -91,12 +92,12 @@ def page_painel_admin(u):
 
         # Cards MRR
         mc1,mc2,mc3,mc4 = st.columns(4)
-        mc1.metric("MRR automático",  _brl(mrr_data["mrr_auto"]),
+        mc1.metric("MRR automático",  fmt_brl(mrr_data["mrr_auto"]),
                   help="Calculado pelos planos dos usuários")
-        mc2.metric("MRR ajustes",     _brl(mrr_data["mrr_ajuste"]),
+        mc2.metric("MRR ajustes",     fmt_brl(mrr_data["mrr_ajuste"]),
                   help="Ajustes manuais do mês")
-        mc3.metric("MRR total",       _brl(mrr_data["mrr_total"]))
-        mc4.metric("ARR projetado",   _brl(mrr_data["arr"]))
+        mc3.metric("MRR total",       fmt_brl(mrr_data["mrr_total"]))
+        mc4.metric("ARR projetado",   fmt_brl(mrr_data["arr"]))
 
         # Breakdown por plano
         if mrr_data["por_plano"]:
@@ -105,8 +106,8 @@ def page_painel_admin(u):
             df_plano = pd.DataFrame([{
                 "Plano":    p,
                 "Usuários": d["qtd"],
-                "Preço":    _brl(d["preco"]),
-                "MRR":      _brl(d["total"]),
+                "Preço":    fmt_brl(d["preco"]),
+                "MRR":      fmt_brl(d["total"]),
             } for p, d in mrr_data["por_plano"].items()
               if d["qtd"] > 0])
             if not df_plano.empty:
@@ -133,7 +134,7 @@ def page_painel_admin(u):
         if mrr_data["ajustes"]:
             df_adj = pd.DataFrame([{
                 "Mês":       a["mes_ref"],
-                "Valor":     _brl(a["valor"]),
+                "Valor":     fmt_brl(a["valor"]),
                 "Descrição": a["descricao"],
             } for a in mrr_data["ajustes"]])
             st.dataframe(df_adj, hide_index=True, width="stretch")
@@ -158,7 +159,7 @@ def page_painel_admin(u):
                 if val_aj != 0 and mes_aj:
                     admin_adicionar_ajuste_mrr(mes_aj, val_aj, desc_aj)
                     st.success(
-                        f"Ajuste de {_brl(val_aj)} adicionado para {mes_aj}!"
+                        f"Ajuste de {fmt_brl(val_aj)} adicionado para {mes_aj}!"
                     )
                     st.rerun()
                 else:
