@@ -477,8 +477,14 @@ def _passo_header(num, titulo, completo):
 # ════════════════════════════════════════════════════════════════════════════
 def page_planos(u):
     """Tela de planos e assinaturas."""
-    oid         = u.get("owner_id") or u["id"]
-    plano_atual = obter_plano(oid)
+    try:
+        oid = int(u.get("owner_id") or u["id"])
+    except (TypeError, ValueError):
+        oid = u.get("id", 1)
+    try:
+        plano_atual = obter_plano(oid) or {}
+    except Exception:
+        plano_atual = {}
     try:
         _lim = verificar_limite_animais(oid) or {}
         atual = int(_lim.get("atual", 0))
