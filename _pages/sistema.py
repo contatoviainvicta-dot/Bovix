@@ -595,7 +595,7 @@ def page_notificacoes(u):
                              "vacina":f"Risco {r['risco_nivel']} ({r['risco_score']}pts)",
                              "data_prevista":r['principal_risco']} for r in resumo_r]
                     ok, msg = email_vacina_pendente(destino_r, u["nome"], vs_r)
-                    st.success("Relatorio enviado!") if ok else st.error(msg)
+                    toast_ok("Relatorio enviado!") if ok else st.error(msg)
                 else:
                     st.error("Configure o e-mail primeiro")
 
@@ -762,7 +762,7 @@ def page_administracao(u):
                         try:
                             uid_n = criar_usuario(n_nome, n_email, n_senha, n_perf)
                             ativar_trial(uid_n)
-                            st.success("Usuario criado!"); st.rerun()
+                            toast_ok("Usuario criado!"); st.rerun()
                         except Exception: st.error("Email ja cadastrado.")
                     else: st.error("Preencha todos os campos.")
     with t2:
@@ -876,7 +876,7 @@ def page_gestao_usuarios(u):
                         with col_btn:
                             if st.button("Salvar plano", key=f"sv_plano_{uid_u}", type="primary"):
                                 definir_plano_usuario(uid_u, perfil_u, novo_plano, u["id"])
-                                st.success(f"Plano atualizado para {planos_info[novo_plano]['nome']}")
+                                toast_ok("Plano atualizado para {planos_info[novo_plano]['nome']}")
                                 st.rerun()
                         with col_exp:
                             sp_u = obter_status_plano(uid_u)
