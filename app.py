@@ -5529,13 +5529,15 @@ with st.sidebar:
     st.caption("MENU")
 
     GRUPOS = {
-        # ── INICIO: igual para todos ──────────────────────────────────────────
         "Inicio": [
             ("Inicio",               "Painel geral"),
             ("Workspace do Lote",    "Visao completa do lote"),
         ],
+    }
 
-        "Analise": [
+    if is_admin():
+        # ── ADMIN: visao operacional + administrativa ──
+        GRUPOS["Analise"] = [
             ("Dashboard Executivo",  "KPIs consolidados"),
             ("Dashboard Sanitario",  "Incidencias e alertas"),
             ("Analisar por Lote",    "GMD e desempenho"),
@@ -5544,99 +5546,117 @@ with st.sidebar:
             ("GMD Temporal",         "Evolucao no tempo"),
             ("Comparativo Lotes",    "Side by side"),
             ("Pesquisar Ocorrencias","Busca avancada"),
-        ] + ([] if is_admin() or is_vet() else [
-            ("Painel de Decisao",    "Lucro por lote"),
-        ]),
-
-        "Analise & IA": [
+        ]
+        GRUPOS["Inteligencia"] = [
             ("Risco Sanitario IA",   "Score de risco do lote"),
             ("Previsao de Abate IA", "Predicao por animal"),
             ("Anomalias de Peso",    "Alertas inteligentes"),
-        ],
-        "Sistema": [
-            ("Mensagens",            "Inbox vet-fazendeiro"),
-            ("Importar CSV",         "Importar animais e pesagens"),
-            ("Onboarding",           "Configuracao inicial guiada"),
-            ("Email Alertas",        "Notificacoes por email"),
-            ("Planos",               "Meu plano e limites"),
+        ]
+        GRUPOS["Administracao"] = [
             ("Painel Admin",         "MRR, usuarios e erros"),
+            ("Administracao",        "Usuarios e planos"),
+            ("Gestao Usuarios",      "Planos e acessos vet"),
+            ("Log Auditoria",        "Historico de acoes"),
+            ("Diagnostico DB",       "Schema do banco"),
+        ]
+        GRUPOS["Sistema"] = [
+            ("Importar CSV",         "Importar animais e pesagens"),
             ("Exportar Relatorios",  "PDF e Excel"),
             ("Backup",               "Download do banco"),
             ("Notificacoes",         "E-mail e alertas"),
-        ] + ([] if is_admin() else [
-            ("Refazer Tutorial",     "Wizard de primeiros passos"),
-            ("Dados de Exemplo",     "Criar ou remover fazenda demo"),
-        ]) + ([] if not is_admin() else [
-            ("Log Auditoria",        "Historico de acoes"),
-            ("Administracao",        "Usuarios e planos"),
-            ("Gestao Usuarios",      "Planos e acessos vet"),
-            ("Diagnostico DB",       "Schema do banco"),
-        ]),
-    }
-
-    # ── GRUPO VETERINARIO: exclusivo para vet ──
-    if is_vet():
-        GRUPOS["Veterinario"] = [
-            ("Meu Dashboard",       "Produtividade e configuracao"),
-            ("Meu CRMV",            "Registro profissional"),
-            ("Receituario",         "Emissao de receitas"),
-            ("Diagnostico IA",      "Analise clinica com IA"),
-            ("Protocolos",          "Protocolos sanitarios"),
-            ("Campanhas",           "Vacinacao por safra"),
-            ("Exames Lab",          "Exames laboratoriais"),
-            ("Monitoramento",       "Pos-tratamento e follow-up"),
-            ("Historico PDF",       "Historico clinico do animal"),
-            ("Agenda Visitas",      "Visitas tecnicas"),
-            ("Relatorio Visita",    "Laudos de visita"),
-            ("Painel Saude",        "Estatisticas do rebanho"),
-            ("Mapa Epidemio",       "Epidemiologia cruzada"),
-            ("Controle Carencia",   "Periodo de abate"),
-            ("Financeiro Vet",      "Honorarios e faturamento"),
+            ("Mensagens",            "Inbox vet-fazendeiro"),
         ]
 
-    # Grupos condicionais por perfil
-    if not is_admin():
-        _op_lote = [
+    else:
+        # ── FAZENDEIRO (base) - o VETERINARIO tambem entra aqui e ve
+        #    todas as telas do fazendeiro. NAO usar elif: o vet herda
+        #    estes grupos e recebe os grupos clinicos adicionais abaixo.
+        GRUPOS["Rebanho"] = [
             ("Cadastrar Lote",       "Novo lote"),
-            ("Editar Lote",          "Alterar dados do lote"),
-            ("Importar CSV",         "Importacao em lote"),
-            ("Transferir Animal",    "Mover entre lotes"),
-            ("Status do Lote",       "Alterar status"),
-        ]
-        _op_animal = [
-            ("Buscar Animal",        "Busca por brinco"),
             ("Cadastrar Animal",     "Novo animal"),
-            ("Registrar Pesagem",    "Novo peso"),
-            ("Editar Pesagens",      "Corrigir pesagens"),
+            ("Registrar Pesagem",    "Nova pesagem"),
             ("Registrar Ocorrencia", "Nova ocorrencia"),
-            ("Gerenciar Ocorrencias","Tratamentos e ocorrencias"),
+            ("Buscar Animal",        "Busca por brinco"),
+            ("Status do Lote",       "Alterar status"),
+            ("Transferir Animal",    "Mover entre lotes"),
             ("Registrar Morte",      "Baixa de animal"),
-            ("Editar Animal",        "Alterar dados do animal"),
-            ("Prontuario Animal",    "Historico completo"),
+            ("Editar Lote",          "Alterar lote"),
+            ("Editar Animal",        "Alterar animal"),
+            ("Editar Pesagens",      "Corrigir pesagens"),
         ]
-        # _op nao e mais usado - lote e animal viram grupos proprios
-        _op = _op_lote  # compatibilidade (nao renderizado diretamente)
-        _fs = [
-            ("Dashboard Financeiro", "KPIs, DRE e projecao de abate"),
+        GRUPOS["Gestao Sanitaria"] = [
+            ("Prontuario Animal",    "Historico completo"),
+            ("Gerenciar Ocorrencias","Tratamentos e ocorrencias"),
             ("Calendario Sanitario", "Vacinas e alertas"),
             ("Estoque Medicamentos", "Controle de estoque"),
             ("Controle Reprodutivo", "IATF e prenhez"),
-            ("Mapa Piquetes",        "Pastagens"),
+        ]
+        GRUPOS["Inteligencia"] = [
+            ("Dashboard Executivo",  "KPIs consolidados"),
+            ("Dashboard Sanitario",  "Incidencias e alertas"),
+            ("Analisar por Lote",    "GMD e desempenho"),
+            ("Analisar Animal",      "Analise individual"),
+            ("Score de Saude",       "Ranking 0-100"),
+            ("GMD Temporal",         "Evolucao no tempo"),
+            ("Comparativo Lotes",    "Side by side"),
+            ("Pesquisar Ocorrencias","Busca avancada"),
+            ("Risco Sanitario IA",   "Score de risco do lote"),
+            ("Previsao de Abate IA", "Predicao por animal"),
+            ("Anomalias de Peso",    "Alertas inteligentes"),
+        ] + ([] if is_vet() else [
+            ("Painel de Decisao",    "Lucro por lote"),
+        ])
+        GRUPOS["Financeiro"] = [
+            ("Dashboard Financeiro", "KPIs, DRE e projecao de abate"),
             ("Previsao Abate",       "Data estimada de abate"),
             ("Cotacao Cepea",        "Preco boi gordo"),
+            ("Mapa Piquetes",        "Pastagens"),
         ] + ([] if is_vet() else [
             ("Margem Real",          "Compra x Venda"),
             ("Rastreabilidade GTA",  "GTA e SISBOV"),
         ])
-        _grupos_final = {}
-        for k, v in GRUPOS.items():
-            _grupos_final[k] = v
-            if k == "Inicio":
-                _grupos_final["🐮 Lote"]   = _op_lote
-                _grupos_final["🐄 Animal"] = _op_animal
-            if k == "Analise & IA":
-                _grupos_final["Financeiro & Saude"] = _fs
-        GRUPOS = _grupos_final
+        GRUPOS["Sistema"] = [
+            ("Importar CSV",         "Importar animais e pesagens"),
+            ("Planos",               "Meu plano e limites"),
+            ("Onboarding",           "Configuracao inicial guiada"),
+            ("Mensagens",            "Inbox vet-fazendeiro"),
+            ("Email Alertas",        "Notificacoes por email"),
+            ("Exportar Relatorios",  "PDF e Excel"),
+            ("Notificacoes",         "E-mail e alertas"),
+        ] + ([] if is_vet() else [
+            ("Refazer Tutorial",     "Wizard de primeiros passos"),
+            ("Dados de Exemplo",     "Criar ou remover fazenda demo"),
+        ])
+
+        # ── VETERINARIO: grupos clinicos ADICIONAIS (alem do fazendeiro) ──
+        if is_vet():
+            GRUPOS["Inicio"] = [
+                ("Meu Dashboard",       "Produtividade e configuracao"),
+                ("Inicio",              "Painel geral"),
+                ("Workspace do Lote",   "Visao completa do lote"),
+                ("Meu CRMV",            "Registro profissional"),
+            ]
+            GRUPOS["Clinico"] = [
+                ("Receituario",         "Emissao de receitas"),
+                ("Diagnostico IA",      "Analise clinica com IA"),
+                ("Historico PDF",       "Historico clinico do animal"),
+                ("Monitoramento",       "Pos-tratamento e follow-up"),
+            ]
+            GRUPOS["Preventivo"] = [
+                ("Protocolos",          "Protocolos sanitarios"),
+                ("Campanhas",           "Vacinacao por safra"),
+                ("Controle Carencia",   "Periodo de abate"),
+                ("Mapa Epidemio",       "Epidemiologia cruzada"),
+            ]
+            GRUPOS["Laboratorio"] = [
+                ("Exames Lab",          "Exames laboratoriais"),
+                ("Painel Saude",        "Estatisticas do rebanho"),
+            ]
+            GRUPOS["Visitas Vet"] = [
+                ("Agenda Visitas",      "Visitas tecnicas"),
+                ("Relatorio Visita",    "Laudos de visita"),
+                ("Financeiro Vet",      "Honorarios e faturamento"),
+            ]
 
     if "menu" not in st.session_state:
         st.session_state.menu = "Inicio"
