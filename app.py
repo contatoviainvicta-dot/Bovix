@@ -5081,9 +5081,10 @@ from _pages.veterinario import (
     page_dashboard_produtividade,
 )
 from _pages.sistema    import (page_inicio, page_buscar_animal, page_notificacoes,
-    page_log_auditoria, page_administracao, page_gestao_usuarios)
+    page_log_auditoria, page_administracao, page_gestao_usuarios,
+    page_configurar_whatsapp, page_exportar_dados)
 from _pages.crescimento import (page_importar_csv, page_onboarding,
-    page_planos, page_notificacoes_email)
+    page_planos, page_notificacoes_email, page_dados_exemplo)
 from _pages.dashboard_exec import page_dashboard_executivo
 from _pages.admin_painel   import page_painel_admin
 
@@ -5137,6 +5138,31 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ── Meta tags PWA ─────────────────────────────────────────────
+st.markdown("""
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Auroque">
+<meta name="theme-color" content="#1B4332">
+<meta name="description" content="Gestão Pecuária Inteligente">
+<style>
+/* Melhorar touch em mobile */
+button, input, select, textarea {
+    -webkit-tap-highlight-color: rgba(64,145,108,0.2);
+    touch-action: manipulation;
+}
+/* Evitar zoom em inputs no iOS */
+input[type="text"], input[type="email"],
+input[type="password"], input[type="number"] {
+    font-size: 16px !important;
+}
+</style>
+</head>
+""", unsafe_allow_html=True)
 
 # ── Auroque Visual ─────────────────────────────────────────────────────────────
 st.markdown("""<style>
@@ -5807,6 +5833,7 @@ with st.sidebar:
             ("Onboarding",           "Configuracao inicial guiada"),
             ("Mensagens",            "Inbox vet-fazendeiro"),
             ("Email Alertas",        "Notificacoes por email"),
+            ("WhatsApp",             "Configurar alertas WhatsApp"),
             ("Exportar Relatorios",  "PDF e Excel"),
             ("Notificacoes",         "E-mail e alertas"),
         ] + ([] if is_vet() else [
