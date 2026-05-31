@@ -70,6 +70,7 @@ from rules import (
     sel_lote, sel_animal, limpar_cache,
     requer_admin, requer_nao_vet, owner_id_lote_novo,
     _listar_lotes_cache, _listar_animais_cache,
+    sel_fazenda_vet,
 )
 
 def hdr(titulo, sub="", desc=""):
