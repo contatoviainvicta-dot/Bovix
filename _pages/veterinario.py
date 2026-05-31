@@ -213,7 +213,7 @@ def page_receituario(u):
                         for a in listar_animais_por_lote(lote_id_rec):
                             adicionar_carencia(a[0], medicamento,
                                               str(date.today()), int(carencia))
-                    st.success(f"Receita #{rid} emitida com sucesso!")
+                    toast_ok(f"Receita #{rid} emitida com sucesso!")
                     st.rerun()
 
     with t2:
@@ -356,7 +356,7 @@ def page_protocolos(u):
                             pid_novo, n_atual + 1, tipo_i,
                             nome_i, int(dia_i), obs_i or ""
                         )
-                        st.success(f"Item '{nome_i}' adicionado!")
+                        toast_ok(f"Item '{nome_i}' adicionado!")
                         st.rerun()
 
             if st.button("Finalizar protocolo"):
@@ -552,7 +552,7 @@ def page_relatorio_visita(u):
                     )
                     if visita_id:
                         atualizar_status_visita(visita_id, "realizada")
-                    st.success(f"Relatorio #{rid} gerado! "
+                    toast_ok(f"Relatorio #{rid} gerado! "
                                f"O fazendeiro recebera no painel dele.")
                     st.rerun()
 
@@ -615,7 +615,7 @@ def page_agenda_visitas(u):
     with t1:
         visitas = listar_visitas(vet_id=u["id"])
         if not visitas:
-            st.info("Nenhuma visita agendada.")
+            empty_state("Sem visitas agendadas", "Agende uma visita técnica para começar.", icone="📅")
         else:
             agend = [v for v in visitas if v[6] == "agendada"]
             real  = [v for v in visitas if v[6] == "realizada"]
@@ -850,7 +850,7 @@ def page_agenda_visitas(u):
                             duracao_min=int(duracao),
                             observacoes=obs_v or ""
                         )
-                        st.success(
+                        toast_ok(
                             f"Visita #{vid} agendada para "
                             f"{_fmt_dt(str(data_v))}!"
                         )
@@ -908,7 +908,7 @@ def page_painel_saude(u):
             width='stretch', hide_index=True
         )
     else:
-        st.success("Nenhum animal em periodo de carencia.")
+        st.info("Nenhum animal em periodo de carencia.")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -965,8 +965,8 @@ def page_controle_carencia(u):
                         try:
                             adicionar_carencia(aid, med_c, str(data_apl), int(dias_car))
                             n_ok += 1
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            pass  # silenced
                     data_lib = date.today() + timedelta(days=int(dias_car))
                     st.success(
                         f"Carencia registrada para {n_ok} animal(is). "
@@ -983,7 +983,7 @@ def page_controle_carencia(u):
 
         carencias = listar_carencias_ativas(owner_id=foid_l)
         if not carencias:
-            st.success("Nenhum animal em carencia.")
+            st.info("Nenhum animal em carencia.")
         else:
             st.warning(f"{len(carencias)} animal(is) em carencia")
             df_c = pd.DataFrame(carencias, columns=[
@@ -1182,7 +1182,7 @@ def page_monitoramento(u):
         mons_faz = [m for m in mons if m["animal_id"] in ids_anim_faz]
 
         if not mons_faz:
-            st.success("Nenhum monitoramento ativo nesta fazenda.")
+            st.info("Nenhum monitoramento ativo nesta fazenda.")
         else:
             # Separar vencidos e em dia
             vencidos = [m for m in mons_faz if m["vencido"]]
@@ -1243,7 +1243,7 @@ def page_monitoramento(u):
                                 type="secondary"
                             ):
                                 encerrar_monitoramento(m["id"])
-                                st.success("Monitoramento encerrado.")
+                                toast_ok("Monitoramento encerrado.")
                                 st.rerun()
 
     with t2:
@@ -1521,7 +1521,7 @@ def page_gestao_financeira_vet(u):
                             itens=itens_av or None,
                             observacoes=obs_av or ""
                         )
-                        st.success(
+                        toast_ok(
                             f"Honorário #{hid} de R$ {val_av:.2f} lançado!"
                         )
                         st.rerun()
@@ -1794,7 +1794,7 @@ def page_mapa_epidemiologico(u):
                     + ", ".join(f"{n} ({c} casos)" for n, c in fazendas)
                 )
         else:
-            st.success("Nenhuma doenca em comum entre fazendas. Bom sinal!")
+            st.info("Nenhuma doenca em comum entre fazendas. Bom sinal!")
 
         if sem_alerta:
             st.divider()
@@ -1900,8 +1900,8 @@ def page_inbox(u):
                     for row in cur.fetchall():
                         nome = obter_nome_usuario(row[0]) or f"#{row[0]}"
                         dest_opts[nome] = row[0]
-            except Exception:
-                pass
+            except Exception as _e:
+                pass  # silenced
 
         if not dest_opts:
             st.warning(
@@ -2092,7 +2092,7 @@ def page_campanhas_vacinacao(u):
                         adicionar_lote_campanha(
                             cid_sel, dict_lc[lote_c_sel], int(meta_c_an)
                         )
-                        st.success("Lote adicionado!")
+                        toast_ok("Lote adicionado!")
                         st.rerun()
 
         # Registrar vacinados
@@ -2148,7 +2148,7 @@ def page_campanhas_vacinacao(u):
                             registrar_vacinacao_campanha(
                                 lcid, n_vac, str(dt_ex_c)
                             )
-                            st.success(
+                            toast_ok(
                                 f"{n_vac} animais vacinados em {nome_l}!"
                             )
                             st.rerun()
