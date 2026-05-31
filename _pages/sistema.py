@@ -188,8 +188,8 @@ def page_inicio(u):
                     _dp = _p.get("data_prevista")
                     if _dp and (_melhor_data is None or _dp < _melhor_data):
                         _melhor_data = _dp
-            except Exception:
-                pass
+            except Exception as _e:
+                pass  # silenced
 
         _n_animais = len(_todos_animais)
         _n_partos  = len(parto)
@@ -295,7 +295,7 @@ def page_inicio(u):
         # ══ BLOCO 3: LOTES ═══════════════════════════════════════════════════
         st.subheader("Seus lotes")
         if not lotes:
-            st.info("Nenhum lote. Va em Lote > Cadastrar Lote.")
+            empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
         else:
             ncols = min(3, len(lotes))
             cols  = st.columns(ncols)
@@ -414,7 +414,7 @@ def page_inicio(u):
             with al1:
                 st.subheader("Alertas sanitarios")
                 if not _pendo_faz and not crit:
-                    st.success("Nenhum alerta critico.")
+                    st.info("Nenhum alerta critico.")
                 if _pendo_faz:
                     with st.expander(
                         f"💉 Vacinas pendentes ({len(_pendo_faz)})",
@@ -517,13 +517,13 @@ def page_buscar_animal(u):
                     det = obter_animal(a[0])
                     c1,c2 = st.columns(2)
                     with c1:
-                        st.write(f"ID: {a[0]} | Idade: {a[2]} meses")
-                        if det: st.write(f"Raca: {det[5]} | Peso alvo: {det[7]} kg")
+                        st.caption(f"ID: {a[0]} | Idade: {a[2]} meses")
+                        if det: st.caption(f"Raca: {det[5]} | Peso alvo: {det[7]} kg")
                     with c2:
                         ps = listar_pesagens(a[0])
                         ocs = listar_ocorrencias(a[0])
                         sc  = calcular_score_saude(a[0])
-                        st.write(f"Pesagens: {len(ps)} | Ocorrencias: {len(ocs)}")
+                        st.caption(f"Pesagens: {len(ps)} | Ocorrencias: {len(ocs)}")
                         st.write(f"Score saude: {sc['score']}/100 ({sc['classificacao']})")
                         car = verificar_carencia(a[0])
                         if car["em_carencia"]:
@@ -557,7 +557,7 @@ def page_notificacoes(u):
     remetente     = Gestao Pecuaria <seu@gmail.com>""", language="toml")
         st.info("Use Senha de App do Google - nao a senha da conta. Veja: myaccount.google.com/apppasswords")
     else:
-        st.success("E-mail configurado e pronto para envio.")
+        toast_ok("E-mail configurado e pronto para envio.")
 
     st.divider()
     tab_alertas, tab_risco, tab_abate, tab_config = st.tabs([
@@ -581,7 +581,7 @@ def page_notificacoes(u):
                     else:
                         st.error("Configure o e-mail primeiro")
             else:
-                st.success("Nenhuma vacina pendente")
+                empty_state("Vacinas em dia", "Nenhuma vacina pendente no momento.", icone="✅")
 
         with col_a2:
             st.metric("Medicamentos criticos", len(crit),
@@ -596,7 +596,7 @@ def page_notificacoes(u):
                     else:
                         st.error("Configure o e-mail primeiro")
             else:
-                st.success("Estoque OK")
+                toast_ok("Estoque OK")
 
         with col_a3:
             st.metric("Partos previstos 30d", len(parto))
@@ -617,7 +617,7 @@ def page_notificacoes(u):
         st.caption("Envia analise de risco de todos os lotes para um email")
         lotes_risco = listar_lotes_usuario()
         if not lotes_risco:
-            st.info("Nenhum lote cadastrado.")
+            empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
         else:
             with st.spinner("Calculando riscos..."):
                 resumo_r = resumo_ia_fazenda(owner_id=owner_id())
@@ -629,7 +629,7 @@ def page_notificacoes(u):
                 for r in criticos_ia:
                     st.warning(f"**{r['lote_nome']}** - {r['risco_nivel']} ({r['risco_score']}pts) - {r['principal_risco']}")
             else:
-                st.success("Nenhum lote em situacao critica.")
+                empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
 
             destino_r = st.text_input("Enviar relatorio para", value=u["email"], key="dest_risco")
             if st.button("Enviar relatorio de risco por email", type="primary", key="btn_risco"):
@@ -746,7 +746,7 @@ def page_administracao(u):
                     usuarios_trial = []
 
                 if not usuarios_trial:
-                    st.success("Nenhum usuario com trial expirando nos proximos 7 dias.")
+                    st.info("Nenhum usuario com trial expirando nos proximos 7 dias.")
                 else:
                     st.info(f"**{len(usuarios_trial)} usuario(s) em situacao de trial:**")
                     for usr in usuarios_trial:
@@ -846,7 +846,7 @@ def page_gestao_usuarios(u):
         st.subheader("Solicitacoes de acesso pendentes")
         pendentes = listar_solicitacoes_pendentes()
         if not pendentes:
-            st.success("Nenhuma solicitacao pendente.")
+            st.info("Nenhuma solicitacao pendente.")
         else:
             st.warning(f"{len(pendentes)} solicitacao(oes) aguardando aprovacao")
             for req in pendentes:
@@ -854,9 +854,9 @@ def page_gestao_usuarios(u):
                 owner_id, faz_nome = req[4], req[5]
                 data_req = req[8]
                 with st.expander(f"Vet: {vet_nome} -> Fazenda: {faz_nome} | {data_req}"):
-                    st.write(f"**Veterinario:** {vet_nome} ({vet_email})")
-                    st.write(f"**Fazenda:** {faz_nome}")
-                    st.write(f"**Solicitado em:** {data_req}")
+                    st.markdown(f"**Veterinario:** {vet_nome} ({vet_email})")
+                    st.markdown(f"**Fazenda:** {faz_nome}")
+                    st.markdown(f"**Solicitado em:** {data_req}")
                     lim_vet = verificar_limite_fazendas(vet_id)
                     st.caption(f"Fazendas do vet: {lim_vet['msg']}")
                     c1, c2 = st.columns(2)
@@ -885,8 +885,8 @@ def page_gestao_usuarios(u):
                 with st.expander(f"{nome_u} | {perfil_u} | Plano: {plano_atual} | Status: {status_conta}"):
                     c1, c2, c3 = st.columns(3)
                     with c1:
-                        st.write(f"**Email:** {email_u}")
-                        st.write(f"**Perfil:** {perfil_u}")
+                        st.markdown(f"**Email:** {email_u}")
+                        st.markdown(f"**Perfil:** {perfil_u}")
                     with c2:
                         if limites:
                             if perfil_u == "veterinario":
@@ -894,7 +894,7 @@ def page_gestao_usuarios(u):
                             else:
                                 lim = verificar_limite_animais(uid_u)
                             _uso_msg = lim.get('msg', f"{lim.get('atual',0)}/{lim.get('limite',0)}") if isinstance(lim, dict) else str(lim)
-                            st.write(f"**Uso:** {_uso_msg}")
+                            st.markdown(f"**Uso:** {_uso_msg}")
                     with c3:
                         if status_conta == "pendente" and perfil_u != "admin":
                             if st.button("Aprovar conta", key=f"aprc_{uid_u}"):
@@ -944,8 +944,8 @@ def page_gestao_usuarios(u):
                 with st.expander(f"{fnome} | {femail} | {plano_faz} | Status: {status_faz}"):
                     c1, c2 = st.columns(2)
                     with c1:
-                        st.write(f"**Email:** {femail}")
-                        st.write(f"**Plano:** {plano_faz}")
+                        st.markdown(f"**Email:** {femail}")
+                        st.markdown(f"**Plano:** {plano_faz}")
                         lim_a = verificar_limite_animais(fid)
                         st.write(f"**Uso:** {lim_a['msg']}")
                     with c2:
@@ -976,7 +976,7 @@ def page_gestao_usuarios(u):
                                     conn.commit()
                                 registrar_auditoria(u["id"], "reativar_fazendeiro",
                                                     "usuarios", fid, fnome)
-                                st.success(f"Acesso de {fnome} reativado.")
+                                toast_ok(f"Acesso de {fnome} reativado.")
                                 st.rerun()
                         else:
                             st.caption(f"Status: {status_faz}")
