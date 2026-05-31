@@ -61,6 +61,48 @@ def fmt_data_hora(data):
         return str(data)[:16] if data else "—"
 
 
+# ── GRÁFICOS SEGUROS (protegidos contra df vazio/NaN) ───────────
+def safe_line_chart(df, titulo=None, empty_msg="Dados insuficientes para o gráfico."):
+    """st.line_chart protegido contra df vazio, None e NaN."""
+    import streamlit as st
+    import pandas as pd
+    try:
+        if df is None or (hasattr(df, 'empty') and df.empty):
+            if titulo: st.caption(titulo)
+            st.info(empty_msg)
+            return
+        # Limpar NaN e inf
+        df = pd.DataFrame(df).replace([float('inf'), float('-inf')], None)
+        df = df.dropna(how='all')
+        if df.empty:
+            st.info(empty_msg)
+            return
+        if titulo: st.caption(titulo)
+        st.line_chart(df)
+    except Exception as e:
+        st.info(f"Gráfico indisponível: {e}")
+
+
+def safe_bar_chart(df, titulo=None, empty_msg="Dados insuficientes para o gráfico."):
+    """st.bar_chart protegido contra df vazio, None e NaN."""
+    import streamlit as st
+    import pandas as pd
+    try:
+        if df is None or (hasattr(df, 'empty') and df.empty):
+            if titulo: st.caption(titulo)
+            st.info(empty_msg)
+            return
+        df = pd.DataFrame(df).replace([float('inf'), float('-inf')], None)
+        df = df.dropna(how='all')
+        if df.empty:
+            st.info(empty_msg)
+            return
+        if titulo: st.caption(titulo)
+        st.bar_chart(df)
+    except Exception as e:
+        st.info(f"Gráfico indisponível: {e}")
+
+
 # ── TOAST HELPERS ─────────────────────────────────────────────
 def toast_ok(msg):
     """Toast de sucesso — desaparece sozinho."""
