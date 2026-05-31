@@ -1138,6 +1138,38 @@ def listar_animais_por_lote(lote_id, incluir_inativos=False):
         rows = _fetch(cur)
         return [(r["id"],r["identificacao"],r["idade"],r["lote_id"]) for r in rows]
 
+def buscar_animal_global(termo, owner_id):
+    """Busca animal por identificacao ou nome em todos os lotes do owner."""
+    if not termo or not owner_id:
+        return []
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT a.id, a.identificacao, a.raca, a.sexo, "
+                f"l.nome as lote_nome "
+                f"FROM animais a "
+                f"JOIN lotes l ON l.id = a.lote_id "
+                f"WHERE l.owner_id = {p} "
+                f"AND a.ativo = 1 "
+                f"AND (LOWER(a.identificacao) LIKE LOWER({p}) "
+                f"     OR LOWER(COALESCE(a.nome,'')) LIKE LOWER({p})) "
+                f"ORDER BY a.identificacao "
+                f"LIMIT 10",
+                (owner_id, f"%{termo}%", f"%{termo}%")
+            )
+            rows = cur.fetchall()
+        return [
+            dict(id=r[0], identificacao=r[1],
+                 raca=r[2], sexo=r[3], lote_nome=r[4])
+            for r in rows
+        ]
+    except Exception as _e:
+        _log_war.debug("buscar_animal_global: %s", _e)
+        return []
+
+
 def contar_animais_no_lote(lote_id, incluir_inativos=False):
     p = _ph()
     with _conexao() as conn:
