@@ -205,28 +205,79 @@ def page_inicio(u):
                 return f"{dt.day:02d} {meses[dt.month]} {dt.year}"
             except: return str(ds)
 
-        # ══ BLOCO 1: PREVISAO DE ABATE IA ════════════════════════════════════
-        st.subheader("Previsao de Abate IA")
-        st.caption(f"Cotacao: R$ {_preco_kg:.2f}/@ — baseada nos dados de pesagem")
+        # ══ BLOCO 1: KPIs COM HIERARQUIA VISUAL ═════════════════════════════
+        _cor_marg = "#1B4332" if _margem_est >= 0 else "#E24B4A"
+        _n_alertas = len(pendo) + len(crit)
 
-        ia_c1, ia_c2, ia_c3, ia_c4 = st.columns(4)
-        ia_c1.metric("Total de animais",      _n_animais)
-        ia_c2.metric("Prontos p/ abate",      _prontos_abate,
-                     delta="prontos" if _prontos_abate else None,
-                     delta_color="normal" if _prontos_abate else "off")
-        ia_c3.metric("Receita total estimada", fmt_brl(_receita_est))
-        ia_c4.metric("Margem total estimada",  fmt_brl(_margem_est))
+        # KPIs primários — destaque máximo
+        st.markdown(f"""
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
+  <div style="background:#1B4332;border-radius:12px;padding:20px 24px;color:white">
+    <div style="font-size:12px;opacity:.7;letter-spacing:1px;
+         text-transform:uppercase;margin-bottom:6px">Receita Estimada</div>
+    <div style="font-size:28px;font-weight:700;line-height:1">
+      {fmt_brl(_receita_est)}</div>
+    <div style="font-size:11px;opacity:.6;margin-top:4px">
+      cotação R$ {_preco_kg:.2f}/@</div>
+  </div>
+  <div style="background:{'#1D9E75' if _margem_est>=0 else '#E24B4A'};
+       border-radius:12px;padding:20px 24px;color:white">
+    <div style="font-size:12px;opacity:.7;letter-spacing:1px;
+         text-transform:uppercase;margin-bottom:6px">Margem Estimada</div>
+    <div style="font-size:28px;font-weight:700;line-height:1">
+      {fmt_brl(_margem_est)}</div>
+    <div style="font-size:11px;opacity:.6;margin-top:4px">sobre custo total</div>
+  </div>
+  <div style="background:#F5F0E8;border:1.5px solid #1B4332;
+       border-radius:12px;padding:20px 24px">
+    <div style="font-size:12px;color:#40916C;letter-spacing:1px;
+         text-transform:uppercase;margin-bottom:6px">Próximo Abate</div>
+    <div style="font-size:22px;font-weight:700;color:#1B4332;line-height:1">
+      {_fmt_dt(_melhor_data)}</div>
+    <div style="font-size:11px;color:#6B7280;margin-top:4px">
+      {_prontos_abate} animal(is) pronto(s)</div>
+  </div>
+</div>
 
-        ia_c5, ia_c6, ia_c7, ia_c8 = st.columns(4)
-        ia_c5.metric("Custo total estimado",   fmt_brl(_custo_total))
-        ia_c6.metric("Proxima data de abate",  _fmt_dt(_melhor_data))
-        ia_c7.metric("Partos proximos 30d",    _n_partos)
-        ia_c8.metric("Meds. em alerta",        len(crit),
-                     delta="atencao" if crit else None,
-                     delta_color="inverse" if crit else "off")
+<!-- KPIs secundários -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;
+     margin-bottom:16px">
+  <div style="background:white;border:1px solid #E5E7EB;border-radius:10px;
+       padding:14px 16px">
+    <div style="font-size:11px;color:#6B7280;margin-bottom:4px">Total Animais</div>
+    <div style="font-size:22px;font-weight:600;color:#1B4332">{_n_animais}</div>
+  </div>
+  <div style="background:white;border:1px solid #E5E7EB;border-radius:10px;
+       padding:14px 16px">
+    <div style="font-size:11px;color:#6B7280;margin-bottom:4px">Custo Total</div>
+    <div style="font-size:18px;font-weight:600;color:#374151">
+      {fmt_brl(_custo_total)}</div>
+  </div>
+  <div style="background:white;border:1px solid #E5E7EB;border-radius:10px;
+       padding:14px 16px">
+    <div style="font-size:11px;color:#6B7280;margin-bottom:4px">Partos 30d</div>
+    <div style="font-size:22px;font-weight:600;color:#374151">{_n_partos}</div>
+  </div>
+  <div style="background:{'#FEF3C7' if _n_alertas>0 else 'white'};
+       border:1px solid {'#F59E0B' if _n_alertas>0 else '#E5E7EB'};
+       border-radius:10px;padding:14px 16px">
+    <div style="font-size:11px;color:#6B7280;margin-bottom:4px">Alertas</div>
+    <div style="font-size:22px;font-weight:600;
+         color:{'#D97706' if _n_alertas>0 else '#374151'}">
+      {_n_alertas}</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
-        if st.button("Ver analise completa de abate", key="btn_ver_abate"):
-            st.session_state.menu = "Previsao de Abate IA"; st.rerun()
+        _c_btn1, _c_btn2 = st.columns(2)
+        with _c_btn1:
+            if st.button("📊 Análise completa de abate",
+                         key="btn_ver_abate", type="primary"):
+                st.session_state.menu = "Previsao de Abate IA"; st.rerun()
+        with _c_btn2:
+            if st.button("💰 Dashboard financeiro",
+                         key="btn_ver_fin"):
+                st.session_state.menu = "Dashboard Financeiro"; st.rerun()
 
         st.divider()
 
