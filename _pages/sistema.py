@@ -1087,3 +1087,246 @@ def page_gestao_usuarios(u):
     # ============================================================
     # RISCO SANITARIO IA
     # ============================================================
+
+
+
+
+def page_configurar_whatsapp(u):
+    """Tela de configuração do WhatsApp pelo admin/fazendeiro."""
+    from ux_helpers import toast_ok, toast_erro, fmt_brl
+    st.subheader("📱 Configurar Notificações WhatsApp")
+    st.caption("Configure o provedor de WhatsApp para receber alertas no celular")
+
+    try:
+        from database import obter_config_sistema, salvar_config_sistema
+    except ImportError:
+        st.error("Módulo de configuração não disponível.")
+        return
+
+    cfg = obter_config_sistema("whatsapp") or {}
+
+    with st.expander("ℹ️ Como funciona", expanded=False):
+        st.markdown("""
+**Z-API** (recomendado para Brasil):
+- Plano a partir de R$ 97/mês · [z-api.io](https://z-api.io)
+- Crie uma instância e copie o Instance ID e Token
+
+**Twilio** (internacional):
+- Pay-as-you-go · [twilio.com](https://www.twilio.com)
+- Precisará de Account SID, Auth Token e número WhatsApp Business
+        """)
+
+    provedor = st.selectbox(
+        "Provedor",
+        ["", "zapi", "twilio"],
+        index=["","zapi","twilio"].index(cfg.get("provedor","")) if cfg.get("provedor","") in ["","zapi","twilio"] else 0,
+        format_func=lambda x: {"":"Selecione...","zapi":"Z-API (Brasil)","twilio":"Twilio (Internacional)"}.get(x,x)
+    )
+
+    st.divider()
+
+    if provedor == "zapi":
+        st.markdown("**Configuração Z-API**")
+        c1, c2 = st.columns(2)
+        with c1:
+            zapi_id    = st.text_input("Instance ID", value=cfg.get("zapi_instance_id",""),
+                                        type="password")
+        with c2:
+            zapi_token = st.text_input("Token",       value=cfg.get("zapi_token",""),
+                                        type="password")
+        zapi_client = st.text_input("Client Token (opcional)",
+                                     value=cfg.get("zapi_client_token",""),
+                                     type="password")
+
+    elif provedor == "twilio":
+        st.markdown("**Configuração Twilio**")
+        c1, c2 = st.columns(2)
+        with c1:
+            tw_sid   = st.text_input("Account SID",  value=cfg.get("twilio_account_sid",""),
+                                      type="password")
+        with c2:
+            tw_token = st.text_input("Auth Token",   value=cfg.get("twilio_auth_token",""),
+                                      type="password")
+        tw_from  = st.text_input("Número From", value=cfg.get("twilio_from_number",
+                                                               "whatsapp:+14155238886"))
+
+    st.divider()
+    st.markdown("**Número para receber alertas**")
+    fone_alerta = st.text_input(
+        "Telefone (com DDD, ex: 11999998888)",
+        value=cfg.get("fone_alerta",""),
+        help="Este número receberá os alertas de vacinas, carências e abate"
+    )
+
+    st.markdown("**Tipos de alerta**")
+    _c1, _c2 = st.columns(2)
+    with _c1:
+        al_vacina   = st.checkbox("Vacinas pendentes",    value=cfg.get("al_vacina", True))
+        al_carencia = st.checkbox("Carência vencendo",    value=cfg.get("al_carencia", True))
+    with _c2:
+        al_abate    = st.checkbox("Projeção de abate",    value=cfg.get("al_abate", True))
+        al_receita  = st.checkbox("Nova receita do vet",  value=cfg.get("al_receita", True))
+
+    col_s, col_t = st.columns(2)
+    with col_s:
+        if st.button("💾 Salvar configuração", type="primary", key="btn_salvar_wpp"):
+            nova_cfg = dict(
+                provedor=provedor,
+                fone_alerta=fone_alerta,
+                al_vacina=al_vacina, al_carencia=al_carencia,
+                al_abate=al_abate, al_receita=al_receita,
+            )
+            if provedor == "zapi":
+                nova_cfg.update(zapi_instance_id=zapi_id,
+                                zapi_token=zapi_token,
+                                zapi_client_token=zapi_client)
+            elif provedor == "twilio":
+                nova_cfg.update(twilio_account_sid=tw_sid,
+                                twilio_auth_token=tw_token,
+                                twilio_from_number=tw_from)
+            try:
+                salvar_config_sistema("whatsapp", nova_cfg)
+                toast_ok("Configuração salva!")
+            except Exception as _e:
+                toast_erro(f"Erro ao salvar: {_e}")
+
+    with col_t:
+        if st.button("🧪 Testar envio", key="btn_testar_wpp"):
+            if not fone_alerta:
+                st.warning("Informe o telefone para teste.")
+            else:
+                try:
+                    from whatsapp import enviar_whatsapp
+                    ok = enviar_whatsapp(fone_alerta,
+                                         "✅ *Auroque* — Teste de notificação funcionando!")
+                    if ok:
+                        toast_ok(f"Mensagem enviada para {fone_alerta[-4:]}****")
+                    else:
+                        toast_erro("Falha no envio — verifique as credenciais.")
+                except Exception as _e:
+                    toast_erro(f"Erro: {_e}")
+
+
+def page_exportar_dados(u):
+    """Tela de exportação de dados para Excel/CSV."""
+    from ux_helpers import toast_ok, toast_erro
+    st.subheader("📥 Exportar Dados")
+    st.caption("Baixe seus dados em Excel para análise externa ou relatórios")
+
+    _oid = owner_id() or u["id"]
+
+    try:
+        from export import (exportar_tudo, exportar_animais,
+                             exportar_pesagens, exportar_financeiro,
+                             exportar_veterinario)
+        _export_ok = True
+    except ImportError:
+        _export_ok = False
+        st.warning("Módulo de exportação não disponível. "
+                   "Verifique se export.py está na raiz do projeto.")
+
+    if not _export_ok:
+        return
+
+    st.markdown("**Escolha o que exportar:**")
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.markdown("##### 📦 Exportação completa")
+        st.caption("Todos os dados em um único arquivo Excel com múltiplas abas")
+        if st.button("⬇️ Exportar tudo (.xlsx)",
+                     key="btn_exp_tudo", type="primary",
+                     use_container_width=True):
+            with st.spinner("Gerando arquivo..."):
+                try:
+                    data = exportar_tudo(_oid)
+                    ts = datetime.now().strftime("%Y%m%d_%H%M")
+                    st.download_button(
+                        "💾 Baixar auroque_completo.xlsx",
+                        data=data,
+                        file_name=f"auroque_completo_{ts}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument"
+                             ".spreadsheetml.sheet",
+                        key="dl_tudo"
+                    )
+                except Exception as _e:
+                    toast_erro(f"Erro: {_e}")
+
+    with c2:
+        st.markdown("##### 🐄 Animais e pesagens")
+        st.caption("Lista de animais por lote com histórico de pesagens")
+        col_a, col_p = st.columns(2)
+        with col_a:
+            if st.button("⬇️ Animais",
+                         key="btn_exp_anim", use_container_width=True):
+                with st.spinner("Gerando..."):
+                    try:
+                        data = exportar_animais(_oid)
+                        st.download_button(
+                            "💾 animais.xlsx", data=data,
+                            file_name="auroque_animais.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument"
+                                 ".spreadsheetml.sheet",
+                            key="dl_anim"
+                        )
+                    except Exception as _e:
+                        toast_erro(f"Erro: {_e}")
+        with col_p:
+            if st.button("⬇️ Pesagens",
+                         key="btn_exp_pes", use_container_width=True):
+                with st.spinner("Gerando..."):
+                    try:
+                        data = exportar_pesagens(_oid)
+                        st.download_button(
+                            "💾 pesagens.xlsx", data=data,
+                            file_name="auroque_pesagens.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument"
+                                 ".spreadsheetml.sheet",
+                            key="dl_pes"
+                        )
+                    except Exception as _e:
+                        toast_erro(f"Erro: {_e}")
+
+    st.divider()
+    c3, c4 = st.columns(2)
+
+    with c3:
+        st.markdown("##### 💰 Financeiro")
+        st.caption("DRE, custos variáveis e registro de vendas")
+        if st.button("⬇️ Exportar financeiro",
+                     key="btn_exp_fin", use_container_width=True):
+            with st.spinner("Gerando..."):
+                try:
+                    data = exportar_financeiro(_oid)
+                    if data:
+                        st.download_button(
+                            "💾 financeiro.xlsx", data=data,
+                            file_name="auroque_financeiro.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument"
+                                 ".spreadsheetml.sheet",
+                            key="dl_fin"
+                        )
+                    else:
+                        st.info("Sem dados financeiros para exportar.")
+                except Exception as _e:
+                    toast_erro(f"Erro: {_e}")
+
+    with c4:
+        if is_vet():
+            st.markdown("##### 🩺 Veterinário")
+            st.caption("Receituário, vacinas e ocorrências clínicas")
+            if st.button("⬇️ Exportar veterinário",
+                         key="btn_exp_vet", use_container_width=True):
+                with st.spinner("Gerando..."):
+                    try:
+                        data = exportar_veterinario(_oid)
+                        if data:
+                            st.download_button(
+                                "💾 veterinario.xlsx", data=data,
+                                file_name="auroque_veterinario.xlsx",
+                                mime="application/vnd.openxmlformats-"
+                                     "officedocument.spreadsheetml.sheet",
+                                key="dl_vet"
+                            )
+                    except Exception as _e:
+                        toast_erro(f"Erro: {_e}")
