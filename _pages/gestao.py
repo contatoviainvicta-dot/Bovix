@@ -4,7 +4,8 @@ import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, confirmar_acao,
-                            erro_com_acao, fmt_brl, fmt_data, fmt_data_hora)
+                            erro_com_acao, fmt_brl, fmt_data, fmt_data_hora,
+                            safe_line_chart, safe_bar_chart)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -25,6 +26,22 @@ except ImportError:
         try: d=str(d)[:10]; p=d.split("-"); return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
         except: return str(d)
     def fmt_data_hora(d): return fmt_data(d)
+    def safe_line_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_line_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
+    def safe_bar_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_bar_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
 import pandas as pd
 from datetime import datetime, date, timedelta
 from database import *
@@ -170,7 +187,7 @@ u):
                     _est_str  = f"vinculada a {med_sel}" if med_id_sel else "sem vinculo de estoque"
                     st.success(
                         f"Vacina **{nome_vac}** agendada para "
-                        f"{data_prev.strftime('%d/%m/%Y')} "
+                        f"{data_prev} "
                         f"({_alvo_str} | {_est_str})!"
                     )
                     st.rerun()
@@ -794,14 +811,19 @@ def page_workspace_do_lote(u):
             df_p_ws["Data"] = pd.to_datetime(df_p_ws["Data"])
             df_p_ws = df_p_ws.sort_values("Data")
 
-            # Grafico de evolucao media
+            # Grafico de evolucao media (usa datetime)
             df_media = df_p_ws.groupby("Data")["Peso"].mean().reset_index()
             st.subheader("Evolucao do peso medio do lote")
-            st.line_chart(df_media.set_index("Data")["Peso"])
+            safe_line_chart(df_media.set_index("Data")["Peso"])
 
             st.subheader("Todas as pesagens")
+            # Exibir com data formatada
+            df_exib = df_p_ws[["Animal","Peso","Data"]].copy()
+            df_exib["Data"] = df_exib["Data"].apply(
+                lambda x: fmt_data(str(x)[:10])
+            )
             st.dataframe(
-                df_p_ws[["Animal","Peso","Data"]].rename(columns={"Peso":"Peso (kg)"}),
+                df_exib.rename(columns={"Peso":"Peso (kg)"}),
                 width='stretch'
             )
             st.caption(f"Total: {len(plote_ws)} pesagens | {df_p_ws['Animal'].nunique()} animais")
@@ -818,14 +840,14 @@ def page_workspace_do_lote(u):
         with c1_s:
             st.subheader("Ocorrencias")
             todas_ocs_raw = _ws['todas_ocs']
-            todas_ocs = [{"Animal": r[9], "Data": r[2], "Tipo": r[3],
+            todas_ocs = [{"Animal": r[9], "Data": fmt_data(r[2]), "Tipo": r[3],
                           "Gravidade": r[5], "Custo": r[6], "Status": r[8]}
                          for r in todas_ocs_raw]
             if todas_ocs:
                 df_oc_ws = pd.DataFrame(todas_ocs)
                 # Contagem por tipo
                 por_tipo = df_oc_ws.groupby("Tipo").size().reset_index(name="Qtd")
-                st.bar_chart(por_tipo.set_index("Tipo")["Qtd"])
+                safe_bar_chart(por_tipo.set_index("Tipo")["Qtd"])
                 em_trat = df_oc_ws[df_oc_ws["Status"]=="Em tratamento"]
                 if len(em_trat) > 0:
                     st.warning(f"{len(em_trat)} ocorrencia(s) em tratamento")
@@ -1128,7 +1150,7 @@ def page_prontuario_animal(u):
         for i, ev in enumerate(eventos):
             cor_key = ev["cor"]
             cor_borda, cor_fundo, _ = COR_MAP.get(cor_key, ("#555","#F5F5F5",""))
-            data_str = ev["data"]
+            data_str = fmt_data(ev.get("data",""))
             icone_str = ICONE_MAP.get(ev["icone"], ev["icone"])[:2].upper()
             is_last = (i == len(eventos)-1)
 
@@ -1230,7 +1252,7 @@ def page_prontuario_animal(u):
                     df_p = pd.DataFrame(ps, columns=["ID","Animal","Peso","Data"])
                     df_p["Data"] = pd.to_datetime(df_p["Data"])
                     df_p = df_p.sort_values("Data")
-                    st.line_chart(df_p.set_index("Data")["Peso"])
+                    safe_line_chart(df_p.set_index("Data")["Peso"])
                     st.dataframe(df_p[["Data","Peso"]].rename(columns={"Peso":"Peso (kg)"}), width='stretch')
                 else: st.info("Sem pesagens.")
 
@@ -1265,7 +1287,7 @@ def page_prontuario_animal(u):
             ):
                 for ev in (m["evolucoes"] or []):
                     quem_ic = "🩺" if ev.get("quem")=="vet" else "🌾"
-                    dt_ev = "/".join(reversed(str(ev.get("data",""))[:10].split("-")))
+                    dt_ev = fmt_data(ev.get("data",""))
                     st.caption(f"{quem_ic} {dt_ev} — {ev.get('texto','')}")
                 if m["status"] == "ativo":
                     with st.form(f"form_ev_faz_{m['id']}"):
