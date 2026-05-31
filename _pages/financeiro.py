@@ -16,6 +16,22 @@ except ImportError:
         try: d=str(d)[:10]; p=d.split("-"); return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
         except: return str(d)
     def fmt_data_hora(d): return fmt_data(d)
+    def safe_line_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_line_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
+    def safe_bar_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_bar_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
 import pandas as pd
 from database import *
 from ui import (
@@ -68,7 +84,7 @@ def page_painel_de_decisao(u):
     df_d = pd.DataFrame(dados, columns=["Lote","Lucro","Receita","Custo Op","Custo San"]).sort_values("Lucro", ascending=False)
     st.metric("Lucro total", f"R$ {df_d['Lucro'].sum():,.2f}")
     st.dataframe(df_d, width='stretch')
-    st.bar_chart(df_d.set_index("Lote")["Lucro"])
+    safe_bar_chart(df_d.set_index("Lote")["Lucro"])
     st.subheader("Alertas")
     for _, row in df_d.iterrows():
         if row["Lucro"] < 0:                            st.error(f"{row['Lote']}: prejuizo")
@@ -160,7 +176,7 @@ def page_dashboard_executivo(u):
             )
             st.caption(f"{lc['animais_ativos']} animais ativos")
         else:
-            st.success("Nenhum lote em situacao critica!")
+            empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
 
         st.write("")
         st.subheader("Situacao Sanitaria")
@@ -206,8 +222,8 @@ def page_dashboard_executivo(u):
                 total_prontos  += sum(1 for p in prev if p['status'] == 'Pronto para abate')
                 total_proximos += sum(1 for p in prev if p['status'] == 'Proximo do abate')
                 total_receita  += sum(p['receita_prevista'] or 0 for p in prev if p['receita_prevista'])
-            except Exception:
-                pass
+            except Exception as _e:
+                pass  # silenced
 
         st.metric("Prontos para abate", total_prontos,
                  delta="acao" if total_prontos > 0 else None)
@@ -222,11 +238,11 @@ def page_dashboard_executivo(u):
                 anoms = detectar_anomalias_peso(lid)
                 total_anom   += len(anoms)
                 total_graves += sum(1 for a in anoms if a['gravidade'] == 'Alta')
-            except Exception:
-                pass
+            except Exception as _e:
+                pass  # silenced
 
         if total_anom == 0:
-            st.success("Nenhuma anomalia detectada na fazenda")
+            st.info("Nenhuma anomalia detectada na fazenda")
         else:
             st.metric("Total de anomalias", total_anom)
             if total_graves > 0:
@@ -366,7 +382,7 @@ def page_cotacao_cepea(u):
             pr_c = st.number_input("Preco (R$/@)", 0.0, 1000.0, 195.0)
             if st.form_submit_button("Salvar manual"):
                 salvar_cotacao(str(dt_c), pr_c, "manual")
-                st.success("Salvo!"); st.rerun()
+                toast_ok("Salvo!"); st.rerun()
     cots = listar_cotacoes(0)
     if cots:
         ult = cots[-1]
@@ -374,7 +390,7 @@ def page_cotacao_cepea(u):
         hist = historico_grafico(cots[-60:])
         if hist["datas"]:
             df_cot = pd.DataFrame({"Data":hist["datas"],"Preco R$/@":hist["precos"]}).set_index("Data")
-            st.line_chart(df_cot)
+            safe_line_chart(df_cot)
     else:
         st.info("Nenhuma cotacao. Insira manualmente ou clique em buscar.")
 
@@ -439,7 +455,7 @@ def page_rastreabilidade_gta(u):
                     if st.form_submit_button("Cadastrar", type="primary"):
                         if len(num_sb) == 15:
                             registrar_sisbov(aid_s, num_sb, str(dt_sb))
-                            st.success("SISBOV cadastrado!"); st.rerun()
+                            toast_ok("SISBOV cadastrado!"); st.rerun()
                         else: st.error("SISBOV deve ter 15 digitos.")
 
     # ============================================================
