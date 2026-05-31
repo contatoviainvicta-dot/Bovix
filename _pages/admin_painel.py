@@ -303,7 +303,7 @@ def page_painel_admin(u):
                     if stack:
                         st.code(stack, language="python")
         else:
-            st.success(f"Nenhum erro nos últimos {dias_erro} dia(s).")
+            st.info(f"Nenhum erro nos últimos {dias_erro} dia(s).")
 
         if erros_email:
             st.divider()
