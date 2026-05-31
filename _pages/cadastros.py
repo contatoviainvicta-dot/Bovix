@@ -280,7 +280,7 @@ def page_registrar_morte(u):
                 if salvar:
                     registrar_morte(dict_am[anim_sel_m], str(data_m), causa_m, desc_m, custo_m)
                     registrar_auditoria(u["id"], "morte_animal", "animais", dict_am[anim_sel_m], f"{anim_sel_m} - {causa_m}")
-                    st.success("Morte registrada. Animal removido do lote.")
+                    toast_ok("Morte registrada. Animal removido do lote.")
                     st.rerun()
     with tab2:
         lotes = listar_lotes_usuario()
@@ -293,7 +293,7 @@ def page_registrar_morte(u):
                 st.dataframe(df_m, width='stretch')
                 st.metric("Custo total perdas", fmt_brl(sum(m[6] for m in morts if m[6])))
             else:
-                st.success("Nenhuma morte registrada.")
+                st.info("Nenhuma morte registrada.")
 
     # ============================================================
     # IMPORTAR CSV
@@ -350,7 +350,7 @@ def page_importar_csv(u):
             if st.button("Importar pesagens"):
                 res = importar_pesagens_csv(linhas, lote_id)
                 registrar_auditoria(u["id"], "import_pesagens", "pesagens", lote_id, f"{res['importados']} importadas")
-                st.success(f"Importadas: {res['importados']} | Animais criados: {res['animais_criados']} | Erros: {res['erros']}")
+                toast_ok(f"Importadas: {res['importados']} | Animais criados: {res['animais_criados']} | Erros: {res['erros']}")
                 for msg in res["mensagens"]: st.warning(msg)
 
     with tab_a:
@@ -393,7 +393,7 @@ def page_editar_lote(u):
         if st.button("Sincronizar todos os lotes agora", key="sync_todos"):
             resultados = sincronizar_todos_lotes()
             for lid_s, nome_s, n_s in resultados:
-                st.write(f"Lote **{nome_s}**: {n_s} animais ativos")
+                st.markdown(f"Lote **{nome_s}**: {n_s} animais ativos")
             st.success("Contagens atualizadas com sucesso!")
             st.rerun()
 
@@ -461,7 +461,7 @@ def page_editar_lote(u):
                         excluir_lote(lote_id)
                         registrar_auditoria(u["id"], "excluir_lote", "lotes", lote_id, lote[1])
                         limpar_cache()
-                        st.success("Lote excluido com sucesso.")
+                        toast_ok("Lote excluido com sucesso.")
                         st.rerun()
 
     # ============================================================
@@ -628,8 +628,8 @@ def page_editar_animal(u):
                                 f"excluido: {_row['Brinco']}"
                             )
                             _n_ok += 1
-                        except Exception:
-                            pass
+                        except Exception as _e:
+                            pass  # silenced
                     st.session_state.pop("ex_todos_flag", None)
                     limpar_cache()
                     st.success(f"{_n_ok} animal(is) excluido(s) com sucesso!")
@@ -666,7 +666,7 @@ def page_editar_pesagens(u):
                 nomes_map    = {r[4]: r[1] for r in pesagens_raw}
 
             if not pesagens:
-                st.info("Nenhuma pesagem registrada.")
+                empty_state("Sem pesagens registradas", "Registre pesagens para acompanhar o desenvolvimento do rebanho.", icone="⚖️")
             else:
                 # Tabela visual
                 df_ps = pd.DataFrame(pesagens, columns=["ID","Animal ID","Peso (kg)","Data"])
@@ -742,7 +742,7 @@ def page_gerenciar_ocorrencias(u):
                 c3.write(f"Tipo: {v[5]}")
                 c4.write(f"Vencido ha {dias_atraso} dia(s)")
     else:
-        st.success("Nenhum tratamento com prazo vencido.")
+        st.info("Nenhum tratamento com prazo vencido.")
 
     st.divider()
 
@@ -861,7 +861,7 @@ def page_gerenciar_ocorrencias(u):
                 registrar_auditoria(u["id"], "editar_ocorrencia", "ocorrencias", oc_id,
                                     f"{tipo_oe}/{grav_oe}/{stat_oe}")
                 if stat_oe == "Resolvido" and stat_cur == "Em tratamento":
-                    st.success("Tratamento encerrado! Ocorrencia marcada como Resolvida.")
+                    toast_ok("Tratamento encerrado! Ocorrencia marcada como Resolvida.")
                 else:
                     st.success("Ocorrencia atualizada!")
                 st.rerun()
@@ -941,7 +941,7 @@ def page_transferir_animal(u):
             if res["ok"]:
                 registrar_auditoria(u["id"], "transferir_animal", "animais", animal_id,
                                     f"{lote_orig_s} -> {lote_dest_s}")
-                st.success(f"Animal transferido com sucesso!")
+                toast_ok(f"Animal transferido com sucesso!")
                 st.rerun()
             else:
                 st.error(res["msg"])
@@ -1103,7 +1103,7 @@ def page_status_do_lote(u):
             } for l in lotes_enc])
             st.dataframe(df_enc, hide_index=True, width="stretch")
         else:
-            st.info("Nenhum lote encerrado ainda.")
+            empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
 
         st.divider()
 
