@@ -840,6 +840,275 @@ def page_workspace_do_lote(u):
 
     # ── ABA PESAGENS ──────────────────────────────────────────────────────────
     with aba_pes:
+        # ── PESAGEM POR VOZ ───────────────────────────────────────────────
+        _animais_lote_voz = listar_animais_por_lote(lote_ws_id)
+        _mapa_voz = {
+            a[1].upper(): a[0]
+            for a in _animais_lote_voz
+        } if _animais_lote_voz else {}
+
+        # Inicializar state
+        if "_voz_transcricao" not in st.session_state:
+            st.session_state["_voz_transcricao"] = ""
+        if "_voz_confirmando" not in st.session_state:
+            st.session_state["_voz_confirmando"] = False
+
+        # Componente HTML com Web Speech API
+        componente_voz = """
+<style>
+  #btn-voz {
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    background:#1B4332;color:#F5F0E8;border:none;border-radius:12px;
+    padding:14px 28px;font-size:16px;font-weight:600;cursor:pointer;
+    width:100%;margin-bottom:12px;transition:all .2s;
+    box-shadow:0 4px 12px rgba(27,67,50,.3);
+  }
+  #btn-voz:hover { background:#40916C; transform:translateY(-1px); }
+  #btn-voz.gravando {
+    background:#E24B4A;animation:pulsar 1.2s infinite;
+  }
+  @keyframes pulsar {
+    0%,100% { box-shadow:0 4px 12px rgba(226,75,74,.4); }
+    50%      { box-shadow:0 4px 24px rgba(226,75,74,.7); }
+  }
+  #status-voz {
+    text-align:center;font-size:13px;color:#6B7280;
+    min-height:20px;margin-bottom:8px;
+  }
+  #resultado-voz {
+    background:#F5F0E8;border:1.5px solid #40916C;border-radius:8px;
+    padding:12px 16px;font-size:15px;color:#1B4332;font-weight:500;
+    min-height:40px;margin-bottom:8px;display:none;
+  }
+</style>
+
+<button id="btn-voz" onclick="toggleVoz()">
+  🎤  Registrar pesagem por voz
+</button>
+<div id="status-voz">Clique no botão e fale o lote, animal e peso</div>
+<div id="resultado-voz"></div>
+
+<script>
+let reconhecimento = null;
+let gravando = false;
+
+function toggleVoz() {
+  if (gravando) {
+    pararVoz();
+  } else {
+    iniciarVoz();
+  }
+}
+
+function iniciarVoz() {
+  const SpeechRecognition = window.SpeechRecognition
+                         || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    document.getElementById('status-voz').textContent =
+      '⚠️ Seu navegador não suporta voz. Use Chrome ou Edge.';
+    return;
+  }
+  reconhecimento = new SpeechRecognition();
+  reconhecimento.lang           = 'pt-BR';
+  reconhecimento.continuous     = false;
+  reconhecimento.interimResults = true;
+  reconhecimento.maxAlternatives = 1;
+
+  const btn    = document.getElementById('btn-voz');
+  const status = document.getElementById('status-voz');
+  const result = document.getElementById('resultado-voz');
+
+  reconhecimento.onstart = () => {
+    gravando = true;
+    btn.classList.add('gravando');
+    btn.innerHTML = '⏹  Parar gravação';
+    status.textContent = '🎙️ Ouvindo... fale agora';
+    result.style.display = 'none';
+  };
+
+  reconhecimento.onresult = (e) => {
+    let texto = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      texto += e.results[i][0].transcript;
+    }
+    result.style.display = 'block';
+    result.textContent = '📝 "' + texto + '"';
+    if (e.results[e.results.length-1].isFinal) {
+      enviarParaStreamlit(texto);
+    }
+  };
+
+  reconhecimento.onerror = (e) => {
+    status.textContent = '❌ Erro: ' + e.error +
+      '. Verifique permissão do microfone.';
+    pararVoz();
+  };
+
+  reconhecimento.onend = () => { pararVoz(); };
+  reconhecimento.start();
+}
+
+function pararVoz() {
+  gravando = false;
+  const btn = document.getElementById('btn-voz');
+  btn.classList.remove('gravando');
+  btn.innerHTML = '🎤  Registrar pesagem por voz';
+  document.getElementById('status-voz').textContent =
+    'Clique no botão e fale o lote, animal e peso';
+  if (reconhecimento) { reconhecimento.stop(); reconhecimento = null; }
+}
+
+function enviarParaStreamlit(texto) {
+  // Comunicar com Streamlit via query param
+  const url = new URL(window.location.href);
+  url.searchParams.set('voz_texto', encodeURIComponent(texto));
+  window.parent.postMessage({
+    type: 'streamlit:setComponentValue',
+    value: texto
+  }, '*');
+}
+</script>
+"""
+        import streamlit.components.v1 as _components
+        _voz_result = _components.html(componente_voz, height=160)
+
+        # Capturar texto via query params ou input oculto
+        _params = st.query_params
+        _texto_voz = _params.get("voz_texto", "")
+        if _texto_voz:
+            st.session_state["_voz_transcricao"] = _texto_voz
+            st.query_params.clear()
+
+        # Campo de texto para fallback manual + receber resultado da API
+        _transcricao = st.text_input(
+            "📝 Transcrição (edite se necessário)",
+            value=st.session_state.get("_voz_transcricao", ""),
+            placeholder='Ex: "lote oeste, animal 01, 350 kg"',
+            key="_input_voz_texto",
+            help="O resultado da fala aparece aqui. Você pode editar antes de confirmar."
+        )
+        if _transcricao != st.session_state.get("_voz_transcricao", ""):
+            st.session_state["_voz_transcricao"] = _transcricao
+
+        # Parser de fala → dados estruturados
+        def _parse_voz(texto):
+            """Extrai animal e peso do texto falado."""
+            import re as _re
+            texto = texto.lower().strip()
+            resultado = {"animal": None, "peso": None, "raw": texto}
+
+            # Extrair peso — número seguido de "kg", "quilos", "quilogramas"
+            _p = _re.search(
+                r'(\d+[\.,]?\d*)\s*(?:kg|quilo|quilos|quilogramas?|kilo|kilos?)?',
+                texto
+            )
+            if _p:
+                try:
+                    resultado["peso"] = float(_p.group(1).replace(",", "."))
+                except Exception:
+                    pass
+
+            # Extrair identificação do animal — padrões comuns
+            for pat in [
+                r'animal\s+(\S+)',
+                r'boi\s+(\S+)',
+                r'vaca\s+(\S+)',
+                r'brinco\s+(\S+)',
+                r'numero\s+(\S+)',
+                r'n[uú]mero\s+(\d+)',
+                r'([A-Za-z]{2,6}[-\s]?\d{1,4})',
+            ]:
+                _m = _re.search(pat, texto)
+                if _m:
+                    _ident = _m.group(1).strip().upper().replace(" ", "-")
+                    resultado["animal"] = _ident
+                    break
+
+            return resultado
+
+        # Mostrar confirmação se há texto
+        if _transcricao and len(_transcricao) > 3:
+            _parsed = _parse_voz(_transcricao)
+
+            st.markdown("---")
+            st.markdown("**Entendi o seguinte:**")
+
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1:
+                st.markdown(f"""
+<div style="background:#F5F0E8;border-radius:8px;padding:12px;text-align:center">
+  <div style="font-size:11px;color:#6B7280;margin-bottom:4px">ANIMAL</div>
+  <div style="font-size:20px;font-weight:700;color:#1B4332">
+    {_parsed['animal'] or '?'}</div>
+</div>""", unsafe_allow_html=True)
+            with _c2:
+                st.markdown(f"""
+<div style="background:#F5F0E8;border-radius:8px;padding:12px;text-align:center">
+  <div style="font-size:11px;color:#6B7280;margin-bottom:4px">PESO (kg)</div>
+  <div style="font-size:20px;font-weight:700;color:#1B4332">
+    {_parsed['peso'] or '?'}</div>
+</div>""", unsafe_allow_html=True)
+            with _c3:
+                from datetime import date as _date
+                _hoje = str(_date.today())
+                _data_pes = st.date_input(
+                    "Data", value=_date.today(),
+                    key="_voz_data", label_visibility="collapsed"
+                )
+
+            # Verificar se animal existe no lote
+            _aid = None
+            if _parsed["animal"]:
+                _aid = (_mapa_voz.get(_parsed["animal"].upper())
+                        or _mapa_voz.get(_parsed["animal"]))
+                if not _aid:
+                    # Busca parcial
+                    for k, v in _mapa_voz.items():
+                        if _parsed["animal"] in k or k in _parsed["animal"]:
+                            _aid = v
+                            break
+
+            if _parsed["animal"] and not _aid:
+                st.warning(
+                    f"⚠️ Animal **{_parsed['animal']}** não encontrado neste lote. "
+                    f"Disponíveis: {', '.join(list(_mapa_voz.keys())[:5])}"
+                )
+
+            # Botões de confirmação
+            _b1, _b2, _b3 = st.columns([2, 1, 1])
+            with _b1:
+                _pode_salvar = bool(_aid and _parsed["peso"] and _parsed["peso"] > 0)
+                if st.button(
+                    "✅ Confirmar e salvar pesagem",
+                    type="primary",
+                    key="btn_voz_confirmar",
+                    disabled=not _pode_salvar,
+                    use_container_width=True
+                ):
+                    try:
+                        adicionar_pesagem(_aid, _parsed["peso"], str(_data_pes))
+                        toast_ok(
+                            f"Pesagem salva: {_parsed['animal']} "
+                            f"— {_parsed['peso']} kg em {fmt_data(str(_data_pes))}"
+                        )
+                        st.session_state["_voz_transcricao"] = ""
+                        st.rerun()
+                    except Exception as _ev:
+                        toast_erro(f"Erro ao salvar: {_ev}")
+            with _b2:
+                if st.button("✏️ Corrigir", key="btn_voz_corrigir",
+                             use_container_width=True):
+                    st.session_state["_voz_transcricao"] = ""
+                    st.rerun()
+            with _b3:
+                if not _pode_salvar and _parsed["animal"] and _aid and _parsed["peso"]:
+                    pass
+                elif not _pode_salvar:
+                    st.caption("Corrija animal ou peso")
+
+        st.divider()
+        # ── FIM PESAGEM POR VOZ ───────────────────────────────────────────
+
         plote_ws = listar_pesagens_lote(lote_ws_id)
         if plote_ws:
             df_p_ws = pd.DataFrame(plote_ws,
