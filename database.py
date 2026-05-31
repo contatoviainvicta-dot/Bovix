@@ -1179,6 +1179,7 @@ def atualizar_animal_detalhes(animal_id, peso_alvo=None, observacoes=None, foto_
         cur = conn.cursor()
         cur.execute(f"UPDATE animais SET {', '.join(campos)} WHERE id={p}", vals)
 
+@lambda _f: _cached(_f, ttl=30)
 def obter_animal(animal_id):
     p = _ph()
     with _conexao() as conn:
@@ -1602,6 +1603,7 @@ def autenticar_usuario(email, senha):
         plano_expirado=plano_expirado,
     )
 
+@lambda _f: _cached(_f, ttl=60)
 def listar_usuarios():
     with _conexao() as conn:
         cur = conn.cursor()
@@ -4670,6 +4672,7 @@ def listar_custos_lote(lote_id):
         return cur.fetchall()
 
 
+@lambda _f: _cached(_f, ttl=120)
 def margem_bruta_lote(lote_id):
     """Calcula margem bruta completa do lote.
     Retorna dict com todos os componentes financeiros."""
@@ -4950,6 +4953,7 @@ def _gmd_animal(pesagens):
         return 0.0
 
 
+@lambda _f: _cached(_f, ttl=300)
 def calendario_abate(owner_id):
     """Previsão de abate para todos os lotes ativos do fazendeiro."""
     from datetime import date, timedelta
@@ -5543,6 +5547,7 @@ def admin_erros_email_log(dias=30, limit=20):
         return []
 
 
+@lambda _f: _cached(_f, ttl=300)
 def admin_metricas_produto():
     """Metricas de uso do produto: animais, lotes, ocorrencias etc."""
     with _conexao() as conn:
