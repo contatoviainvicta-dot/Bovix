@@ -4,7 +4,8 @@ import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, erro_com_acao,
-                            fmt_brl, fmt_data, fmt_data_hora)
+                            fmt_brl, fmt_data, fmt_data_hora,
+                            safe_line_chart, safe_bar_chart)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -24,6 +25,22 @@ except ImportError:
         try: d=str(d)[:10]; p=d.split("-"); return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
         except: return str(d)
     def fmt_data_hora(d): return fmt_data(d)
+    def safe_line_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_line_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
+    def safe_bar_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_bar_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
 import pandas as pd
 from database import *
 from ui import (
@@ -90,10 +107,10 @@ def page_dashboard_sanitario(u):
             c1,c2 = st.columns(2)
             with c1:
                 st.subheader("Por tipo")
-                st.bar_chart(df_oc["tipo"].value_counts())
+                safe_bar_chart(df_oc["tipo"].value_counts())
             with c2:
                 st.subheader("Por gravidade")
-                st.bar_chart(df_oc["gravidade"].value_counts())
+                safe_bar_chart(df_oc["gravidade"].value_counts())
         with t2:
             dados_l = []
             for lote in lotes:
@@ -105,12 +122,12 @@ def page_dashboard_sanitario(u):
                 inc_l  = (doentes_l/tot_l*100) if tot_l>0 else 0
                 dados_l.append((lote[1], inc_l))
             df_l = pd.DataFrame(dados_l, columns=["Lote","Incidencia (%)"]).set_index("Lote")
-            st.bar_chart(df_l)
+            safe_bar_chart(df_l)
         with t3:
             df_oc2 = df_oc.copy()
             df_oc2["data"] = pd.to_datetime(df_oc2["data"])
             curva = df_oc2.groupby(["data","tipo"]).size().unstack(fill_value=0)
-            st.line_chart(curva)
+            safe_line_chart(curva)
         with t4:
             for nome_l, inc_l in dados_l:
                 if inc_l > 20:  st.error(f"{nome_l}: alta incidencia ({inc_l:.1f}%)")
@@ -249,7 +266,7 @@ def page_analisar_animal(u):
                     df = pd.DataFrame(pesagens, columns=["ID","Animal","Peso","Data"])
                     df["Data"] = pd.to_datetime(df["Data"])
                     df = df.sort_values("Data")
-                    st.line_chart(df.set_index("Data")["Peso"])
+                    safe_line_chart(df.set_index("Data")["Peso"])
                     st.dataframe(df[["Data","Peso"]].rename(columns={"Peso":"Peso (kg)"}), width='stretch')
                     if len(df) > 1:
                         dias = (df["Data"].iloc[-1]-df["Data"].iloc[0]).days
@@ -324,7 +341,7 @@ def page_score_de_saude(u):
             c1.metric("Score medio",   f"{df_sc['Score'].mean():.1f}")
             c2.metric("Melhor animal", df_sc.iloc[0]["Animal"])
             c3.metric("Criticos (<40)", len(df_sc[df_sc["Score"]<40]))
-            st.bar_chart(df_sc.set_index("Animal")["Score"])
+            safe_bar_chart(df_sc.set_index("Animal")["Score"])
             st.subheader("Alertas")
             for _, row in df_sc.iterrows():
                 if row["Score"] < 40:   st.error(f"{row['Animal']}: Score {row['Score']} - CRITICO")
@@ -347,7 +364,7 @@ def page_gmd_temporal(u):
         pontos = calcular_gmd_temporal(lote_id, janela)
         if pontos:
             df_g = pd.DataFrame(pontos, columns=["Data","GMD medio (kg/dia)"]).set_index("Data")
-            st.line_chart(df_g)
+            safe_line_chart(df_g)
             st.dataframe(df_g, width='stretch')
             ult = pontos[-1][1]; pri = pontos[0][1]
             st.metric("GMD atual", f"{ult:.3f} kg/dia", delta=f"{ult-pri:+.3f} vs inicio")
@@ -411,8 +428,8 @@ def page_comparativo_lotes(u):
             df_c = pd.DataFrame(dados).set_index("Lote")
             st.dataframe(df_c, width='stretch')
             c1,c2 = st.columns(2)
-            with c1: st.subheader("GMD medio"); st.bar_chart(df_c["GMD medio"])
-            with c2: st.subheader("Lucro R$");  st.bar_chart(df_c["Lucro R$"])
+            with c1: st.subheader("GMD medio"); safe_bar_chart(df_c["GMD medio"])
+            with c2: st.subheader("Lucro R$");  safe_bar_chart(df_c["Lucro R$"])
 
     # ============================================================
     # PAINEL DE DECISAO
@@ -455,8 +472,8 @@ def page_pesquisar_ocorrencias(u):
         with t1: st.dataframe(df_oc[["data","tipo","gravidade","descricao","custo","status"]], width='stretch')
         with t2:
             c1,c2 = st.columns(2)
-            with c1: st.bar_chart(df_oc["tipo"].value_counts())
-            with c2: st.bar_chart(df_oc["gravidade"].value_counts())
+            with c1: safe_bar_chart(df_oc["tipo"].value_counts())
+            with c2: safe_bar_chart(df_oc["gravidade"].value_counts())
     else:
         st.info("Nenhuma ocorrencia com esses filtros.")
 
@@ -532,7 +549,7 @@ def page_risco_sanitario_ia(u):
             st.subheader("Distribuicao de GMD no lote")
             import pandas as pd
             df_gmd = pd.DataFrame({'GMD (kg/dia)': risco['gmds']})
-            st.bar_chart(df_gmd)
+            safe_bar_chart(df_gmd)
             gmd_m = sum(risco['gmds'])/len(risco['gmds'])
             col_g1, col_g2, col_g3 = st.columns(3)
             col_g1.metric("GMD Medio", f"{gmd_m:.3f} kg/d")
@@ -637,7 +654,7 @@ def page_previsao_de_abate_ia(u):
             st.subheader("Dias ate o abate por animal")
             df_bar = df_prev[df_prev['Dias'].notna()][['Animal','Dias']]
             if not df_bar.empty:
-                st.bar_chart(df_bar.set_index('Animal'))
+                safe_bar_chart(df_bar.set_index('Animal'))
 
 
     # ============================================================
@@ -719,7 +736,7 @@ def page_previsao_abate(u):
             pr1,pr2 = st.columns(2)
             pr1.metric("Animais analisados", len(resultados))
             pr2.metric("Receita total estimada", fmt_brl(sum(r['Receita Est.'] for r in resultados)))
-            st.bar_chart(df_prev.set_index("Animal")["Dias Rest."])
+            safe_bar_chart(df_prev.set_index("Animal")["Dias Rest."])
             for r in resultados:
                 if r["Dias Rest."] == 0:   st.success(f"{r['Animal']}: atingiu o peso alvo!")
                 elif r["Dias Rest."] <= 15: st.warning(f"{r['Animal']}: {r['Dias Rest.']} dias - prepare o abate")
