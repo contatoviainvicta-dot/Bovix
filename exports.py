@@ -1,270 +1,315 @@
-# exports.py -- Exportacao de relatorios PDF e Excel
-# Usa openpyxl para Excel e reportlab para PDF
-
+"""
+export.py — Exportação de dados do Auroque para Excel e CSV
+Cobertura total: animais, pesagens, custos, DRE, veterinário, etc.
+"""
 import io
-import csv
+import logging
 from datetime import datetime
 
-import pandas as pd
+_log = logging.getLogger("auroque.export")
 
 try:
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
+    import openpyxl
+    from openpyxl.styles import (Font, PatternFill, Alignment,
+                                  Border, Side)
     from openpyxl.utils import get_column_letter
-    _OPENPYXL = True
+    _EXCEL_OK = True
 except ImportError:
-    _OPENPYXL = False
-
-try:
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-    )
-    _REPORTLAB = True
-except ImportError:
-    _REPORTLAB = False
+    _EXCEL_OK = False
+    _log.warning("openpyxl nao instalado — export Excel indisponivel")
 
 
-# ── helpers Excel ────────────────────────────────────────────────────────────
+# ── HELPERS ───────────────────────────────────────────────────
 
-def _cab(ws, row, cols, cor="1F5C2E"):
-    fill = PatternFill("solid", fgColor=cor)
-    bold = Font(bold=True, color="FFFFFF", size=11)
-    alin = Alignment(horizontal="center", vertical="center")
-    for col in range(1, cols+1):
-        cell = ws.cell(row=row, column=col)
-        cell.fill = fill
-        cell.font = bold
+def _estilizar_header(ws, row=1, cor_fundo="1B4332", cor_texto="F5F0E8"):
+    """Aplica estilo de cabeçalho verde Auroque."""
+    if not _EXCEL_OK:
+        return
+    fill  = PatternFill("solid", fgColor=cor_fundo)
+    fonte = Font(bold=True, color=cor_texto)
+    alin  = Alignment(horizontal="center", vertical="center")
+    for cell in ws[row]:
+        cell.fill      = fill
+        cell.font      = fonte
         cell.alignment = alin
 
-def _auto_w(ws):
+
+def _auto_width(ws):
+    """Ajusta largura das colunas automaticamente."""
+    if not _EXCEL_OK:
+        return
     for col in ws.columns:
-        ml = 0
-        cl = get_column_letter(col[0].column)
+        max_w = 0
+        col_l = get_column_letter(col[0].column)
         for cell in col:
-            try: ml = max(ml, len(str(cell.value or "")))
-            except: pass
-        ws.column_dimensions[cl].width = min(ml+4, 40)
-
-def _csv_fallback(tabelas):
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    for nome, linhas in tabelas.items():
-        w.writerow([f"=== {nome} ==="])
-        for linha in linhas: w.writerow(linha)
-        w.writerow([])
-    return buf.getvalue().encode("utf-8-sig")
+            try:
+                max_w = max(max_w, len(str(cell.value or "")))
+            except Exception:
+                pass
+        ws.column_dimensions[col_l].width = min(max(max_w + 2, 10), 50)
 
 
-# ── Excel lote ───────────────────────────────────────────────────────────────
-
-def gerar_excel_lote(nome_lote, animais, pesagens_dict, ocorrencias_dict):
-    if not _OPENPYXL:
-        todos_p = [p for ps in pesagens_dict.values() for p in ps]
-        todos_o = [o for os in ocorrencias_dict.values() for o in os]
-        return _csv_fallback({
-            "Animais":     [("ID","Identificacao","Idade","Lote ID")] + list(animais),
-            "Pesagens":    [("ID","Animal ID","Peso","Data")] + todos_p,
-            "Ocorrencias": [("ID","Animal ID","Data","Tipo","Desc","Grav","Custo","Dias","Status")] + todos_o,
-        })
-
-    wb = Workbook()
-
-    # Resumo
-    ws_r = wb.active
-    ws_r.title = "Resumo"
-    ws_r["A1"] = f"Relatorio -- {nome_lote}"
-    ws_r["A1"].font = Font(bold=True, size=14)
-    ws_r["A2"] = f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-
-    total_a   = len(animais)
-    total_oc  = sum(len(v) for v in ocorrencias_dict.values())
-    custo_san = sum(o[6] for ocs in ocorrencias_dict.values() for o in ocs if o[6])
-    gmds = []
-    for aid, pesos in pesagens_dict.items():
-        if len(pesos) > 1:
-            df = pd.DataFrame(pesos, columns=["id","aid","peso","data"])
-            df["data"] = pd.to_datetime(df["data"])
-            df = df.sort_values("data")
-            dias = (df["data"].iloc[-1]-df["data"].iloc[0]).days
-            if dias > 0:
-                g = (df["peso"].iloc[-1]-df["peso"].iloc[0])/dias
-                if 0 <= g <= 2: gmds.append(g)
-    gmd_m = sum(gmds)/len(gmds) if gmds else 0
-
-    resumo = [
-        ["Indicador","Valor"],
-        ["Total de animais", total_a],
-        ["Total de ocorrencias", total_oc],
-        ["Custo sanitario total (R$)", f"{custo_san:.2f}"],
-        ["GMD medio (kg/dia)", f"{gmd_m:.3f}"],
-    ]
-    for i, linha in enumerate(resumo, start=4):
-        for j, val in enumerate(linha, start=1):
-            ws_r.cell(row=i, column=j, value=val)
-    _cab(ws_r, 4, 2)
-    _auto_w(ws_r)
-
-    # Animais
-    ws_a = wb.create_sheet("Animais")
-    cab_a = ["ID","Identificacao","Idade (meses)","Lote ID"]
-    for j, c in enumerate(cab_a, 1): ws_a.cell(row=1, column=j, value=c)
-    _cab(ws_a, 1, len(cab_a))
-    for i, animal in enumerate(animais, start=2):
-        for j, val in enumerate(animal, start=1): ws_a.cell(row=i, column=j, value=val)
-    _auto_w(ws_a)
-
-    # Pesagens
-    ws_p = wb.create_sheet("Pesagens")
-    cab_p = ["ID","Animal ID","Peso (kg)","Data"]
-    for j, c in enumerate(cab_p, 1): ws_p.cell(row=1, column=j, value=c)
-    _cab(ws_p, 1, len(cab_p))
-    row = 2
-    for pesos in pesagens_dict.values():
-        for p in pesos:
-            for j, val in enumerate(p, start=1): ws_p.cell(row=row, column=j, value=val)
-            row += 1
-    _auto_w(ws_p)
-
-    # Ocorrencias
-    ws_o = wb.create_sheet("Ocorrencias")
-    cab_o = ["ID","Animal ID","Data","Tipo","Descricao","Gravidade","Custo (R$)","Dias Rec","Status"]
-    for j, c in enumerate(cab_o, 1): ws_o.cell(row=1, column=j, value=c)
-    _cab(ws_o, 1, len(cab_o))
-    row = 2
-    for ocs in ocorrencias_dict.values():
-        for o in ocs:
-            for j, val in enumerate(o, start=1): ws_o.cell(row=row, column=j, value=val)
-            row += 1
-    _auto_w(ws_o)
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+def _df_para_sheet(wb, df, nome_aba, cor="1B4332"):
+    """Adiciona DataFrame como aba no workbook."""
+    if df is None or (hasattr(df, "empty") and df.empty):
+        return
+    ws = wb.create_sheet(title=nome_aba[:31])
+    # Cabeçalho
+    for col_idx, col_name in enumerate(df.columns, 1):
+        ws.cell(row=1, column=col_idx, value=str(col_name))
+    # Dados
+    for row_idx, row in enumerate(df.itertuples(index=False), 2):
+        for col_idx, value in enumerate(row, 1):
+            ws.cell(row=row_idx, column=col_idx, value=value)
+    _estilizar_header(ws, cor_fundo=cor)
+    _auto_width(ws)
+    return ws
 
 
-# ── Excel sanitario ──────────────────────────────────────────────────────────
+# ── EXPORTAÇÕES ESPECÍFICAS ───────────────────────────────────
 
-def gerar_excel_sanitario(vacinas, medicamentos):
-    if not _OPENPYXL:
-        return _csv_fallback({
-            "Vacinas":      [("ID","Lote ID","Vacina","Previsto","Realizado","Status","Obs")] + list(vacinas),
-            "Medicamentos": [("ID","Nome","Unidade","Estoque","Minimo","Validade","Custo")] + list(medicamentos),
-        })
+def exportar_animais(owner_id) -> bytes:
+    """Exporta lista de animais para Excel."""
+    import pandas as pd
+    from database import listar_lotes, listar_animais_por_lote
 
-    wb = Workbook()
+    if not _EXCEL_OK:
+        return _exportar_csv_fallback_animais(owner_id)
 
-    ws_v = wb.active
-    ws_v.title = "Agenda Vacinas"
-    cab_v = ["ID","Lote ID","Vacina","Previsto","Realizado","Status","Observacao"]
-    for j, c in enumerate(cab_v, 1): ws_v.cell(row=1, column=j, value=c)
-    _cab(ws_v, 1, len(cab_v), "0F6E56")
-    for i, v in enumerate(vacinas, start=2):
-        for j, val in enumerate(v, start=1): ws_v.cell(row=i, column=j, value=val)
-    _auto_w(ws_v)
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
 
-    ws_m = wb.create_sheet("Estoque Medicamentos")
-    cab_m = ["ID","Nome","Unidade","Estoque Atual","Estoque Minimo","Validade","Custo Unit. (R$)"]
-    for j, c in enumerate(cab_m, 1): ws_m.cell(row=1, column=j, value=c)
-    _cab(ws_m, 1, len(cab_m), "0F6E56")
-    for i, m in enumerate(medicamentos, start=2):
-        for j, val in enumerate(m, start=1): ws_m.cell(row=i, column=j, value=val)
-    _auto_w(ws_m)
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
-
-
-# ── PDF ──────────────────────────────────────────────────────────────────────
-
-def _sanitizar(val):
-    texto = str(val) if val is not None else ""
-    return texto.replace("\x00", "").strip()
-
-def _pdf_fallback(titulo, secoes):
-    linhas = [f"# {titulo}", f"# {datetime.now().strftime('%d/%m/%Y %H:%M')}", ""]
-    for sec in secoes:
-        linhas.append(f"## {sec['titulo']}")
-        df = sec.get("df")
-        if df is not None and not df.empty:
-            linhas.append(df.to_string(index=False))
-        linhas.append("")
-    return "\n".join(linhas).encode()
-
-def gerar_pdf_relatorio(titulo, secoes):
-    if not _REPORTLAB:
-        return _pdf_fallback(titulo, secoes)
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=1.5*cm, rightMargin=1.5*cm,
-        topMargin=2*cm, bottomMargin=2*cm,
-    )
-    styles = getSampleStyleSheet()
-    story  = []
-
-    st_titulo = ParagraphStyle(
-        "tit_pec", parent=styles["Title"],
-        fontSize=15, spaceAfter=4,
-        textColor=colors.HexColor("#1F5C2E"),
-    )
-    story.append(Paragraph(_sanitizar(titulo), st_titulo))
-    story.append(Paragraph(
-        f"Gerado em {datetime.now().strftime('%d/%m/%Y as %H:%M')}",
-        styles["Normal"],
-    ))
-    story.append(Spacer(1, 0.3*cm))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#1F5C2E")))
-    story.append(Spacer(1, 0.3*cm))
-
-    st_sec = ParagraphStyle(
-        "sec_pec", parent=styles["Heading2"],
-        fontSize=11, textColor=colors.HexColor("#1F5C2E"), spaceAfter=4,
-    )
-
-    for sec in secoes:
-        story.append(Paragraph(_sanitizar(sec["titulo"]), st_sec))
-        df = sec.get("df")
-        if df is None or (hasattr(df, "empty") and df.empty):
-            story.append(Paragraph("Sem dados.", styles["Normal"]))
-            story.append(Spacer(1, 0.3*cm))
+    lotes = listar_lotes(owner_id=owner_id) or []
+    for lote in lotes:
+        lid, nome_lote = lote[0], lote[1]
+        animais = listar_animais_por_lote(lid) or []
+        if not animais:
             continue
-        try:
-            colunas = [_sanitizar(c) for c in df.columns]
-            linhas  = [[_sanitizar(v) for v in row] for row in df.values.tolist()]
-            data    = [colunas] + linhas
-            n_cols  = len(colunas)
-            col_w   = doc.width / n_cols
-            t = Table(data, colWidths=[col_w]*n_cols, repeatRows=1, splitByRow=True)
-            t.setStyle(TableStyle([
-                ("BACKGROUND",    (0,0),(-1,0), colors.HexColor("#1F5C2E")),
-                ("TEXTCOLOR",     (0,0),(-1,0), colors.white),
-                ("FONTNAME",      (0,0),(-1,0), "Helvetica-Bold"),
-                ("FONTNAME",      (0,1),(-1,-1),"Helvetica"),
-                ("FONTSIZE",      (0,0),(-1,0), 8),
-                ("FONTSIZE",      (0,1),(-1,-1),7),
-                ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white, colors.HexColor("#F1F8F3")]),
-                ("GRID",          (0,0),(-1,-1),0.3, colors.HexColor("#CCCCCC")),
-                ("VALIGN",        (0,0),(-1,-1),"MIDDLE"),
-                ("ALIGN",         (0,0),(-1,-1),"LEFT"),
-                ("TOPPADDING",    (0,0),(-1,-1),3),
-                ("BOTTOMPADDING", (0,0),(-1,-1),3),
-            ]))
-            story.append(t)
-        except Exception as e:
-            story.append(Paragraph(f"Erro ao renderizar tabela: {e}", styles["Normal"]))
-        story.append(Spacer(1, 0.4*cm))
+        rows = []
+        for a in animais:
+            rows.append({
+                "Identificação": a[1] if len(a)>1 else "",
+                "Raça":          a[2] if len(a)>2 else "",
+                "Sexo":          a[3] if len(a)>3 else "",
+                "Idade (meses)": a[4] if len(a)>4 else "",
+                "Peso entrada":  a[5] if len(a)>5 else "",
+                "Status":        a[7] if len(a)>7 else "ATIVO",
+            })
+        df = pd.DataFrame(rows)
+        _df_para_sheet(wb, df, nome_lote[:31])
 
-    try:
-        doc.build(story)
-        pdf_bytes = buf.getvalue()
-        if not pdf_bytes.startswith(b"%PDF-"):
-            return _pdf_fallback(titulo, secoes)
-        return pdf_bytes
-    except Exception:
-        return _pdf_fallback(titulo, secoes)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def exportar_pesagens(owner_id) -> bytes:
+    """Exporta pesagens de todos os animais."""
+    import pandas as pd
+    from database import listar_lotes, listar_animais_por_lote, listar_pesagens
+
+    wb = openpyxl.Workbook() if _EXCEL_OK else None
+    rows_all = []
+
+    lotes = listar_lotes(owner_id=owner_id) or []
+    for lote in lotes:
+        lid, nome_lote = lote[0], lote[1]
+        for animal in (listar_animais_por_lote(lid) or []):
+            aid, ident = animal[0], animal[1]
+            for p in (listar_pesagens(aid) or []):
+                rows_all.append({
+                    "Lote":           nome_lote,
+                    "Identificação":  ident,
+                    "Peso (kg)":      p[2] if len(p)>2 else "",
+                    "Data":           str(p[3])[:10] if len(p)>3 else "",
+                })
+
+    df = pd.DataFrame(rows_all)
+    if _EXCEL_OK and wb:
+        _df_para_sheet(wb, df, "Pesagens")
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+    else:
+        return df.to_csv(index=False).encode("utf-8")
+
+
+def exportar_financeiro(owner_id) -> bytes:
+    """Exporta DRE, custos e vendas em abas separadas."""
+    import pandas as pd
+    from database import (listar_custos_lote, listar_vendas_lote,
+                          listar_lotes)
+
+    if not _EXCEL_OK:
+        _log.warning("openpyxl nao disponivel")
+        return b""
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    lotes = listar_lotes(owner_id=owner_id) or []
+
+    # Aba custos
+    rows_custos = []
+    for lote in lotes:
+        lid, nome = lote[0], lote[1]
+        for c in (listar_custos_lote(lid) or []):
+            rows_custos.append({
+                "Lote":       nome,
+                "Categoria":  c[1] if len(c)>1 else "",
+                "Descrição":  c[2] if len(c)>2 else "",
+                "Valor":      c[3] if len(c)>3 else 0,
+                "Data":       str(c[4])[:10] if len(c)>4 else "",
+            })
+    _df_para_sheet(wb, pd.DataFrame(rows_custos), "Custos")
+
+    # Aba vendas
+    rows_vendas = []
+    for lote in lotes:
+        lid, nome = lote[0], lote[1]
+        for v in (listar_vendas_lote(lid) or []):
+            rows_vendas.append({
+                "Lote":        nome,
+                "Data venda":  str(v[1])[:10] if len(v)>1 else "",
+                "Preço/kg":    v[2] if len(v)>2 else 0,
+                "Peso total":  v[3] if len(v)>3 else 0,
+                "Frigorífico": v[4] if len(v)>4 else "",
+            })
+    _df_para_sheet(wb, pd.DataFrame(rows_vendas), "Vendas")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def exportar_veterinario(owner_id) -> bytes:
+    """Exporta receituário, vacinas e ocorrências."""
+    import pandas as pd
+    from database import listar_receitas, listar_vacinas_agenda, listar_ocorrencias
+
+    if not _EXCEL_OK:
+        return b""
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    # Receitas
+    receitas = listar_receitas(fazenda_owner_id=owner_id) or []
+    rows_r = []
+    for r in receitas:
+        rows_r.append({
+            "Medicamento": r[3] if len(r)>3 else "",
+            "Dose":        r[4] if len(r)>4 else "",
+            "Via":         r[5] if len(r)>5 else "",
+            "Data":        str(r[6])[:10] if len(r)>6 else "",
+            "Carência":    r[7] if len(r)>7 else "",
+        })
+    _df_para_sheet(wb, pd.DataFrame(rows_r), "Receituário")
+
+    # Vacinas
+    vacinas = listar_vacinas_agenda(owner_id=owner_id) or []
+    rows_v = []
+    for v in vacinas:
+        rows_v.append({
+            "Vacina":         v[1] if len(v)>1 else "",
+            "Data prevista":  str(v[2])[:10] if len(v)>2 else "",
+            "Data realizada": str(v[3])[:10] if len(v)>3 else "",
+            "Status":         v[4] if len(v)>4 else "",
+        })
+    _df_para_sheet(wb, pd.DataFrame(rows_v), "Vacinas", cor="40916C")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def exportar_tudo(owner_id) -> bytes:
+    """Exporta todos os dados em um único arquivo Excel."""
+    import pandas as pd
+    from database import (listar_lotes, listar_animais_por_lote,
+                          listar_pesagens, listar_custos_lote,
+                          listar_vendas_lote, listar_ocorrencias,
+                          listar_receitas, listar_vacinas_agenda)
+
+    if not _EXCEL_OK:
+        return b""
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    lotes = listar_lotes(owner_id=owner_id) or []
+
+    # Aba: Animais
+    rows = []
+    for lote in lotes:
+        lid, nome = lote[0], lote[1]
+        for a in (listar_animais_por_lote(lid) or []):
+            rows.append({"Lote": nome, "ID": a[1] if len(a)>1 else "",
+                         "Raça": a[2] if len(a)>2 else "",
+                         "Sexo": a[3] if len(a)>3 else "",
+                         "Peso entrada": a[5] if len(a)>5 else "",
+                         "Status": a[7] if len(a)>7 else "ATIVO"})
+    _df_para_sheet(wb, pd.DataFrame(rows), "Animais")
+
+    # Aba: Pesagens
+    rows = []
+    for lote in lotes:
+        lid, nome = lote[0], lote[1]
+        for a in (listar_animais_por_lote(lid) or []):
+            for p in (listar_pesagens(a[0]) or []):
+                rows.append({"Lote": nome, "Animal": a[1] if len(a)>1 else "",
+                             "Peso": p[2] if len(p)>2 else "",
+                             "Data": str(p[3])[:10] if len(p)>3 else ""})
+    _df_para_sheet(wb, pd.DataFrame(rows), "Pesagens", cor="40916C")
+
+    # Aba: Custos
+    rows = []
+    for lote in lotes:
+        lid, nome = lote[0], lote[1]
+        for c in (listar_custos_lote(lid) or []):
+            rows.append({"Lote": nome,
+                         "Categoria": c[1] if len(c)>1 else "",
+                         "Descrição": c[2] if len(c)>2 else "",
+                         "Valor": c[3] if len(c)>3 else 0,
+                         "Data": str(c[4])[:10] if len(c)>4 else ""})
+    _df_para_sheet(wb, pd.DataFrame(rows), "Custos")
+
+    # Aba: Vendas
+    rows = []
+    for lote in lotes:
+        lid, nome = lote[0], lote[1]
+        for v in (listar_vendas_lote(lid) or []):
+            rows.append({"Lote": nome,
+                         "Data": str(v[1])[:10] if len(v)>1 else "",
+                         "Preço/kg": v[2] if len(v)>2 else 0,
+                         "Peso total": v[3] if len(v)>3 else 0})
+    _df_para_sheet(wb, pd.DataFrame(rows), "Vendas")
+
+    # Aba: Ocorrências
+    rows = []
+    for lote in lotes:
+        lid, nome = lote[0], lote[1]
+        for a in (listar_animais_por_lote(lid) or []):
+            for o in (listar_ocorrencias(a[0]) or []):
+                rows.append({"Lote": nome, "Animal": a[1] if len(a)>1 else "",
+                             "Tipo": o[2] if len(o)>2 else "",
+                             "Data": str(o[1])[:10] if len(o)>1 else "",
+                             "Descrição": o[3] if len(o)>3 else ""})
+    _df_para_sheet(wb, pd.DataFrame(rows), "Ocorrências")
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    _log.info("exportar_tudo: %d abas, owner=%s", len(wb.sheetnames), owner_id)
+    return buf.getvalue()
+
+
+def _exportar_csv_fallback_animais(owner_id) -> bytes:
+    """Fallback CSV quando openpyxl não está disponível."""
+    import pandas as pd
+    from database import listar_lotes, listar_animais_por_lote
+    rows = []
+    for lote in (listar_lotes(owner_id=owner_id) or []):
+        for a in (listar_animais_por_lote(lote[0]) or []):
+            rows.append({"lote": lote[1], "identificacao": a[1] if len(a)>1 else "",
+                         "raca": a[2] if len(a)>2 else ""})
+    return pd.DataFrame(rows).to_csv(index=False).encode("utf-8")
