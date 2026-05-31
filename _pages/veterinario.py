@@ -3,7 +3,8 @@ import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, erro_com_acao,
-                            fmt_brl, fmt_data, fmt_data_hora)
+                            fmt_brl, fmt_data, fmt_data_hora,
+                            safe_line_chart, safe_bar_chart)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -23,6 +24,22 @@ except ImportError:
         try: d=str(d)[:10]; p=d.split("-"); return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
         except: return str(d)
     def fmt_data_hora(d): return fmt_data(d)
+    def safe_line_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_line_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
+    def safe_bar_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_bar_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
 import pandas as pd
 import json
 import io
@@ -870,7 +887,7 @@ def page_painel_saude(u):
         df_tipos = pd.DataFrame(dados["por_tipo"], columns=["Tipo","Quantidade"])
         c_g, c_t = st.columns([2,1])
         with c_g:
-            st.bar_chart(df_tipos.set_index("Tipo"))
+            safe_bar_chart(df_tipos.set_index("Tipo"))
         with c_t:
             st.dataframe(df_tipos, hide_index=True, width='stretch')
     else:
@@ -1568,7 +1585,7 @@ def page_gestao_financeira_vet(u):
             )
             df_mensal["Faturado"] = df_mensal["Faturado"].apply(float)
             df_mensal = df_mensal.sort_values("Mês")
-            st.bar_chart(df_mensal.set_index("Mês"))
+            safe_bar_chart(df_mensal.set_index("Mês"))
 
         # Extrato detalhado
         st.divider()
@@ -1658,7 +1675,7 @@ def page_mapa_epidemiologico(u):
                     sorted(all_tipos.items(), key=lambda x: x[1], reverse=True),
                     columns=["Tipo", "Total"]
                 )
-                st.bar_chart(df_tipos.set_index("Tipo"))
+                safe_bar_chart(df_tipos.set_index("Tipo"))
 
             # Detalhe por fazenda
             st.divider()
@@ -1671,7 +1688,7 @@ def page_mapa_epidemiologico(u):
                         )
                         c_g, c_t = st.columns([2, 1])
                         with c_g:
-                            st.bar_chart(df_f.set_index("Tipo"))
+                            safe_bar_chart(df_f.set_index("Tipo"))
                         with c_t:
                             st.dataframe(df_f, hide_index=True,
                                         width='stretch')
@@ -2266,7 +2283,7 @@ def page_dashboard_produtividade(u):
                 sorted(meses.items()),
                 columns=["Mes", "Visitas"]
             )
-            st.bar_chart(df_vis.set_index("Mes"))
+            safe_bar_chart(df_vis.set_index("Mes"))
 
     # Onboarding checklist
     st.divider()
