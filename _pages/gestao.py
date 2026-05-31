@@ -628,6 +628,27 @@ def page_mapa_piquetes(u):
     # ============================================================
 
 
+# Cache de sessão para dados do workspace (evita re-queries a cada rerender)
+def _ws_cache_key(lote_id, fn_name):
+    """Chave de cache por lote + função."""
+    return f"_ws_cache_{lote_id}_{fn_name}"
+
+def _ws_get(lote_id, fn_name, fn_call, ttl=30):
+    """Busca do cache de sessão ou executa a query."""
+    import time
+    key     = _ws_cache_key(lote_id, fn_name)
+    key_ts  = key + "_ts"
+    now     = time.time()
+    if (key in st.session_state
+            and key_ts in st.session_state
+            and now - st.session_state[key_ts] < ttl):
+        return st.session_state[key]
+    result = fn_call()
+    st.session_state[key]    = result
+    st.session_state[key_ts] = now
+    return result
+
+
 def page_workspace_do_lote(u):
     hdr("Workspace do Lote", "Visao Completa", "Tudo sobre o lote em um lugar so")
 
@@ -658,17 +679,17 @@ def page_workspace_do_lote(u):
             lote        = obter_lote(lid),
             status      = next((l[7] for l in todos if l[0]==lid), "ATIVO"),
             rs          = resumo_lote(lid),
-            animais     = listar_animais_por_lote(lid),
+            animais     = _ws_get(lid, "animais_lote", lambda: listar_animais_por_lote(lid), ttl=30),
             mort        = taxa_mortalidade_lote(lid),
-            gmds_map    = calcular_gmds_lote(lid),
+            gmds_map    = _ws_get(lid, "gmds_lote", lambda: calcular_gmds_lote(lid), ttl=120),
             insights    = gerar_insights_lote(lid),
             gtas        = listar_gta(lid),
             movs        = listar_movimentacoes(lote_id=lid),
             vacs        = listar_vacinas_agenda(lid),
-            plote       = listar_pesagens_lote(lid),
-            todas_ocs   = listar_ocorrencias_todos_animais(lid),
+            plote       = _ws_get(lid, "pesagens_lote", lambda: listar_pesagens_lote(lid), ttl=60),
+            todas_ocs   = _ws_get(lid, "ocorrencias_todos", lambda: listar_ocorrencias_todos_animais(lid), ttl=60),
             vendas      = listar_vendas_lote(lid),
-            scores      = calcular_scores_lote(lid),
+            scores      = _ws_get(lid, "scores_lote", lambda: calcular_scores_lote(lid), ttl=120),
             cont_status = contagem_status_animais(lid),
         )
 
