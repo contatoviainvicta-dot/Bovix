@@ -435,7 +435,7 @@ def page_dashboard_executivo(u):
         dict_lv  = {l[1]: l[0] for l in lotes_v}
 
         if not dict_lv:
-            st.info("Nenhum lote ativo. Lotes encerrados estão no histórico abaixo.")
+            empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
         else:
             tipo_venda = st.radio(
                 "Tipo de venda",
@@ -597,7 +597,7 @@ def page_dashboard_executivo(u):
             } for l in lotes_enc])
             st.dataframe(df_enc, hide_index=True, width="stretch")
         else:
-            st.info("Nenhum lote encerrado ainda.")
+            empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
 
         # Histórico financeiro de todas as vendas
         st.divider()
