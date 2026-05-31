@@ -5149,6 +5149,15 @@ st.markdown("""
 <meta name="apple-mobile-web-app-title" content="Auroque">
 <meta name="theme-color" content="#1B4332">
 <meta name="description" content="Gestão Pecuária Inteligente">
+<link rel="manifest" href="data:application/json,{
+  &quot;name&quot;:&quot;Auroque&quot;,
+  &quot;short_name&quot;:&quot;Auroque&quot;,
+  &quot;display&quot;:&quot;standalone&quot;,
+  &quot;background_color&quot;:&quot;#1B4332&quot;,
+  &quot;theme_color&quot;:&quot;#1B4332&quot;,
+  &quot;start_url&quot;:&quot;/&quot;,
+  &quot;lang&quot;:&quot;pt-BR&quot;
+}">
 <style>
 /* Melhorar touch em mobile */
 button, input, select, textarea {
