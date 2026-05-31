@@ -204,7 +204,7 @@ u):
                      if v[5] == "pendente"]
 
         if not pendentes:
-            st.success("Nenhuma vacina pendente neste lote.")
+            empty_state("Vacinas em dia", "Nenhuma vacina pendente no momento.", icone="✅")
         else:
             st.warning(f"{len(pendentes)} vacina(s) pendente(s)")
             for vac in pendentes:
@@ -377,7 +377,7 @@ def page_estoque_medicamentos(u):
                     e3.metric("Validade",       _fmt_data_med(mval))
                     e4.metric("Custo/unidade",  _fmt_brl_med(mcusto))
         else:
-            st.info("Nenhum medicamento cadastrado. Use a aba Cadastrar.")
+            empty_state("Estoque limpo", "Nenhum medicamento em alerta no momento.", icone="💊")
 
     # ── ABA 2: Cadastrar ─────────────────────────────────────────────────────
     with t2:
@@ -446,7 +446,7 @@ def page_estoque_medicamentos(u):
                             registrar_uso_medicamento(_mid_sel, dict_au[anim_sel], str(data_u), qtd_u)
                             registrar_auditoria(u["id"], "uso_medicamento", "medicamentos",
                                                _mid_sel, f"{qtd_u} unidades")
-                            st.success(f"Uso registrado! Estoque de '{med_s.split(' — ')[0]}' "
+                            toast_ok(f"Uso registrado! Estoque de '{med_s.split(' — ')[0]}' "
                                       f"atualizado: -{qtd_u:.1f} unidades.")
                             st.rerun()
                     else:
@@ -457,7 +457,7 @@ def page_estoque_medicamentos(u):
         st.subheader("Historico de uso")
         meds_hist = listar_medicamentos(owner_id=_oid)
         if not meds_hist:
-            st.info("Nenhum medicamento cadastrado.")
+            empty_state("Estoque limpo", "Nenhum medicamento em alerta no momento.", icone="💊")
         else:
             _ids_meds = [m[0] for m in meds_hist]
             # Buscar usos recentes via query direta
@@ -527,7 +527,7 @@ def page_controle_reprodutivo(u):
                     obs_r  = st.text_area("Observacao")
                 if st.form_submit_button("Registrar", type="primary") and dict_ar:
                     adicionar_reproducao(dict_ar[anim_rs], tipo_r, data_cio=str(data_r), observacao=obs_r)
-                    st.success("Cobertura registrada!"); st.rerun()
+                    toast_ok("Cobertura registrada!"); st.rerun()
     with t3:
         lotes = listar_lotes_usuario()
         if lotes:
@@ -550,14 +550,14 @@ def page_controle_reprodutivo(u):
                             atualizar_reproducao(r[0], resultado,
                                 data_diagnostico=str(data_diag),
                                 data_parto_previsto=str(parto_p) if resultado=="positivo" else None)
-                            st.success("Atualizado!"); st.rerun()
+                            toast_ok("Atualizado!"); st.rerun()
                 else: st.info("Sem registros reprodutivos.")
     with t4:
         partos = listar_partos_previstos()
         if partos:
             df_p = pd.DataFrame(partos, columns=["ID","Animal","Lote","Parto Previsto","Tipo"])
             st.dataframe(df_p, width='stretch')
-        else: st.success("Nenhum parto previsto nos proximos 30 dias.")
+        else: st.info("Nenhum parto previsto nos proximos 30 dias.")
 
     # ============================================================
     # MAPA PIQUETES
@@ -738,10 +738,10 @@ def page_workspace_do_lote(u):
         with c1_r:
             st.subheader("Informacoes do Lote")
             if lote_ws:
-                st.write(f"**Data de entrada:** {lote_ws[3]}")
+                st.markdown(f"**Data de entrada:** {lote_ws[3]}")
                 st.write(f"**Transportadora:** {lote_ws[6] or 'Nao informada'}")
                 st.write(f"**Descricao:** {lote_ws[2] or 'Sem descricao'}")
-                st.write(f"**Preco por animal:** R$ {lote_ws[3] or 0}")
+                st.markdown(f"**Preco por animal:** R$ {lote_ws[3] or 0}")
 
             st.subheader("Status dos animais")
             cont_ws = _ws['cont_status']
@@ -828,7 +828,7 @@ def page_workspace_do_lote(u):
             )
             st.caption(f"Total: {len(plote_ws)} pesagens | {df_p_ws['Animal'].nunique()} animais")
         else:
-            st.info("Nenhuma pesagem registrada neste lote.")
+            empty_state("Sem pesagens registradas", "Registre pesagens para acompanhar o desenvolvimento do rebanho.", icone="⚖️")
             if st.button("Ir para Registrar Pesagem", type="primary"):
                 st.session_state.menu = "Registrar Pesagem"
                 st.rerun()
@@ -853,7 +853,7 @@ def page_workspace_do_lote(u):
                     st.warning(f"{len(em_trat)} ocorrencia(s) em tratamento")
                     st.dataframe(em_trat[["Animal","Data","Tipo","Gravidade"]], width='stretch')
             else:
-                st.success("Nenhuma ocorrencia registrada.")
+                st.info("Nenhuma ocorrencia registrada.")
 
         with c2_s:
             st.subheader("Vacinas")
@@ -874,7 +874,7 @@ def page_workspace_do_lote(u):
                 for m in meds_ws[:3]:
                     st.warning(f"{m[1]}: {m[3]} {m[2]} (min: {m[4]})")
             else:
-                st.success("Estoque OK")
+                toast_ok("Estoque OK")
 
     # ── ABA FINANCEIRO ────────────────────────────────────────────────────────
     if aba_fin is not None:
@@ -897,8 +897,8 @@ def page_workspace_do_lote(u):
                     custo_aq = preco_u * rs_ws['total_animais']
                     st.metric("Custo total de compra", fmt_brl(custo_aq))
                     st.metric("Preco por animal", fmt_brl(preco_u))
-                except Exception:
-                    pass
+                except Exception as _e:
+                    pass  # silenced
 
             st.metric("Custo sanitario", fmt_brl(rs_ws['custo_sanitario']))
             custo_total = custo_aq + rs_ws['custo_sanitario']
@@ -1080,8 +1080,8 @@ def page_prontuario_animal(u):
                             "detalhe": "Realizada",
                             "cor": "verde",
                         })
-        except Exception:
-            pass
+        except Exception as _e:
+            pass  # silenced
 
         # Reproducao
         repros = listar_reproducao(animal_id)
@@ -1263,7 +1263,7 @@ def page_prontuario_animal(u):
                     df_oc["Data"] = pd.to_datetime(df_oc["Data"])
                     st.dataframe(df_oc[["Data","Tipo","Grav","Desc","Custo","Status"]], width='stretch')
                     st.metric("Custo total tratamentos", fmt_brl(sum(o[6] for o in ocs if o[6])))
-                else: st.success("Nenhuma ocorrencia registrada.")
+                else: st.info("Nenhuma ocorrencia registrada.")
                 repros = listar_reproducao(animal_id)
                 if repros:
                     st.subheader("Historico Reprodutivo")
