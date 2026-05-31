@@ -771,7 +771,7 @@ def page_notificacoes_email(u):
                             "'Configurar SMTP'."
                         )
         else:
-            st.success("Nenhum alerta ativo no momento.")
+            st.info("Nenhum alerta ativo no momento.")
 
         # Email de boas-vindas
         st.divider()
