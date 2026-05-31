@@ -5,7 +5,8 @@ try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, skeleton_cards,
                             erro_com_acao, humanizar_erro,
-                            fmt_brl, fmt_data, fmt_data_hora)
+                            fmt_brl, fmt_data, fmt_data_hora,
+                            safe_line_chart, safe_bar_chart)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -30,9 +31,30 @@ except ImportError:
             return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
         except: return str(d)
     def fmt_data_hora(d): return fmt_data(d)
+    def safe_line_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_line_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
+    def safe_bar_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_bar_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
 import pandas as pd
 from datetime import datetime, date
 from database import *
+try:
+    from database import PLANOS_VETERINARIO, PLANOS_FAZENDEIRO
+except ImportError:
+    PLANOS_VETERINARIO = {'trial': {'nome':'Trial','limite_fazendas':2,'preco':0}}
+    PLANOS_FAZENDEIRO  = {'trial': {'nome':'Trial','limite_animais':50,'preco':0}}
 from database import _conexao, _ph
 
 try:
@@ -871,7 +893,8 @@ def page_gestao_usuarios(u):
                                 lim = verificar_limite_fazendas(uid_u)
                             else:
                                 lim = verificar_limite_animais(uid_u)
-                            st.write(f"**Uso:** {lim['msg']}")
+                            _uso_msg = lim.get('msg', f"{lim.get('atual',0)}/{lim.get('limite',0)}") if isinstance(lim, dict) else str(lim)
+                            st.write(f"**Uso:** {_uso_msg}")
                     with c3:
                         if status_conta == "pendente" and perfil_u != "admin":
                             if st.button("Aprovar conta", key=f"aprc_{uid_u}"):
