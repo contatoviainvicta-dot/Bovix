@@ -235,19 +235,102 @@ def skeleton_linhas(n=3, altura=16):
     )
 
 
-def skeleton_cards(n=4):
-    """Exibe cards de skeleton enquanto carrega."""
+def skeleton_cards(n=4, altura=80):
+    """Exibe cards skeleton com animação shimmer enquanto carrega."""
+    shimmer_css = """<style>
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.sk{background:linear-gradient(90deg,#e8e8e8 25%,#f5f5f5 50%,#e8e8e8 75%);
+    background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:8px}
+.sk-line{border-radius:4px;margin-bottom:8px}
+</style>"""
     cols = st.columns(n)
     for col in cols:
         col.markdown(
-            "<div style='height:80px;background:"
-            "linear-gradient(90deg,#e8e8e8 25%,#f0f0f0 50%,#e8e8e8 75%);"
-            "background-size:200% 100%;border-radius:8px;"
-            "animation:shimmer 1.5s infinite'></div>"
-            "<style>@keyframes shimmer{0%{background-position:200% 0}"
-            "100%{background-position:-200% 0}}</style>",
+            f"{shimmer_css}"
+            f"<div class='sk' style='height:{altura}px;margin-bottom:8px'></div>"
+            f"<div class='sk sk-line' style='height:12px;width:70%'></div>"
+            f"<div class='sk sk-line' style='height:10px;width:45%'></div>",
             unsafe_allow_html=True
         )
+
+
+def skeleton_tabela(linhas=5, colunas=4):
+    """Exibe skeleton de tabela enquanto dados carregam."""
+    shimmer_css = """<style>
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.sk{background:linear-gradient(90deg,#e8e8e8 25%,#f5f5f5 50%,#e8e8e8 75%);
+    background-size:200% 100%;animation:shimmer 1.4s infinite;
+    border-radius:4px;height:12px;margin:2px 0}
+</style>"""
+    # Header
+    widths = [90, 70, 80, 60]
+    header = "".join(
+        f"<div style='flex:1;padding:8px 4px'>"
+        f"<div class='sk' style='width:{widths[i%4]}%'></div></div>"
+        for i in range(colunas)
+    )
+    rows = ""
+    for r in range(linhas):
+        cols_html = "".join(
+            f"<div style='flex:1;padding:8px 4px'>"
+            f"<div class='sk' style='width:{[85,65,75,55][i%4]}%'></div></div>"
+            for i in range(colunas)
+        )
+        bg = "#fafafa" if r % 2 else "white"
+        rows += (
+            f"<div style='display:flex;background:{bg};"
+            f"border-bottom:1px solid #f0f0f0'>{cols_html}</div>"
+        )
+    st.markdown(
+        f"{shimmer_css}"
+        f"<div style='border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>"
+        f"<div style='display:flex;background:#f9fafb;border-bottom:2px solid #e5e7eb'>"
+        f"{header}</div>{rows}</div>",
+        unsafe_allow_html=True
+    )
+
+
+# ── PAGINAÇÃO DE TABELAS ─────────────────────────────────────
+def paginar_dataframe(df, key, page_size=20, label="registros"):
+    """Exibe DataFrame com paginação. Retorna o slice da página atual."""
+    import streamlit as st
+    import math
+
+    if df is None or (hasattr(df, 'empty') and df.empty):
+        return df
+
+    total  = len(df)
+    if total <= page_size:
+        return df  # sem paginação necessária
+
+    n_pages = math.ceil(total / page_size)
+
+    # Controles de paginação
+    _c1, _c2, _c3 = st.columns([1, 2, 1])
+    with _c1:
+        st.caption(f"{total} {label} · {n_pages} páginas")
+    with _c2:
+        pagina = st.number_input(
+            "Página", min_value=1, max_value=n_pages,
+            value=st.session_state.get(f"_pag_{key}", 1),
+            step=1, key=f"_pag_inp_{key}", label_visibility="collapsed"
+        )
+        st.session_state[f"_pag_{key}"] = pagina
+    with _c3:
+        ini = (pagina - 1) * page_size + 1
+        fim = min(pagina * page_size, total)
+        st.caption(f"{ini}–{fim}")
+
+    start = (pagina - 1) * page_size
+    return df.iloc[start:start + page_size]
+
+
+def tabela_paginada(df, key, page_size=20, label="registros", **kwargs):
+    """Exibe DataFrame paginado com st.dataframe."""
+    import streamlit as st
+    df_page = paginar_dataframe(df, key, page_size, label)
+    if df_page is not None and not (hasattr(df_page, 'empty') and df_page.empty):
+        st.dataframe(df_page, hide_index=True, **kwargs)
 
 
 # ── CSS GLOBAL AUROQUE ────────────────────────────────────────
