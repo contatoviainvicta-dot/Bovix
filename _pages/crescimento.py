@@ -299,6 +299,81 @@ O animal precisa ja estar cadastrado no sistema.
 # ════════════════════════════════════════════════════════════════════════════
 # ONBOARDING — 6 PASSOS
 # ════════════════════════════════════════════════════════════════════════════
+def page_dados_exemplo(u):
+    """Tela para criar ou remover dados de demonstração."""
+    from ux_helpers import toast_ok, toast_erro
+    from database import criar_dados_demo, remover_dados_demo
+
+    st.subheader("🎯 Dados de Exemplo")
+    st.caption("Explore o Auroque com uma fazenda fictícia completa")
+
+    _oid = u.get("owner_id") or u["id"]
+
+    st.markdown("""
+Crie uma **fazenda demo** com dados realistas para explorar todas as funcionalidades
+antes de cadastrar seus dados reais:
+- **8 animais** Nelore e Angus com histórico completo
+- **4 pesagens** por animal ao longo de 90 dias
+- **Custos variáveis** de ração, medicamentos e mão de obra
+- **KPIs e gráficos** já preenchidos para você explorar
+""")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("🌱 Criar dados de exemplo", type="primary",
+                     key="btn_criar_demo", use_container_width=True):
+            with st.spinner("Criando fazenda demo..."):
+                ok = criar_dados_demo(_oid)
+            if ok:
+                toast_ok("Dados demo criados! Explore o Dashboard.")
+                st.balloons()
+            else:
+                toast_erro("Erro ao criar dados demo.")
+
+    with c2:
+        if st.button("🗑️ Remover dados de exemplo",
+                     key="btn_remover_demo", use_container_width=True):
+            from ux_helpers import confirmar_acao
+            if confirmar_acao(
+                "Isso removerá todos os lotes e animais com 'Demo' no nome.",
+                "rm_demo", "Sim, remover"
+            ):
+                ok = remover_dados_demo(_oid)
+                if ok:
+                    toast_ok("Dados demo removidos.")
+                else:
+                    toast_erro("Erro ao remover.")
+
+    st.divider()
+    st.markdown("### 🗺️ Tour do sistema")
+    st.caption("Clique nos botões abaixo para explorar cada módulo")
+
+    tour_itens = [
+        ("🏠", "1. Dashboard",      "Inicio",            "Veja os KPIs da sua fazenda"),
+        ("🐄", "2. Workspace",      "Workspace do Lote", "Visão completa do lote"),
+        ("💰", "3. Financeiro",     "Dashboard Financeiro","DRE e projeção de abate"),
+        ("📊", "4. Análise IA",     "Risco Sanitario IA","Score de risco dos animais"),
+        ("📋", "5. Prontuário",     "Prontuario Animal", "Histórico clínico"),
+        ("⚙️", "6. Planos",         "Planos",            "Conheça os planos"),
+    ]
+
+    cols = st.columns(3)
+    for i, (icone, titulo, destino, desc) in enumerate(tour_itens):
+        with cols[i % 3]:
+            st.markdown(f"""
+<div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;
+     margin-bottom:8px;text-align:center">
+  <div style="font-size:24px">{icone}</div>
+  <div style="font-weight:600;font-size:13px;color:#1B4332">{titulo}</div>
+  <div style="font-size:11px;color:#6B7280;margin-top:2px">{desc}</div>
+</div>
+""", unsafe_allow_html=True)
+            if st.button(f"Ir →", key=f"tour_{i}",
+                         use_container_width=True):
+                st.session_state.menu = destino
+                st.rerun()
+
+
 def page_onboarding(u):
     """Wizard de onboarding de 6 passos."""
     oid  = u.get("owner_id") or u["id"]
