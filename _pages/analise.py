@@ -221,7 +221,7 @@ def page_analisar_por_lote(u):
             ranking.sort(key=lambda x: x[1], reverse=True)
             st.subheader("Ranking GMD")
             for i,(nm,gmd) in enumerate(ranking,1):
-                st.write(f"{i}. {nm} -> {gmd:.3f} kg/dia")
+                st.caption(f"{i}. {nm} -> {gmd:.3f} kg/dia")
 
     # ============================================================
     # ANALISAR ANIMAL
@@ -291,7 +291,7 @@ def page_analisar_animal(u):
                     custo_tot = df_oc["custo"].fillna(0).sum()
                     st.metric("Custo total tratamentos", fmt_brl(custo_tot))
                 else:
-                    st.success("Nenhuma ocorrencia registrada.")
+                    st.info("Nenhuma ocorrencia registrada.")
 
             with t3:
                 det = sc["detalhes"]
@@ -308,7 +308,7 @@ def page_analisar_animal(u):
                 if car["em_carencia"]:
                     st.error(f"Em carencia ate {car['liberado_em']} - nao abater!")
                 else:
-                    st.success("Sem restricao de carencia")
+                    st.info("Sem restricao de carencia")
 
     # ============================================================
     # SCORE DE SAUDE
@@ -499,7 +499,7 @@ def page_risco_sanitario_ia(u):
         df_r.columns = ['Lote','Nivel','Score','Animais','Principal Risco']
         st.dataframe(df_r, width='stretch', hide_index=True)
     else:
-        st.info("Nenhum lote com dados suficientes para calcular risco.")
+        empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
 
     st.divider()
     st.subheader("Analise detalhada por lote")
@@ -673,7 +673,7 @@ def page_anomalias_de_peso(u):
             anomalias = detectar_anomalias_peso(lote_id)
 
         if not anomalias:
-            st.success("Nenhuma anomalia detectada. Padroes de peso normais.")
+            st.info("Nenhuma anomalia detectada. Padroes de peso normais.")
         else:
             altas  = [a for a in anomalias if a['gravidade'] == 'Alta']
             medias = [a for a in anomalias if a['gravidade'] == 'Media']
