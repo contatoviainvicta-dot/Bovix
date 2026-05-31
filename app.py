@@ -5298,16 +5298,14 @@ if st.session_state.usuario is None:
 </style>
 """, unsafe_allow_html=True)
 
-    # ── Layout 2 colunas ─────────────────────────────────────
-    _col_esq, _col_dir = st.columns([1.1, 0.9], gap="large")
+    # ── Layout 2 colunas - esquerda menor, formulário visível sem scroll ──
+    _col_esq, _col_dir = st.columns([1, 1], gap="large")
 
     with _col_esq:
         st.markdown("""
-<div style="padding:48px 32px;height:100%">
-
-  <!-- Logo -->
-  <div style="display:flex;align-items:center;gap:14px;margin-bottom:40px">
-    <svg width="48" height="48" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+<div style="padding:24px 16px 0">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <svg width="40" height="40" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
       <polygon points="22,3 39,13 39,31 22,41 5,31 5,13"
                fill="none" stroke="#1B4332" stroke-width="2.2"/>
       <text x="22" y="30" font-family="system-ui,sans-serif"
@@ -5317,87 +5315,40 @@ if st.session_state.usuario is None:
             stroke="#40916C" stroke-width="1.8"/>
     </svg>
     <div>
-      <div style="font-family:Georgia,serif;font-size:28px;font-weight:700;
-           color:#1B4332;letter-spacing:1px;line-height:1">Auroque</div>
-      <div style="font-size:9px;color:#40916C;letter-spacing:4px;margin-top:3px">
-        GESTÃO PECUÁRIA INTELIGENTE</div>
+      <div style="font-family:Georgia,serif;font-size:22px;font-weight:700;
+           color:#1B4332;line-height:1">Auroque</div>
+      <div style="font-size:9px;color:#40916C;letter-spacing:3px">
+        GESTÃO PECUÁRIA</div>
     </div>
   </div>
-
-  <!-- Headline -->
-  <h1 style="font-family:Georgia,serif;font-size:36px;font-weight:700;
-       color:#1B4332;line-height:1.2;margin-bottom:16px">
+  <h2 style="font-family:Georgia,serif;font-size:26px;font-weight:700;
+       color:#1B4332;line-height:1.25;margin:0 0 10px">
     Gerencie seu rebanho com inteligência
-  </h1>
-
-  <p style="font-size:16px;color:#4B5563;line-height:1.6;margin-bottom:32px">
-    Controle animais, pesagens, saúde e finanças da sua fazenda
-    em um único sistema. Tome decisões baseadas em dados reais.
+  </h2>
+  <p style="font-size:14px;color:#4B5563;line-height:1.5;margin:0 0 18px">
+    Controle animais, pesagens, saúde e finanças em um só lugar.
   </p>
-
-  <!-- Benefícios -->
-  <div style="display:flex;flex-direction:column;gap:12px">
-    <div style="display:flex;align-items:center;gap:10px">
-      <div style="width:32px;height:32px;background:#E1F5EE;border-radius:8px;
-           display:flex;align-items:center;justify-content:center;
-           font-size:16px;flex-shrink:0">🐄</div>
-      <div>
-        <div style="font-weight:600;color:#1B4332;font-size:14px">
-          Gestão completa do rebanho</div>
-        <div style="font-size:12px;color:#6B7280">
-          Lotes, animais, pesagens e GMD automático</div>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <div style="width:32px;height:32px;background:#E1F5EE;border-radius:8px;
-           display:flex;align-items:center;justify-content:center;
-           font-size:16px;flex-shrink:0">💊</div>
-      <div>
-        <div style="font-weight:600;color:#1B4332;font-size:14px">
-          Saúde e veterinário integrados</div>
-        <div style="font-size:12px;color:#6B7280">
-          Prontuários, receitas e controle de carência</div>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <div style="width:32px;height:32px;background:#E1F5EE;border-radius:8px;
-           display:flex;align-items:center;justify-content:center;
-           font-size:16px;flex-shrink:0">📊</div>
-      <div>
-        <div style="font-weight:600;color:#1B4332;font-size:14px">
-          DRE e projeção de abate</div>
-        <div style="font-size:12px;color:#6B7280">
-          Margem real por lote e previsão de receita</div>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <div style="width:32px;height:32px;background:#E1F5EE;border-radius:8px;
-           display:flex;align-items:center;justify-content:center;
-           font-size:16px;flex-shrink:0">🤖</div>
-      <div>
-        <div style="font-weight:600;color:#1B4332;font-size:14px">
-          IA para diagnóstico e previsão</div>
-        <div style="font-size:12px;color:#6B7280">
-          Anomalias de peso e risco sanitário automáticos</div>
-      </div>
-    </div>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151">
+      <span style="color:#40916C;font-weight:700">✓</span>
+      Lotes, pesagens e GMD automático</div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151">
+      <span style="color:#40916C;font-weight:700">✓</span>
+      Receituários e controle de carência</div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151">
+      <span style="color:#40916C;font-weight:700">✓</span>
+      DRE, margem real e projeção de abate</div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151">
+      <span style="color:#40916C;font-weight:700">✓</span>
+      IA para risco sanitário e anomalias</div>
   </div>
-
-  <!-- Rodapé -->
-  <div style="margin-top:40px;padding-top:20px;
-       border-top:1px solid #D1FAE5">
-    <p style="font-size:12px;color:#9CA3AF;margin:0">
-      contato@auroque.com.br · auroque.com.br
-    </p>
-  </div>
+  <p style="font-size:11px;color:#9CA3AF;margin:0">
+    contato@auroque.com.br</p>
 </div>
 """, unsafe_allow_html=True)
 
     with _col_dir:
-        st.markdown("""
-<div style="padding:32px;background:white;border-radius:16px;
-     box-shadow:0 4px 24px rgba(0,0,0,0.08);margin:32px 0">
-""", unsafe_allow_html=True)
+        st.markdown("<div style='padding:8px 0'></div>", unsafe_allow_html=True)
 
     if not usuario_existe():
         st.info("Primeiro acesso: crie sua conta de administrador.")
