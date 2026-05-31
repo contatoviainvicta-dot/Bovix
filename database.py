@@ -79,10 +79,15 @@ def _diagnostico_banco():
 def _get_pg_url():
     try:
         import streamlit as st
-        return st.secrets["database"]["url"]
+        url = st.secrets["database"]["url"]
     except Exception:
         _log_war.debug('excecao tratada: %s', exc_info=True)
-        return os.environ.get("DATABASE_URL", "")
+        url = os.environ.get("DATABASE_URL", "")
+    # Supabase: preferir transaction pooler (porta 6543)
+    # vs session pooler (porta 5432, limite 15 conexões)
+    if url and "pooler.supabase.com:5432" in url:
+        url = url.replace(":5432/", ":6543/")
+    return url
 
 def _date_add(dias, sinal="+"):
     if _usar_postgres():
@@ -125,13 +130,14 @@ def _get_pool():
             url = _get_pg_url()
             if not url:
                 return None
-            # min=1, max=3: conservador para nao esgotar limite do Supabase
+            # Transaction mode (porta 6543): sem limite de sessão
+            # Pool maior para suportar telas com múltiplas queries simultâneas
             _pg_pool = psycopg2.pool.ThreadedConnectionPool(
-                1, 3, url, connect_timeout=10,
+                2, 8, url, connect_timeout=10,
                 keepalives=1, keepalives_idle=30,
                 keepalives_interval=5, keepalives_count=3,
             )
-            _log_db.info("Pool PostgreSQL criado (min=1, max=3)")
+            _log_db.info("Pool PostgreSQL criado (min=2, max=8)")
             return _pg_pool
         except Exception as e:
             _log_war.warning("Falha ao criar pool Postgres: %s", e)
@@ -156,18 +162,17 @@ def _conexao():
 
         if pool:
             # Tentar obter conexão do pool com retry
-            _tentativas = 3
+            _tentativas = 2
             for _t in range(_tentativas):
                 try:
                     conn = pool.getconn()
                     break
                 except psycopg2.pool.PoolError:
                     if _t < _tentativas - 1:
-                        _time_conn.sleep(0.5 * (_t + 1))
+                        _time_conn.sleep(0.2)
                     else:
-                        _log_war.warning(
-                            "Pool esgotado após %d tentativas — "
-                            "tentando conexão direta", _tentativas
+                        _log_war.debug(
+                            "Pool ocupado — usando conexão direta"
                         )
                         conn = None
 
@@ -199,6 +204,12 @@ def _conexao():
         finally:
             try:
                 if pool and _via_pool:
+                    # Resetar estado da conexão antes de devolver ao pool
+                    try:
+                        if conn.status != 0:  # 0 = STATUS_READY
+                            conn.rollback()
+                    except Exception:
+                        pass
                     pool.putconn(conn)
                 else:
                     conn.close()
