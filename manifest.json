@@ -1,0 +1,27 @@
+{
+  "name": "Auroque — Gestão Pecuária",
+  "short_name": "Auroque",
+  "description": "Sistema de gestão para pecuária inteligente",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1B4332",
+  "theme_color": "#1B4332",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/your-repo/bovix/main/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://raw.githubusercontent.com/your-repo/bovix/main/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "lang": "pt-BR"
+}
