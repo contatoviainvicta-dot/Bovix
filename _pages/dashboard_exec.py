@@ -6,7 +6,8 @@ import streamlit as st
 try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, erro_com_acao,
-                            fmt_brl, fmt_data, fmt_data_hora)
+                            fmt_brl, fmt_data, fmt_data_hora,
+                            safe_line_chart, safe_bar_chart)
 except ImportError:
     def aplicar_css_global(): pass
     def toast_ok(m): st.success(m)
@@ -26,6 +27,22 @@ except ImportError:
         try: d=str(d)[:10]; p=d.split("-"); return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
         except: return str(d)
     def fmt_data_hora(d): return fmt_data(d)
+    def safe_line_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_line_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
+    def safe_bar_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_bar_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
 import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date, datetime
@@ -175,7 +192,7 @@ def page_dashboard_executivo(u):
                 "Categoria": ["Compra de animais", "Custos variáveis"],
                 "Valor":     [dre["custo_compra"], max(dre["custos_var"], 0)]
             })
-            st.bar_chart(df_comp.set_index("Categoria"))
+            safe_bar_chart(df_comp.set_index("Categoria"))
         with col_g2:
             st.caption("Receita × Custo × Margem")
             df_res = pd.DataFrame({
@@ -184,7 +201,7 @@ def page_dashboard_executivo(u):
                          dre["custo_total"],
                          max(dre["margem_bruta"], 0)]
             })
-            st.bar_chart(df_res.set_index("Item"))
+            safe_bar_chart(df_res.set_index("Item"))
 
     # ── ABA 2: RANKING DE LOTES ──────────────────────────────────────────
     with t2:
@@ -710,14 +727,14 @@ def page_dashboard_executivo(u):
                 df_barras = df_curva[["mes","receita","custo","margem"]].copy()
                 df_barras = df_barras.set_index("mes")
                 df_barras.columns = ["Receita","Custo","Margem"]
-                st.bar_chart(df_barras)
+                safe_bar_chart(df_barras)
 
                 # Gráfico de linha: margem acumulada
                 st.caption("Margem acumulada no ano")
                 df_linha = df_curva[["mes","margem_acum"]].copy()
                 df_linha = df_linha.set_index("mes")
                 df_linha.columns = ["Margem Acumulada"]
-                st.line_chart(df_linha)
+                safe_line_chart(df_linha)
 
                 # Tabela resumo anual
                 st.divider()
