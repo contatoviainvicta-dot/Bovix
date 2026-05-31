@@ -4,6 +4,7 @@ try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, erro_com_acao,
                             fmt_brl, fmt_data, fmt_data_hora,
+                            tabela_paginada, paginar_dataframe,
                             safe_line_chart, safe_bar_chart)
 except ImportError:
     def aplicar_css_global(): pass
@@ -24,6 +25,11 @@ except ImportError:
         try: d=str(d)[:10]; p=d.split("-"); return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
         except: return str(d)
     def fmt_data_hora(d): return fmt_data(d)
+    def tabela_paginada(df, key, **kw):
+        import streamlit as st
+        if df is not None and not (hasattr(df,"empty") and df.empty):
+            st.dataframe(df, hide_index=True)
+    def paginar_dataframe(df, key, **kw): return df
     def safe_line_chart(df, titulo=None, empty_msg="Sem dados."):
         import pandas as pd
         if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
