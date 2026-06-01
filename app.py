@@ -5654,6 +5654,22 @@ if u and not is_admin():
             st.stop()
 
 
+# ── CSS da sidebar - injetado antes de renderizar ────────────────────────────
+try:
+    from ux_helpers import _CSS_AUROQUE as _CSS_SB
+    st.markdown(_CSS_SB, unsafe_allow_html=True)
+except Exception:
+    st.markdown("""<style>
+[data-testid="stSidebar"]{background-color:#1B4332 !important;}
+[data-testid="stSidebar"]>div:first-child{background-color:#1B4332 !important;}
+[data-testid="stSidebar"] button{background-color:#1B4332 !important;
+  color:#F5F0E8 !important;border:1px solid rgba(245,240,232,0.2) !important;}
+[data-testid="stSidebar"] button:hover{background-color:#40916C !important;}
+[data-testid="stSidebar"] span:not([data-testid]),
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label{color:#F5F0E8 !important;}
+</style>""", unsafe_allow_html=True)
+
 # ── sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
 
@@ -5937,6 +5953,24 @@ with st.sidebar:
 
     if "menu" not in st.session_state:
         st.session_state.menu = "Inicio"
+
+    # Ícones por grupo
+    _ICONES = {
+        "Inicio":          "🏠",
+        "Rebanho":         "🐄",
+        "Gestao Sanitaria":"🩺",
+        "Analises":        "📊",
+        "Inteligencia IA": "🤖",
+        "Inteligencia":    "🤖",
+        "Financeiro":      "💰",
+        "Sistema":         "⚙️",
+        "Clinico":         "💊",
+        "Preventivo":      "🛡️",
+        "Laboratorio":     "🔬",
+        "Visitas Vet":     "📅",
+        "Analise":         "📊",
+        "Administracao":   "👥",
+    }
 
     for grupo, itens in GRUPOS.items():
         if not itens:
