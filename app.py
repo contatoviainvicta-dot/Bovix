@@ -6209,6 +6209,10 @@ _ROTAS = {
     "Email Alertas":        page_notificacoes_email,
     "Dashboard Financeiro": page_dashboard_executivo,
     "Painel Admin":         page_painel_admin,
+    "Ferramentas":          page_ferramentas_publicas,
+    "Dados de Exemplo":     page_dados_exemplo,
+    "WhatsApp":             page_configurar_whatsapp,
+    "Exportar Relatorios":  page_exportar_dados,
 }
 
 
