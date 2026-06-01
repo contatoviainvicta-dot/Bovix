@@ -844,267 +844,249 @@ def page_workspace_do_lote(u):
         _animais_lote_voz = listar_animais_por_lote(lote_ws_id)
         _mapa_voz = {
             a[1].upper(): a[0]
-            for a in _animais_lote_voz
-        } if _animais_lote_voz else {}
+            for a in (_animais_lote_voz or [])
+        }
 
-        # Inicializar state
-        if "_voz_transcricao" not in st.session_state:
-            st.session_state["_voz_transcricao"] = ""
-        if "_voz_confirmando" not in st.session_state:
-            st.session_state["_voz_confirmando"] = False
+        import streamlit.components.v1 as _components
 
-        # Componente HTML com Web Speech API
-        componente_voz = """
+        # Componente de voz — a transcrição é exibida no HTML
+        # e copiada para um campo de texto Streamlit pelo usuário
+        html_voz = """
 <style>
-  #btn-voz {
-    display:flex;align-items:center;justify-content:center;gap:10px;
-    background:#1B4332;color:#F5F0E8;border:none;border-radius:12px;
-    padding:14px 28px;font-size:16px;font-weight:600;cursor:pointer;
-    width:100%;margin-bottom:12px;transition:all .2s;
-    box-shadow:0 4px 12px rgba(27,67,50,.3);
-  }
-  #btn-voz:hover { background:#40916C; transform:translateY(-1px); }
-  #btn-voz.gravando {
-    background:#E24B4A;animation:pulsar 1.2s infinite;
-  }
-  @keyframes pulsar {
-    0%,100% { box-shadow:0 4px 12px rgba(226,75,74,.4); }
-    50%      { box-shadow:0 4px 24px rgba(226,75,74,.7); }
-  }
-  #status-voz {
-    text-align:center;font-size:13px;color:#6B7280;
-    min-height:20px;margin-bottom:8px;
-  }
-  #resultado-voz {
-    background:#F5F0E8;border:1.5px solid #40916C;border-radius:8px;
-    padding:12px 16px;font-size:15px;color:#1B4332;font-weight:500;
-    min-height:40px;margin-bottom:8px;display:none;
-  }
+#btn-voz{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  background:#1B4332;color:#F5F0E8;border:none;border-radius:12px;
+  padding:16px 28px;font-size:17px;font-weight:600;cursor:pointer;
+  width:100%;margin-bottom:10px;transition:all .2s;
+  box-shadow:0 4px 12px rgba(27,67,50,.35);letter-spacing:.3px;
+}
+#btn-voz:hover{background:#2D6A4F;transform:translateY(-1px)}
+#btn-voz.gravando{
+  background:#E24B4A;animation:pulsar 1.1s infinite;
+}
+@keyframes pulsar{
+  0%,100%{box-shadow:0 4px 12px rgba(226,75,74,.4)}
+  50%{box-shadow:0 8px 28px rgba(226,75,74,.75)}
+}
+#status{font-size:13px;color:#6B7280;text-align:center;
+        min-height:18px;margin-bottom:8px}
+#box-resultado{
+  display:none;background:#E8F5EE;border:2px solid #40916C;
+  border-radius:10px;padding:14px 18px;font-size:16px;
+  color:#1B4332;font-weight:600;margin-bottom:8px;
+  word-break:break-word;
+}
+#instrucao{
+  font-size:12px;color:#9CA3AF;text-align:center;
+  display:none;margin-bottom:4px;
+}
 </style>
 
-<button id="btn-voz" onclick="toggleVoz()">
-  🎤  Registrar pesagem por voz
+<button id="btn-voz" onclick="toggle()">
+  🎤&nbsp;&nbsp;Registrar pesagem por voz
 </button>
-<div id="status-voz">Clique no botão e fale o lote, animal e peso</div>
-<div id="resultado-voz"></div>
+<div id="status">Clique e fale: lote, animal e peso</div>
+<div id="box-resultado"></div>
+<div id="instrucao">👆 Copie o texto acima para o campo abaixo</div>
 
 <script>
-let reconhecimento = null;
-let gravando = false;
+var rec=null, ativo=false;
 
-function toggleVoz() {
-  if (gravando) {
-    pararVoz();
-  } else {
-    iniciarVoz();
-  }
+function toggle(){
+  ativo ? parar() : iniciar();
 }
 
-function iniciarVoz() {
-  const SpeechRecognition = window.SpeechRecognition
-                         || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    document.getElementById('status-voz').textContent =
-      '⚠️ Seu navegador não suporta voz. Use Chrome ou Edge.';
+function iniciar(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
+    document.getElementById('status').textContent=
+      '⚠️ Use Chrome ou Edge para reconhecimento de voz';
     return;
   }
-  reconhecimento = new SpeechRecognition();
-  reconhecimento.lang           = 'pt-BR';
-  reconhecimento.continuous     = false;
-  reconhecimento.interimResults = true;
-  reconhecimento.maxAlternatives = 1;
+  rec=new SR();
+  rec.lang='pt-BR';
+  rec.continuous=false;
+  rec.interimResults=true;
 
-  const btn    = document.getElementById('btn-voz');
-  const status = document.getElementById('status-voz');
-  const result = document.getElementById('resultado-voz');
+  var btn=document.getElementById('btn-voz');
+  var status=document.getElementById('status');
+  var box=document.getElementById('box-resultado');
+  var instr=document.getElementById('instrucao');
 
-  reconhecimento.onstart = () => {
-    gravando = true;
-    btn.classList.add('gravando');
-    btn.innerHTML = '⏹  Parar gravação';
-    status.textContent = '🎙️ Ouvindo... fale agora';
-    result.style.display = 'none';
+  rec.onstart=function(){
+    ativo=true;
+    btn.className='gravando';
+    btn.innerHTML='⏹&nbsp;&nbsp;Parar gravação';
+    status.textContent='🎙️ Ouvindo... fale agora';
   };
 
-  reconhecimento.onresult = (e) => {
-    let texto = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      texto += e.results[i][0].transcript;
+  rec.onresult=function(e){
+    var t='';
+    for(var i=e.resultIndex;i<e.results.length;i++){
+      t+=e.results[i][0].transcript;
     }
-    result.style.display = 'block';
-    result.textContent = '📝 "' + texto + '"';
-    if (e.results[e.results.length-1].isFinal) {
-      enviarParaStreamlit(texto);
+    box.style.display='block';
+    box.textContent='📝 '+t;
+    if(e.results[e.results.length-1].isFinal){
+      status.textContent='✅ Transcrição concluída';
+      instr.style.display='block';
+      // Tentar preencher automaticamente via Streamlit query param
+      try{
+        var url=new URL(window.parent.location.href);
+        url.searchParams.set('_voz',encodeURIComponent(t));
+        window.parent.history.replaceState({},'',url.toString());
+      }catch(err){}
+      parar();
     }
   };
 
-  reconhecimento.onerror = (e) => {
-    status.textContent = '❌ Erro: ' + e.error +
-      '. Verifique permissão do microfone.';
-    pararVoz();
+  rec.onerror=function(e){
+    var msgs={
+      'not-allowed':'❌ Permissão negada — clique no 🔒 da barra de endereço',
+      'no-speech':'⚠️ Nenhuma fala detectada. Tente novamente.',
+      'network':'⚠️ Erro de rede. Verifique a conexão.',
+    };
+    status.textContent=msgs[e.error]||'❌ Erro: '+e.error;
+    parar();
   };
 
-  reconhecimento.onend = () => { pararVoz(); };
-  reconhecimento.start();
+  rec.onend=function(){ parar(); };
+  rec.start();
 }
 
-function pararVoz() {
-  gravando = false;
-  const btn = document.getElementById('btn-voz');
-  btn.classList.remove('gravando');
-  btn.innerHTML = '🎤  Registrar pesagem por voz';
-  document.getElementById('status-voz').textContent =
-    'Clique no botão e fale o lote, animal e peso';
-  if (reconhecimento) { reconhecimento.stop(); reconhecimento = null; }
-}
-
-function enviarParaStreamlit(texto) {
-  // Comunicar com Streamlit via query param
-  const url = new URL(window.location.href);
-  url.searchParams.set('voz_texto', encodeURIComponent(texto));
-  window.parent.postMessage({
-    type: 'streamlit:setComponentValue',
-    value: texto
-  }, '*');
+function parar(){
+  ativo=false;
+  var btn=document.getElementById('btn-voz');
+  btn.className='';
+  btn.innerHTML='🎤&nbsp;&nbsp;Registrar pesagem por voz';
+  if(rec){try{rec.stop();}catch(e){} rec=null;}
 }
 </script>
 """
-        import streamlit.components.v1 as _components
-        _voz_result = _components.html(componente_voz, height=160)
+        _components.html(html_voz, height=180)
 
-        # Capturar texto via query params ou input oculto
+        # Ler transcrição do query param (preenchido pelo JS)
         _params = st.query_params
-        _texto_voz = _params.get("voz_texto", "")
-        if _texto_voz:
-            st.session_state["_voz_transcricao"] = _texto_voz
+        _texto_auto = _params.get("_voz", "")
+
+        # Campo editável — recebe a transcrição OU digitação manual
+        _transcricao = st.text_input(
+            "📝 Cole ou edite a transcrição aqui:",
+            value=_texto_auto if _texto_auto else "",
+            placeholder='Ex: "lote oeste, animal 01, 350 kg"',
+            key="_voz_input",
+            help="Digite ou cole o que foi transcrito. Você pode corrigir antes de salvar."
+        )
+
+        # Limpar query param após uso
+        if _texto_auto:
             st.query_params.clear()
 
-        # Campo de texto para fallback manual + receber resultado da API
-        _transcricao = st.text_input(
-            "📝 Transcrição (edite se necessário)",
-            value=st.session_state.get("_voz_transcricao", ""),
-            placeholder='Ex: "lote oeste, animal 01, 350 kg"',
-            key="_input_voz_texto",
-            help="O resultado da fala aparece aqui. Você pode editar antes de confirmar."
-        )
-        if _transcricao != st.session_state.get("_voz_transcricao", ""):
-            st.session_state["_voz_transcricao"] = _transcricao
-
-        # Parser de fala → dados estruturados
+        # Parser
         def _parse_voz(texto):
-            """Extrai animal e peso do texto falado."""
             import re as _re
-            texto = texto.lower().strip()
-            resultado = {"animal": None, "peso": None, "raw": texto}
-
-            # Extrair peso — número seguido de "kg", "quilos", "quilogramas"
-            _p = _re.search(
-                r'(\d+[\.,]?\d*)\s*(?:kg|quilo|quilos|quilogramas?|kilo|kilos?)?',
-                texto
+            texto_l = texto.lower().strip()
+            res = {"animal": None, "peso": None}
+            # Peso
+            m = _re.search(
+                r'(\d+(?:[.,]\d+)?)\s*(?:kg|quilo[sg]?|quilograma[sg]?)?',
+                texto_l
             )
-            if _p:
+            if m:
                 try:
-                    resultado["peso"] = float(_p.group(1).replace(",", "."))
+                    res["peso"] = float(m.group(1).replace(",","."))
                 except Exception:
                     pass
-
-            # Extrair identificação do animal — padrões comuns
+            # Animal
             for pat in [
                 r'animal\s+(\S+)',
                 r'boi\s+(\S+)',
                 r'vaca\s+(\S+)',
                 r'brinco\s+(\S+)',
-                r'numero\s+(\S+)',
-                r'n[uú]mero\s+(\d+)',
-                r'([A-Za-z]{2,6}[-\s]?\d{1,4})',
+                r'n[uú]mero\s+(\S+)',
+                r'([A-Z]{2,6}[-]?\d{1,4})',
             ]:
-                _m = _re.search(pat, texto)
-                if _m:
-                    _ident = _m.group(1).strip().upper().replace(" ", "-")
-                    resultado["animal"] = _ident
+                mx = _re.search(pat, texto_l, _re.I)
+                if mx:
+                    res["animal"] = mx.group(1).strip().upper().replace(" ","-")
                     break
+            # Fallback: último token alfanumérico antes do número
+            if not res["animal"]:
+                tokens = _re.findall(r'[A-Za-z0-9]+', texto)
+                nums   = [t for t in tokens if t.isdigit()]
+                alphas = [t for t in tokens if not t.isdigit()]
+                if alphas:
+                    res["animal"] = alphas[-1].upper()
+            return res
 
-            return resultado
+        # Mostrar cards de confirmação
+        if _transcricao and len(_transcricao) > 2:
+            _p = _parse_voz(_transcricao)
 
-        # Mostrar confirmação se há texto
-        if _transcricao and len(_transcricao) > 3:
-            _parsed = _parse_voz(_transcricao)
-
-            st.markdown("---")
-            st.markdown("**Entendi o seguinte:**")
-
+            st.markdown("**🔍 Entendi o seguinte — confirme antes de salvar:**")
             _c1, _c2, _c3 = st.columns(3)
             with _c1:
                 st.markdown(f"""
-<div style="background:#F5F0E8;border-radius:8px;padding:12px;text-align:center">
-  <div style="font-size:11px;color:#6B7280;margin-bottom:4px">ANIMAL</div>
-  <div style="font-size:20px;font-weight:700;color:#1B4332">
-    {_parsed['animal'] or '?'}</div>
+<div style="background:#E8F5EE;border:2px solid #1B4332;border-radius:10px;
+     padding:14px;text-align:center">
+  <div style="font-size:10px;color:#40916C;letter-spacing:1px;
+       margin-bottom:4px">ANIMAL</div>
+  <div style="font-size:22px;font-weight:700;color:#1B4332">
+    {_p['animal'] or '?'}</div>
 </div>""", unsafe_allow_html=True)
             with _c2:
                 st.markdown(f"""
-<div style="background:#F5F0E8;border-radius:8px;padding:12px;text-align:center">
-  <div style="font-size:11px;color:#6B7280;margin-bottom:4px">PESO (kg)</div>
-  <div style="font-size:20px;font-weight:700;color:#1B4332">
-    {_parsed['peso'] or '?'}</div>
+<div style="background:#E8F5EE;border:2px solid #1B4332;border-radius:10px;
+     padding:14px;text-align:center">
+  <div style="font-size:10px;color:#40916C;letter-spacing:1px;
+       margin-bottom:4px">PESO (kg)</div>
+  <div style="font-size:22px;font-weight:700;color:#1B4332">
+    {_p['peso'] or '?'}</div>
 </div>""", unsafe_allow_html=True)
             with _c3:
                 from datetime import date as _date
-                _hoje = str(_date.today())
-                _data_pes = st.date_input(
-                    "Data", value=_date.today(),
-                    key="_voz_data", label_visibility="collapsed"
-                )
+                _data_v = st.date_input("Data", value=_date.today(),
+                                        key="_voz_dt",
+                                        label_visibility="collapsed")
 
-            # Verificar se animal existe no lote
-            _aid = None
-            if _parsed["animal"]:
-                _aid = (_mapa_voz.get(_parsed["animal"].upper())
-                        or _mapa_voz.get(_parsed["animal"]))
-                if not _aid:
-                    # Busca parcial
-                    for k, v in _mapa_voz.items():
-                        if _parsed["animal"] in k or k in _parsed["animal"]:
-                            _aid = v
-                            break
+            # Buscar animal no lote
+            _aid = _mapa_voz.get((_p["animal"] or "").upper())
+            if not _aid and _p["animal"]:
+                for k, v in _mapa_voz.items():
+                    if _p["animal"] in k or k in _p["animal"]:
+                        _aid = v; break
 
-            if _parsed["animal"] and not _aid:
+            if _p["animal"] and not _aid:
                 st.warning(
-                    f"⚠️ Animal **{_parsed['animal']}** não encontrado neste lote. "
-                    f"Disponíveis: {', '.join(list(_mapa_voz.keys())[:5])}"
+                    f"⚠️ **{_p['animal']}** não encontrado neste lote. "
+                    f"Disponíveis: {', '.join(list(_mapa_voz.keys())[:6])}"
                 )
 
-            # Botões de confirmação
-            _b1, _b2, _b3 = st.columns([2, 1, 1])
+            st.markdown("<br>", unsafe_allow_html=True)
+            _b1, _b2 = st.columns([2, 1])
+            _pode = bool(_aid and _p["peso"] and _p["peso"] > 0)
             with _b1:
-                _pode_salvar = bool(_aid and _parsed["peso"] and _parsed["peso"] > 0)
-                if st.button(
-                    "✅ Confirmar e salvar pesagem",
-                    type="primary",
-                    key="btn_voz_confirmar",
-                    disabled=not _pode_salvar,
-                    use_container_width=True
-                ):
+                if st.button("✅ Confirmar e salvar pesagem",
+                             type="primary", key="btn_voz_ok",
+                             disabled=not _pode,
+                             use_container_width=True):
                     try:
-                        adicionar_pesagem(_aid, _parsed["peso"], str(_data_pes))
+                        adicionar_pesagem(_aid, _p["peso"], str(_data_v))
                         toast_ok(
-                            f"Pesagem salva: {_parsed['animal']} "
-                            f"— {_parsed['peso']} kg em {fmt_data(str(_data_pes))}"
+                            f"✅ Pesagem salva — {_p['animal']} "
+                            f"{_p['peso']} kg em {fmt_data(str(_data_v))}"
                         )
-                        st.session_state["_voz_transcricao"] = ""
+                        st.query_params.clear()
                         st.rerun()
                     except Exception as _ev:
-                        toast_erro(f"Erro ao salvar: {_ev}")
+                        toast_erro(f"Erro: {_ev}")
             with _b2:
-                if st.button("✏️ Corrigir", key="btn_voz_corrigir",
+                if st.button("🔄 Nova pesagem", key="btn_voz_nova",
                              use_container_width=True):
-                    st.session_state["_voz_transcricao"] = ""
                     st.rerun()
-            with _b3:
-                if not _pode_salvar and _parsed["animal"] and _aid and _parsed["peso"]:
-                    pass
-                elif not _pode_salvar:
-                    st.caption("Corrija animal ou peso")
+
+            if not _pode and not _aid and _p["animal"]:
+                st.caption("Corrija o nome do animal ou selecione manualmente abaixo.")
 
         st.divider()
         # ── FIM PESAGEM POR VOZ ───────────────────────────────────────────
