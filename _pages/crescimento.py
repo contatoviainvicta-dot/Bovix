@@ -901,3 +901,410 @@ from_email  = "seuemail@gmail.com"
                 toast_ok("Email de teste enviado com sucesso!")
             else:
                 st.error(f"Falha: {msg}")
+
+def page_ferramentas_publicas(u=None):
+    """Página pública de ferramentas — sem necessidade de login."""
+    from datetime import date, timedelta
+    import math
+
+    # ── CSS da página pública ─────────────────────────────────────────
+    st.markdown("""
+<style>
+.ferr-hero{
+  background:linear-gradient(135deg,#1B4332 0%,#2D6A4F 50%,#40916C 100%);
+  border-radius:16px;padding:32px 36px;margin-bottom:24px;color:white;
+}
+.ferr-titulo{font-family:Georgia,serif;font-size:28px;font-weight:700;
+  margin:0 0 6px}
+.ferr-sub{font-size:15px;opacity:.85;margin:0 0 20px}
+.ferr-cta-btn{
+  display:inline-block;background:#F5F0E8;color:#1B4332;
+  font-weight:700;font-size:14px;padding:10px 24px;border-radius:8px;
+  text-decoration:none;letter-spacing:.3px;
+}
+.ferr-card{
+  background:white;border:1px solid #E5E7EB;border-radius:12px;
+  padding:20px 24px;margin-bottom:16px;
+}
+.ferr-card-titulo{font-size:16px;font-weight:700;color:#1B4332;
+  margin-bottom:4px}
+.ferr-card-sub{font-size:12px;color:#6B7280;margin-bottom:16px}
+.ferr-resultado{
+  background:#E8F5EE;border:2px solid #40916C;border-radius:10px;
+  padding:16px 20px;margin-top:12px;
+}
+.ferr-res-label{font-size:11px;color:#40916C;letter-spacing:1px;
+  text-transform:uppercase;margin-bottom:4px}
+.ferr-res-valor{font-size:28px;font-weight:700;color:#1B4332}
+.ferr-res-detalhe{font-size:12px;color:#6B7280;margin-top:4px}
+.ferr-cta-inline{
+  background:#1B4332;border-radius:10px;padding:16px 20px;
+  margin-top:16px;display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:12px;
+}
+.ferr-cta-texto{color:white;font-size:13px;font-weight:500}
+.ferr-cta-link{
+  background:#40916C;color:white;padding:8px 18px;border-radius:6px;
+  font-size:12px;font-weight:700;text-decoration:none;white-space:nowrap;
+}
+</style>
+""", unsafe_allow_html=True)
+
+    # ── Hero com CTA ──────────────────────────────────────────────────
+    st.markdown("""
+<div class="ferr-hero">
+  <div class="ferr-titulo">🐄 Ferramentas Gratuitas para Pecuária</div>
+  <div class="ferr-sub">
+    Calcule GMD, previsão de abate, custo por arroba e muito mais.<br>
+    Sem cadastro. Sem limite. 100% gratuito.
+  </div>
+  <a class="ferr-cta-btn" href="https://2qemgappujzfxkzrbez75v7.streamlit.app"
+     target="_blank">
+    🚀 Gerenciar meu rebanho no Auroque →
+  </a>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Abas das ferramentas ──────────────────────────────────────────
+    _t1, _t2, _t3, _t4, _t5 = st.tabs([
+        "⚡ GMD",
+        "🔪 Previsão de Abate",
+        "💰 Custo / Arroba",
+        "📅 Calendário Sanitário",
+        "🌿 Lotação de Pastagem",
+    ])
+
+    # ── FERRAMENTA 1: GMD ─────────────────────────────────────────────
+    with _t1:
+        st.markdown("""<div class="ferr-card">
+<div class="ferr-card-titulo">⚡ Calculadora de GMD</div>
+<div class="ferr-card-sub">Ganho Médio Diário de peso do animal</div>
+</div>""", unsafe_allow_html=True)
+
+        _c1, _c2, _c3 = st.columns(3)
+        with _c1:
+            _pi = st.number_input("Peso inicial (kg)", min_value=100.0,
+                                  max_value=800.0, value=300.0, step=5.0,
+                                  key="gmd_pi")
+        with _c2:
+            _pf = st.number_input("Peso final (kg)", min_value=100.0,
+                                  max_value=800.0, value=420.0, step=5.0,
+                                  key="gmd_pf")
+        with _c3:
+            _dias = st.number_input("Dias no período", min_value=1,
+                                    max_value=730, value=90, key="gmd_dias")
+
+        if _pf > _pi and _dias > 0:
+            _gmd = (_pf - _pi) / _dias
+            _class = ("Excelente 🟢" if _gmd >= 1.2
+                      else "Bom 🟡" if _gmd >= 0.8
+                      else "Abaixo do esperado 🔴")
+            st.markdown(f"""
+<div class="ferr-resultado">
+  <div class="ferr-res-label">GMD calculado</div>
+  <div class="ferr-res-valor">{_gmd:.3f} kg/dia</div>
+  <div class="ferr-res-detalhe">
+    Ganho total: {_pf-_pi:.0f} kg em {_dias} dias · Classificação: {_class}
+  </div>
+</div>
+<div class="ferr-cta-inline">
+  <div class="ferr-cta-texto">
+    💡 No Auroque, o GMD é calculado automaticamente para cada animal do seu lote
+  </div>
+  <a class="ferr-cta-link"
+     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
+    Ver no meu rebanho →
+  </a>
+</div>
+""", unsafe_allow_html=True)
+        elif _pf <= _pi:
+            st.warning("O peso final deve ser maior que o peso inicial.")
+
+    # ── FERRAMENTA 2: PREVISÃO DE ABATE ───────────────────────────────
+    with _t2:
+        st.markdown("""<div class="ferr-card">
+<div class="ferr-card-titulo">🔪 Previsão de Abate</div>
+<div class="ferr-card-sub">Quando o animal atingirá o peso ideal de abate</div>
+</div>""", unsafe_allow_html=True)
+
+        _c1, _c2, _c3 = st.columns(3)
+        with _c1:
+            _pa_atual = st.number_input("Peso atual (kg)", min_value=100.0,
+                                        max_value=800.0, value=380.0, step=5.0,
+                                        key="abate_pa")
+        with _c2:
+            _pa_alvo  = st.number_input("Peso alvo de abate (kg)", min_value=100.0,
+                                        max_value=800.0, value=500.0, step=5.0,
+                                        key="abate_alvo")
+        with _c3:
+            _pa_gmd   = st.number_input("GMD esperado (kg/dia)", min_value=0.1,
+                                        max_value=3.0, value=1.0, step=0.05,
+                                        key="abate_gmd")
+
+        if _pa_alvo > _pa_atual and _pa_gmd > 0:
+            _dias_abate = math.ceil((_pa_alvo - _pa_atual) / _pa_gmd)
+            _data_abate = date.today() + timedelta(days=_dias_abate)
+            _arrobas    = _pa_alvo * 0.5 / 15
+            st.markdown(f"""
+<div class="ferr-resultado">
+  <div class="ferr-res-label">Previsão de abate</div>
+  <div class="ferr-res-valor">{_data_abate.strftime('%d/%m/%Y')}</div>
+  <div class="ferr-res-detalhe">
+    {_dias_abate} dias restantes ·
+    Peso faltando: {_pa_alvo-_pa_atual:.0f} kg ·
+    Rendimento estimado: {_arrobas:.1f} @
+  </div>
+</div>
+<div class="ferr-cta-inline">
+  <div class="ferr-cta-texto">
+    💡 O Auroque calcula isso automaticamente para todos os animais do lote
+  </div>
+  <a class="ferr-cta-link"
+     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
+    Testar grátis →
+  </a>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── FERRAMENTA 3: CUSTO / ARROBA ──────────────────────────────────
+    with _t3:
+        st.markdown("""<div class="ferr-card">
+<div class="ferr-card-titulo">💰 Custo e Margem por Arroba</div>
+<div class="ferr-card-sub">
+  Calcule o custo de produção e a margem esperada na venda
+</div>
+</div>""", unsafe_allow_html=True)
+
+        _c1, _c2 = st.columns(2)
+        with _c1:
+            _cv_compra  = st.number_input("Custo de compra (R$)", min_value=0.0,
+                                           value=3000.0, step=100.0, key="arr_compra")
+            _cv_racao   = st.number_input("Ração e suplementos (R$)", min_value=0.0,
+                                           value=800.0, step=50.0, key="arr_racao")
+            _cv_sanit   = st.number_input("Sanidade/veterinário (R$)", min_value=0.0,
+                                           value=150.0, step=10.0, key="arr_sanit")
+        with _c2:
+            _cv_outros  = st.number_input("Outros custos (R$)", min_value=0.0,
+                                           value=200.0, step=10.0, key="arr_outros")
+            _cv_peso_v  = st.number_input("Peso de venda (kg)", min_value=100.0,
+                                           value=500.0, step=10.0, key="arr_peso")
+            _cv_preco_a = st.number_input("Preço da arroba (R$)", min_value=0.0,
+                                           value=320.0, step=5.0, key="arr_preco")
+
+        _custo_total = _cv_compra + _cv_racao + _cv_sanit + _cv_outros
+        _arrobas_v   = _cv_peso_v * 0.5 / 15
+        _receita     = _arrobas_v * _cv_preco_a
+        _margem      = _receita - _custo_total
+        _custo_at    = _custo_total / _arrobas_v if _arrobas_v > 0 else 0
+        _margem_pct  = (_margem / _custo_total * 100) if _custo_total > 0 else 0
+        _cor_m       = "#1B4332" if _margem >= 0 else "#E24B4A"
+
+        st.markdown(f"""
+<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <div>
+      <div class="ferr-res-label">Custo total</div>
+      <div class="ferr-res-valor" style="font-size:22px">
+        R$ {_custo_total:,.0f}</div>
+    </div>
+    <div>
+      <div class="ferr-res-label">Receita estimada</div>
+      <div class="ferr-res-valor" style="font-size:22px">
+        R$ {_receita:,.0f}</div>
+    </div>
+    <div>
+      <div class="ferr-res-label">Margem</div>
+      <div class="ferr-res-valor" style="font-size:22px;color:{_cor_m}">
+        R$ {_margem:,.0f}</div>
+    </div>
+  </div>
+  <div class="ferr-res-detalhe" style="margin-top:8px">
+    Custo/@ R$ {_custo_at:.0f} ·
+    {_arrobas_v:.1f} arrobas ·
+    Margem {_margem_pct:.1f}%
+  </div>
+</div>
+<div class="ferr-cta-inline">
+  <div class="ferr-cta-texto">
+    💡 No Auroque, o DRE completo é gerado automaticamente por lote
+  </div>
+  <a class="ferr-cta-link"
+     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
+    Ver DRE completo →
+  </a>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── FERRAMENTA 4: CALENDÁRIO SANITÁRIO ───────────────────────────
+    with _t4:
+        st.markdown("""<div class="ferr-card">
+<div class="ferr-card-titulo">📅 Calendário Sanitário</div>
+<div class="ferr-card-sub">
+  Vacinas e procedimentos recomendados por fase do lote
+</div>
+</div>""", unsafe_allow_html=True)
+
+        _fase = st.selectbox("Fase / categoria do lote", [
+            "Cria (0-6 meses)",
+            "Recria (7-18 meses)",
+            "Engorda (19-30 meses)",
+            "Vacas em produção",
+            "Touros",
+        ], key="cal_fase")
+
+        _calendario = {
+            "Cria (0-6 meses)": [
+                ("Brucelose (fêmeas 3-8 meses)", "Obrigatória", "3-8 meses"),
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Clostridioses (polivalente)", "Recomendada", "2-3 meses"),
+                ("Raiva", "Recomendada", "Regiões de risco"),
+                ("Vermifugação estratégica", "Recomendada", "A cada 90 dias"),
+            ],
+            "Recria (7-18 meses)": [
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Raiva", "Recomendada", "Anual"),
+                ("Clostridioses (polivalente)", "Recomendada", "Anual"),
+                ("Vermifugação", "Recomendada", "A cada 90 dias"),
+                ("Carrapatos (banho/pour-on)", "Recomendada", "Monitorar"),
+            ],
+            "Engorda (19-30 meses)": [
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Clostridioses (polivalente)", "Recomendada", "Entrada no confinamento"),
+                ("Vermifugação estratégica", "Recomendada", "Entrada + 60 dias"),
+                ("Controle de carrapatos", "Recomendada", "Monitorar"),
+                ("IBR / BVD", "Recomendada", "Entrada no confinamento"),
+            ],
+            "Vacas em produção": [
+                ("Brucelose (não vacinadas)", "Obrigatória", "Verificar status"),
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Clostridioses", "Recomendada", "Anual — pré-parto"),
+                ("Leptospirose", "Recomendada", "Anual"),
+                ("Vermifugação pós-parto", "Recomendada", "30 dias pós-parto"),
+            ],
+            "Touros": [
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Brucelose (exame)", "Obrigatória", "Anual"),
+                ("Clostridioses", "Recomendada", "Anual"),
+                ("Leptospirose", "Recomendada", "Antes da estação"),
+                ("Exame andrológico", "Recomendada", "Anual — pré-estação"),
+            ],
+        }
+
+        import pandas as _pd_cal
+        _df_cal = _pd_cal.DataFrame(
+            _calendario[_fase],
+            columns=["Procedimento", "Tipo", "Frequência / Quando"]
+        )
+        st.dataframe(_df_cal, hide_index=True, use_container_width=True)
+
+        st.markdown(f"""
+<div class="ferr-cta-inline">
+  <div class="ferr-cta-texto">
+    💡 No Auroque, o calendário sanitário é gerado automaticamente
+    com alertas no celular via WhatsApp
+  </div>
+  <a class="ferr-cta-link"
+     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
+    Criar meu calendário →
+  </a>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── FERRAMENTA 5: LOTAÇÃO DE PASTAGEM ─────────────────────────────
+    with _t5:
+        st.markdown("""<div class="ferr-card">
+<div class="ferr-card-titulo">🌿 Calculadora de Lotação de Pastagem</div>
+<div class="ferr-card-sub">
+  Quantos animais sua área suporta com segurança
+</div>
+</div>""", unsafe_allow_html=True)
+
+        _c1, _c2 = st.columns(2)
+        with _c1:
+            _area_ha  = st.number_input("Área total (hectares)", min_value=1.0,
+                                         value=50.0, step=1.0, key="lot_area")
+            _capac_ua = st.number_input("Capacidade de suporte (UA/ha)", min_value=0.1,
+                                         max_value=10.0, value=1.5, step=0.1,
+                                         key="lot_capac",
+                                         help="Brachiaria: 1-2 UA/ha · Panicum: 2-4 UA/ha · Intensivo: 4-8 UA/ha")
+        with _c2:
+            _peso_med = st.number_input("Peso médio dos animais (kg)", min_value=100.0,
+                                         value=400.0, step=10.0, key="lot_peso")
+            _tipo_past = st.selectbox("Tipo de pastagem", [
+                "Brachiaria brizantha",
+                "Brachiaria decumbens",
+                "Panicum maximum (Mombaça)",
+                "Panicum maximum (Tanzânia)",
+                "Tifton 85 (irrigado)",
+                "Outro",
+            ], key="lot_tipo")
+
+        # 1 UA = 450 kg de peso vivo
+        _ua_por_animal = _peso_med / 450
+        _ua_total      = _area_ha * _capac_ua
+        _n_animais     = math.floor(_ua_total / _ua_por_animal)
+        _ua_usada_pct  = (_ua_por_animal * _n_animais / _ua_total * 100)
+
+        _refs_capac = {
+            "Brachiaria brizantha":         "1,5 – 2,5 UA/ha",
+            "Brachiaria decumbens":          "1,0 – 1,8 UA/ha",
+            "Panicum maximum (Mombaça)":     "2,5 – 4,0 UA/ha",
+            "Panicum maximum (Tanzânia)":    "2,0 – 3,5 UA/ha",
+            "Tifton 85 (irrigado)":          "4,0 – 8,0 UA/ha",
+            "Outro":                         "Consulte um agrônomo",
+        }
+
+        st.markdown(f"""
+<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <div>
+      <div class="ferr-res-label">Animais suportados</div>
+      <div class="ferr-res-valor">{_n_animais}</div>
+    </div>
+    <div>
+      <div class="ferr-res-label">UA total da área</div>
+      <div class="ferr-res-valor">{_ua_total:.1f} UA</div>
+    </div>
+    <div>
+      <div class="ferr-res-label">UA por animal</div>
+      <div class="ferr-res-valor">{_ua_por_animal:.2f} UA</div>
+    </div>
+  </div>
+  <div class="ferr-res-detalhe" style="margin-top:8px">
+    Referência {_tipo_past}: {_refs_capac[_tipo_past]} ·
+    Ocupação: {_ua_usada_pct:.0f}% da capacidade
+  </div>
+</div>
+<div class="ferr-cta-inline">
+  <div class="ferr-cta-texto">
+    💡 No Auroque você monitora piquetes e rotação de pastagem em tempo real
+  </div>
+  <a class="ferr-cta-link"
+     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
+    Conhecer o Auroque →
+  </a>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Rodapé CTA ────────────────────────────────────────────────────
+    st.divider()
+    st.markdown("""
+<div style="text-align:center;padding:24px 16px">
+  <div style="font-size:22px;font-weight:700;color:#1B4332;margin-bottom:8px">
+    Gostou das ferramentas?
+  </div>
+  <div style="font-size:14px;color:#6B7280;margin-bottom:16px">
+    No Auroque, tudo isso é automático — GMD, previsão de abate, DRE,
+    calendário sanitário e muito mais. Gerencie seu rebanho com inteligência.
+  </div>
+  <a href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank"
+     style="background:#1B4332;color:white;font-size:15px;font-weight:700;
+            padding:14px 32px;border-radius:10px;text-decoration:none;
+            display:inline-block">
+    🚀 Criar conta gratuita no Auroque
+  </a>
+  <div style="font-size:12px;color:#9CA3AF;margin-top:12px">
+    Grátis para até 50 animais · Sem cartão de crédito
+  </div>
+</div>
+""", unsafe_allow_html=True)
