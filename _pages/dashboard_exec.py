@@ -43,7 +43,6 @@ except ImportError:
             if not df.empty: safe_bar_chart(df)
             else: st.info(empty_msg)
         except Exception as e: st.info(f"Grafico indisponivel: {e}")
-import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date, datetime
 
@@ -181,7 +180,7 @@ def page_dashboard_executivo(u):
                     color:#666;font-size:12px'>{pct}%</td>
             </tr>"""
         html_dre += "</table>"
-        components.html(html_dre, height=220)
+        st.html(html_dre)
 
         # Gráfico de pizza custos vs margem
         st.divider()
@@ -661,7 +660,6 @@ def page_dashboard_executivo(u):
 
             # DRE em tabela
             st.divider()
-            import streamlit.components.v1 as _comp
             linhas_p = [
                 ("(+) Receita de vendas",  dre_p["receita_venda"],  False, True),
                 ("(-) Custo de compra",    dre_p["custo_compra"],   False, False),
