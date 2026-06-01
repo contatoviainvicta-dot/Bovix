@@ -5332,6 +5332,12 @@ def hdr(icone, titulo, sub=""):
 if "usuario" not in st.session_state:
     st.session_state.usuario = None
 
+# Ler query param de menu na URL (ex: ?menu=Ferramentas)
+_qp_menu = st.query_params.get("menu", "")
+if _qp_menu and not st.session_state.get("menu"):
+    st.session_state["menu"] = _qp_menu
+    st.query_params.clear()
+
 # Ferramentas públicas - acesso sem login
 if st.session_state.get("menu") == "Ferramentas" and st.session_state.usuario is None:
     page_ferramentas_publicas()
