@@ -948,20 +948,37 @@ function pa(){
 }
 
 function confirmar(){
-  // Preencher o campo oculto e submeter via URL param
   try{
+    // 1. Gravar texto na URL sem recarregar a página
     var url=new URL(window.parent.location.href);
     url.searchParams.set('_voz_txt', encodeURIComponent(txt));
-    window.parent.location.href = url.toString();
+    window.parent.history.replaceState({},'',url.toString());
+
+    // 2. Clicar no botão Streamlit oculto para forçar rerun
+    var btns = window.parent.document.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){
+      if(btns[i].textContent.trim() === '_voz_rerun_'){
+        btns[i].click();
+        return;
+      }
+    }
+
+    // 3. Fallback: recarregar preservando query params
+    window.parent.location.reload();
   }catch(e){
-    // Fallback: copiar para clipboard
-    navigator.clipboard.writeText(txt);
-    document.getElementById('sv').textContent='📋 Copiado! Cole no campo abaixo.';
+    navigator.clipboard.writeText(txt).catch(function(){});
+    document.getElementById('sv').textContent=
+      '📋 Cole o texto no campo abaixo';
   }
 }
 </script>
 """
         _stc.html(_html_voz, height=200)
+
+        # Botão oculto — clicado pelo JS para forçar rerun do Streamlit
+        if st.button("_voz_rerun_", key="_btn_voz_rerun",
+                     label_visibility="hidden"):
+            pass  # apenas dispara o rerun
 
         # Ler transcrição do query param — disparado pelo botão "Usar esta transcrição"
         _voz_param = st.query_params.get("_voz_txt", "")
