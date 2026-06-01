@@ -605,8 +605,7 @@ def page_planos(u):
     }
 
     # Cards via components para renderizar HTML/CSS completo
-    import streamlit.components.v1 as _components
-
+    
     _feats_map = {
         "free":       [("ok","Ate 50 animais"),("ok","1 fazenda"),("ok","Calendario sanitario"),("no","Modulo veterinario"),("no","Relatorios avancados")],
         "pro":        [("ok","Ate 500 animais"),("ok","3 fazendas"),("ok","Calendario sanitario"),("ok","Relatorios avancados"),("no","Modulo veterinario")],
@@ -746,7 +745,7 @@ def page_planos(u):
         {_cards_html}
     </div>"""
 
-    _components.html(_html_full, height=480, scrolling=False)
+    st.html(_html_full)
 
     st.divider()
 
