@@ -1090,10 +1090,23 @@ button[kind="secondary"][data-testid*="voz_rerun"]{
             df_p_ws["Data"] = pd.to_datetime(df_p_ws["Data"])
             df_p_ws = df_p_ws.sort_values("Data")
 
-            # Gráfico: evolução do peso médio do lote
-            df_media = df_p_ws.groupby("Data")["Peso"].mean().reset_index()
-            st.caption("Peso médio diário de todos os animais do lote")
-            safe_line_chart(df_media.set_index("Data")["Peso"])
+            # Gráfico: peso médio do lote por período
+            # Estratégia: para cada animal, pegar o peso mais recente
+            # até cada data — depois calcular a média entre animais
+            # Isso produz uma linha suave mesmo com datas diferentes
+
+            # 1. Pivotar: cada animal vira coluna, cada data vira linha
+            _df_pivot = df_p_ws.pivot_table(
+                index="Data", columns="Animal",
+                values="Peso", aggfunc="mean"
+            )
+            # 2. Forward-fill: propagar último peso conhecido p/ datas sem pesagem
+            _df_pivot = _df_pivot.sort_index().ffill()
+            # 3. Média diária entre todos os animais com dados
+            _df_media = _df_pivot.mean(axis=1).reset_index()
+            _df_media.columns = ["Data", "Peso Médio (kg)"]
+            st.caption("Peso médio do lote — evolução ao longo do tempo")
+            safe_line_chart(_df_media.set_index("Data")["Peso Médio (kg)"])
 
             st.subheader("Todas as pesagens")
             # Exibir com data formatada
