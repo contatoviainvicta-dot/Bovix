@@ -5656,99 +5656,20 @@ if u and not is_admin():
 
 # ── sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    perf_ico = {"admin":"gear","veterinario":"stethoscope","fazendeiro":"seedling"}.get(u["perfil"],"person")
-    st.markdown(f"**{u['nome']}**")
-    st.caption(u["perfil"].capitalize())
-    if st.button("Sair", width='stretch'):
-        st.session_state.usuario       = None
-        st.session_state.onboarding_ok = None
-        st.session_state.wizard_pulado = False
-        st.session_state.wizard_passo  = 1
-        st.rerun()
 
-    @st.cache_data(ttl=300, show_spinner=False)
-    def _plano_usuario(uid):
-        return obter_status_plano(uid)
-    sp = _plano_usuario(u["id"])
-    if sp["plano"] == "trial":
-        dr = sp["dias_restantes"]
-        if dr <= 3:
-            st.sidebar.error(f"Trial: {dr} dia(s) restante(s)!")
-        elif dr <= 7:
-            st.sidebar.warning(f"Trial: {dr} dias restantes")
-        else:
-            limites  = obter_limites_usuario(u["id"])
-            plano_nm = (limites["plano_nome"] if limites else "trial").upper()
-            st.sidebar.markdown(f"""
-<div style="background:rgba(200,134,10,0.15);border:0.5px solid rgba(200,134,10,0.4);
-            border-radius:6px;padding:7px 10px;margin:2px 0 4px">
-  <div style="font-size:8px;color:#C8860A;font-weight:700;letter-spacing:1px">TRIAL &middot; {dr} DIAS</div>
-  <div style="font-size:10px;color:rgba(255,255,255,0.45);margin-top:1px">{plano_nm}</div>
-</div>""", unsafe_allow_html=True)
-    elif sp["plano"] == "expirado":
-        st.sidebar.error("Trial expirado")
-    else:
-        limites  = obter_limites_usuario(u["id"])
-        plano_nm = (limites["plano_nome"] if limites else "ativo").upper()
-        st.sidebar.markdown(f"""
-<div style="background:rgba(200,134,10,0.15);border:0.5px solid rgba(200,134,10,0.4);
-            border-radius:6px;padding:7px 10px;margin:2px 0 4px">
-  <div style="font-size:8px;color:#C8860A;font-weight:700;letter-spacing:1px">PLANO {plano_nm}</div>
-  <div style="font-size:10px;color:rgba(255,255,255,0.45);margin-top:1px">Conta ativa</div>
-</div>""", unsafe_allow_html=True)
-
-    # Alertas sidebar filtrados pelo usuario logado
-    # Alertas sem cache - cada usuario ve apenas os seus proprios
-    # ── Atalhos rápidos na sidebar ──────────────────────────────────
-    if not is_admin():
-        with st.sidebar:
-            st.markdown(
-                "<div style='font-size:10px;color:rgba(245,240,232,.5);"
-                "letter-spacing:1px;text-transform:uppercase;"
-                "margin:4px 0 6px;padding:0 4px'>Acesso rápido</div>",
-                unsafe_allow_html=True
-            )
-            _atalhos = [
-                ("⚖️ Pesagem por voz",   "Workspace do Lote"),
-                ("📋 Prontuário",         "Prontuario Animal"),
-                ("💊 Receituário",        "Receituario"),
-                ("💰 Financeiro",         "Dashboard Financeiro"),
-                ("📥 Exportar dados",     "Exportar Relatorios"),
-            ] if is_vet() else [
-                ("⚖️ Pesagem por voz",   "Workspace do Lote"),
-                ("🐄 Cadastrar animal",   "Cadastrar Animal"),
-                ("💰 Financeiro",         "Dashboard Financeiro"),
-                ("📋 Prontuário",         "Prontuario Animal"),
-                ("📥 Exportar dados",     "Exportar Relatorios"),
-            ]
-            for _label, _destino in _atalhos:
-                if st.button(
-                    _label,
-                    key=f"_atl_{_destino}",
-                    use_container_width=True,
-                ):
-                    st.session_state.menu = _destino
-                    st.rerun()
-            st.markdown(
-                "<div style='height:1px;background:rgba(245,240,232,.15);"
-                "margin:8px 0'></div>",
-                unsafe_allow_html=True
-            )
-    # ── Cabeçalho sidebar ────────────────────────────────────────────
+    # ── 1. LOGO + FAZENDA + PERFIL (TOPO) ────────────────────────────
     _sb_nome_raw = u.get("nome", "")
-    # Limpar sufixos técnicos do nome (ex: "Fazendeiro 2 - Fazenda X - Nome: Y")
-    _sb_fazenda = ""
+    _sb_fazenda  = ""
     if " - " in _sb_nome_raw:
         _sb_fazenda = _sb_nome_raw.split(" - ")[-1].strip()
-        if " - Nome:" in _sb_fazenda:
-            _sb_fazenda = _sb_fazenda.split(" - Nome:")[0].strip()
-        if _sb_fazenda.startswith("Fazenda "):
+        _sb_fazenda = _sb_fazenda.split(" - Nome:")[0].strip()
+        if _sb_fazenda.lower().startswith("fazenda "):
             _sb_fazenda = _sb_fazenda[8:].strip()
     elif " - Fazenda" in _sb_nome_raw:
         _sb_fazenda = _sb_nome_raw.split(" - Fazenda")[-1].strip()
-    else:
-        _sb_fazenda = _sb_nome_raw.split(" - Nome:")[-1].strip()             if " - Nome:" in _sb_nome_raw else ""
-
+    elif " - Nome:" in _sb_nome_raw:
+        _sb_fazenda = _sb_nome_raw.split(" - Nome:")[0].strip()
+        _sb_fazenda = _sb_fazenda.split(" - ")[-1].strip()
     _sb_perfil = u.get("perfil", "fazendeiro").capitalize()
     _sb_plano  = (u.get("plano") or "free").upper()
     _plano_cor = {
@@ -5756,9 +5677,8 @@ with st.sidebar:
         "VET": "#2563EB", "ENTERPRISE": "#7C3AED"
     }.get(_sb_plano, "#6B7280")
 
-    st.sidebar.markdown(f"""
-<div style="padding:12px 4px 10px">
-  <!-- Logo -->
+    st.markdown(f"""
+<div style="padding:14px 4px 10px">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
     <svg width="36" height="36" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
       <polygon points="22,3 39,13 39,31 22,41 5,31 5,13"
@@ -5776,15 +5696,13 @@ with st.sidebar:
            margin-top:2px">GESTÃO PECUÁRIA</div>
     </div>
   </div>
-  <!-- Fazenda + Perfil -->
   <div style="background:rgba(64,145,108,.15);border-radius:8px;
-       padding:8px 10px;margin-bottom:4px">
+       padding:8px 10px;margin-bottom:6px">
     <div style="font-size:13px;font-weight:600;color:#F5F0E8;
          white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
       🏡 {_sb_fazenda or 'Minha Fazenda'}</div>
     <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
-      <span style="font-size:11px;color:rgba(245,240,232,.6)">
-        {_sb_perfil}</span>
+      <span style="font-size:11px;color:rgba(245,240,232,.6)">{_sb_perfil}</span>
       <span style="background:{_plano_cor};color:white;font-size:9px;
             font-weight:700;padding:1px 6px;border-radius:4px;
             letter-spacing:.5px">{_sb_plano}</span>
@@ -5793,159 +5711,70 @@ with st.sidebar:
 </div>
 """, unsafe_allow_html=True)
 
-    st.sidebar.markdown(
-        "<div style='font-size:10px;color:rgba(245,240,232,.4);"
-        "letter-spacing:1px;text-transform:uppercase;"
-        "padding:2px 4px 6px'>Menu</div>",
+    # ── 2. BOTÃO SAIR ─────────────────────────────────────────────────
+    if st.button("Sair", key="_btn_sair", use_container_width=True):
+        st.session_state.usuario       = None
+        st.session_state.onboarding_ok = None
+        st.session_state.wizard_pulado = False
+        st.session_state.wizard_passo  = 1
+        st.rerun()
+
+    st.markdown(
+        "<div style='height:1px;background:rgba(245,240,232,.15);"
+        "margin:6px 0 8px'></div>",
         unsafe_allow_html=True
     )
 
-    GRUPOS = {
-        "Inicio": [
-            ("Inicio",               "Painel geral"),
-            ("Workspace do Lote",    "Visao completa do lote"),
-        ],
-    }
+    # ── 3. ATALHOS RÁPIDOS ────────────────────────────────────────────
+    if not is_admin():
+        st.markdown(
+            "<div style='font-size:10px;color:rgba(245,240,232,.45);"
+            "letter-spacing:1px;text-transform:uppercase;"
+            "margin:0 0 5px;padding:0 2px'>Acesso rápido</div>",
+            unsafe_allow_html=True
+        )
+        _atalhos = [
+            ("⚖️ Pesagem por voz",   "Workspace do Lote"),
+            ("📋 Prontuário",         "Prontuario Animal"),
+            ("💊 Receituário",        "Receituario"),
+            ("💰 Financeiro",         "Dashboard Financeiro"),
+            ("📥 Exportar dados",     "Exportar Relatorios"),
+        ] if is_vet() else [
+            ("⚖️ Pesagem por voz",   "Workspace do Lote"),
+            ("🐄 Cadastrar animal",   "Cadastrar Animal"),
+            ("💰 Financeiro",         "Dashboard Financeiro"),
+            ("📋 Prontuário",         "Prontuario Animal"),
+            ("📥 Exportar dados",     "Exportar Relatorios"),
+        ]
+        for _label, _destino in _atalhos:
+            if st.button(_label, key=f"_atl_{_destino}",
+                         use_container_width=True):
+                st.session_state.menu = _destino
+                st.rerun()
+        st.markdown(
+            "<div style='height:1px;background:rgba(245,240,232,.15);"
+            "margin:8px 0'></div>",
+            unsafe_allow_html=True
+        )
 
-    if is_admin():
-        # ── ADMIN: visao operacional + administrativa ──
-        GRUPOS["Analise"] = [
-            ("Dashboard Executivo",  "KPIs consolidados"),
-            ("Dashboard Sanitario",  "Incidencias e alertas"),
-            ("Analisar por Lote",    "GMD e desempenho"),
-            ("Analisar Animal",      "Analise individual"),
-            ("Score de Saude",       "Ranking 0-100"),
-            ("GMD Temporal",         "Evolucao no tempo"),
-            ("Comparativo Lotes",    "Side by side"),
-            ("Pesquisar Ocorrencias","Busca avancada"),
-        ]
-        GRUPOS["Inteligencia"] = [
-            ("Risco Sanitario IA",   "Score de risco do lote"),
-            ("Previsao de Abate IA", "Predicao por animal"),
-            ("Anomalias de Peso",    "Alertas inteligentes"),
-        ]
-        GRUPOS["Administracao"] = [
-            ("Painel Admin",         "MRR, usuarios e erros"),
-            ("Administracao",        "Usuarios e planos"),
-            ("Gestao Usuarios",      "Planos e acessos vet"),
-            ("Log Auditoria",        "Historico de acoes"),
-            ("Diagnostico DB",       "Schema do banco"),
-        ]
-        GRUPOS["Sistema"] = [
-            ("Importar CSV",         "Importar animais e pesagens"),
-            ("Exportar Relatorios",  "PDF e Excel"),
-            ("Backup",               "Download do banco"),
-            ("Notificacoes",         "E-mail e alertas"),
-            ("Mensagens",            "Inbox vet-fazendeiro"),
-        ]
+    # ── 4. PLANO / TRIAL (discreto, sem erro vermelho) ────────────────
+    @st.cache_data(ttl=300, show_spinner=False)
+    def _plano_usuario(uid):
+        return obter_status_plano(uid)
+    _sp = _plano_usuario(u["id"])
+    if _sp and _sp.get("plano") == "trial":
+        _dr = _sp.get("dias_restantes", 0)
+        if _dr <= 3:
+            st.warning(f"⚠️ Trial: {_dr} dia(s) restante(s)")
+        elif _dr <= 7:
+            st.caption(f"Trial: {_dr} dias restantes")
 
-    else:
-        # ── FAZENDEIRO (base) - o VETERINARIO tambem entra aqui e ve
-        #    todas as telas do fazendeiro. NAO usar elif: o vet herda
-        #    estes grupos e recebe os grupos clinicos adicionais abaixo.
-        GRUPOS["Rebanho"] = [
-            ("Cadastrar Lote",       "Novo lote"),
-            ("Cadastrar Animal",     "Novo animal"),
-            ("Registrar Pesagem",    "Nova pesagem"),
-            ("Registrar Ocorrencia", "Nova ocorrencia"),
-            ("Buscar Animal",        "Busca por brinco"),
-            ("Status do Lote",       "Alterar status"),
-            ("Transferir Animal",    "Mover entre lotes"),
-            ("Registrar Morte",      "Baixa de animal"),
-            ("Editar Lote",          "Alterar lote"),
-            ("Editar Animal",        "Alterar animal"),
-            ("Editar Pesagens",      "Corrigir pesagens"),
-        ]
-        GRUPOS["Gestao Sanitaria"] = [
-            ("Prontuario Animal",    "Historico completo"),
-            ("Gerenciar Ocorrencias","Tratamentos e ocorrencias"),
-            ("Calendario Sanitario", "Vacinas e alertas"),
-            ("Estoque Medicamentos", "Controle de estoque"),
-            ("Controle Reprodutivo", "IATF e prenhez"),
-        ]
-        GRUPOS["Analises"] = [
-            ("Dashboard Executivo",  "KPIs consolidados"),
-            ("Dashboard Sanitario",  "Incidencias e alertas"),
-            ("Analisar por Lote",    "GMD e desempenho"),
-            ("Analisar Animal",      "Analise individual"),
-            ("Comparativo Lotes",    "Side by side"),
-            ("Score de Saude",       "Ranking 0-100"),
-            ("GMD Temporal",         "Evolucao no tempo"),
-            ("Pesquisar Ocorrencias","Busca avancada"),
-        ]
-        GRUPOS["Inteligencia IA"] = [
-            ("Risco Sanitario IA",   "Score de risco do lote"),
-            ("Previsao de Abate IA", "Predicao por animal"),
-            ("Anomalias de Peso",    "Alertas inteligentes"),
-        ] + ([] if is_vet() else [
-            ("Painel de Decisao",    "Lucro por lote"),
-        ])
-        GRUPOS["Financeiro"] = [
-            ("Dashboard Financeiro", "KPIs, DRE e projecao de abate"),
-            ("Previsao Abate",       "Data estimada de abate"),
-            ("Cotacao Cepea",        "Preco boi gordo"),
-            ("Mapa Piquetes",        "Pastagens"),
-        ] + ([] if is_vet() else [
-            ("Margem Real",          "Compra x Venda"),
-            ("Rastreabilidade GTA",  "GTA e SISBOV"),
-        ])
-        GRUPOS["Sistema"] = [
-            ("Importar CSV",         "Importar animais e pesagens"),
-            ("Exportar Relatorios",  "PDF e Excel"),
-            ("Planos",               "Meu plano e limites"),
-            ("WhatsApp",             "Configurar alertas WhatsApp"),
-            ("Mensagens",            "Inbox vet-fazendeiro"),
-            ("Email Alertas",        "Notificacoes por email"),
-        ] + ([] if is_vet() else [
-            ("Dados de Exemplo",     "Criar ou remover fazenda demo"),
-            ("Onboarding",           "Configuracao inicial guiada"),
-        ])
-
-
-        if is_vet():
-            GRUPOS["Inicio"] = [
-                ("Meu Dashboard",       "Produtividade e configuracao"),
-                ("Inicio",              "Painel geral"),
-                ("Workspace do Lote",   "Visao completa do lote"),
-                ("Meu CRMV",            "Registro profissional"),
-            ]
-            GRUPOS["Clinico"] = [
-                ("Receituario",         "Emissao de receitas"),
-                ("Diagnostico IA",      "Analise clinica com IA"),
-                ("Historico PDF",       "Historico clinico do animal"),
-                ("Monitoramento",       "Pos-tratamento e follow-up"),
-            ]
-            GRUPOS["Preventivo"] = [
-                ("Protocolos",          "Protocolos sanitarios"),
-                ("Campanhas",           "Vacinacao por safra"),
-                ("Controle Carencia",   "Periodo de abate"),
-                ("Mapa Epidemio",       "Epidemiologia cruzada"),
-            ]
-            GRUPOS["Laboratorio"] = [
-                ("Exames Lab",          "Exames laboratoriais"),
-                ("Painel Saude",        "Estatisticas do rebanho"),
-            ]
-            GRUPOS["Visitas Vet"] = [
-                ("Agenda Visitas",      "Visitas tecnicas"),
-                ("Relatorio Visita",    "Laudos de visita"),
-                ("Financeiro Vet",      "Honorarios e faturamento"),
-            ]
-
-    if "menu" not in st.session_state:
-        st.session_state.menu = "Inicio"
-
-    # Icones por grupo
-    _ICONES = {
-        "Inicio":              "🏠",
-        "🐮 Lote":             "🐮",
-        "🐄 Animal":           "🐄",
-        "Analise":             "📊",
-        "Analise & IA":        "🤖",
-        "Financeiro & Saude":  "💰",
-        "Financeiro & Saude":"💰",
-        "Sistema":           "⚙️",
-        "Veterinario":       "🩺",
-    }
+    st.markdown(
+        "<div style='font-size:10px;color:rgba(245,240,232,.4);"
+        "letter-spacing:1px;text-transform:uppercase;"
+        "padding:2px 0 4px'>Menu</div>",
+        unsafe_allow_html=True
+    )
 
     # ── Busca global ─────────────────────────────────────────
     with st.sidebar:
