@@ -969,13 +969,17 @@ function parar(){
         _params = st.query_params
         _texto_auto = _params.get("_voz", "")
 
+        # Ler transcrição vinda da sidebar (query param ou session_state)
+        _texto_sb = st.session_state.pop("_voz_transcricao_sb", "")
+        _valor_inicial = _texto_sb or _texto_auto
+
         # Campo editável — recebe a transcrição OU digitação manual
         _transcricao = st.text_input(
             "📝 Cole ou edite a transcrição aqui:",
-            value=_texto_auto if _texto_auto else "",
+            value=_valor_inicial,
             placeholder='Ex: "lote oeste, animal 01, 350 kg"',
             key="_voz_input",
-            help="Digite ou cole o que foi transcrito. Você pode corrigir antes de salvar."
+            help="Resultado da pesagem por voz. Edite se necessário."
         )
 
         # Limpar query param após uso
