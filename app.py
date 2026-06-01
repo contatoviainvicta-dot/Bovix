@@ -5090,7 +5090,8 @@ from _pages.sistema    import (page_inicio, page_buscar_animal, page_notificacoe
     page_log_auditoria, page_administracao, page_gestao_usuarios,
     page_configurar_whatsapp, page_exportar_dados)
 from _pages.crescimento import (page_importar_csv, page_onboarding,
-    page_planos, page_notificacoes_email, page_dados_exemplo)
+    page_planos, page_notificacoes_email, page_dados_exemplo,
+    page_ferramentas_publicas)
 from _pages.dashboard_exec import page_dashboard_executivo
 from _pages.admin_painel   import page_painel_admin
 
@@ -5326,6 +5327,11 @@ def hdr(icone, titulo, sub=""):
 # ── autenticacao ─────────────────────────────────────────────────────────────
 if "usuario" not in st.session_state:
     st.session_state.usuario = None
+
+# Ferramentas públicas - acesso sem login
+if st.session_state.get("menu") == "Ferramentas" and st.session_state.usuario is None:
+    page_ferramentas_publicas()
+    st.stop()
 
 if st.session_state.usuario is None:
     # ── CSS da tela de login ──────────────────────────────────
@@ -5917,6 +5923,7 @@ with st.sidebar:
             ("WhatsApp",             "Configurar alertas WhatsApp"),
             ("Mensagens",            "Inbox vet-fazendeiro"),
             ("Email Alertas",        "Notificacoes por email"),
+            ("Ferramentas",          "Calculadoras e calendarios publicos"),
         ] + ([] if is_vet() else [
             ("Dados de Exemplo",     "Criar ou remover fazenda demo"),
             ("Onboarding",           "Configuracao inicial guiada"),
