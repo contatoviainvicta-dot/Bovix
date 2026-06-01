@@ -77,14 +77,24 @@ def _diagnostico_banco():
         return f"Erro ao ler secrets: {e} - usando SQLite"
 
 def _get_pg_url():
+    url = ""
     try:
         import streamlit as st
-        url = st.secrets["database"]["url"]
+        # Tentar múltiplos formatos de secrets
+        _sec = st.secrets
+        if "database" in _sec and "url" in _sec["database"]:
+            url = _sec["database"]["url"]
+        elif "DATABASE_URL" in _sec:
+            url = _sec["DATABASE_URL"]
+        elif "SUPABASE_DB_URL" in _sec:
+            url = _sec["SUPABASE_DB_URL"]
     except Exception:
-        _log_war.debug('excecao tratada: %s', exc_info=True)
-        url = os.environ.get("DATABASE_URL", "")
+        pass
+    # Fallback para variáveis de ambiente
+    if not url:
+        url = (os.environ.get("DATABASE_URL")
+               or os.environ.get("SUPABASE_DB_URL", ""))
     # Supabase: preferir transaction pooler (porta 6543)
-    # vs session pooler (porta 5432, limite 15 conexões)
     if url and "pooler.supabase.com:5432" in url:
         url = url.replace(":5432/", ":6543/")
     return url
