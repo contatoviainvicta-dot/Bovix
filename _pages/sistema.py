@@ -112,8 +112,44 @@ def page_inicio(u):
     _nome = _nome.split(' — ')[0].strip() if ' — ' in _nome else _nome
     _nome = _nome.split(' - ')[0].strip() if ' - Fazenda' in _nome else _nome
 
-    st.markdown(f"## {sau}, **{_nome}**")
-    st.caption(datetime.now().strftime("%d/%m/%Y - %H:%M"))
+    # Dados do perfil e plano
+    _perfil_label = {
+        "fazendeiro":  "Fazendeiro",
+        "veterinario": "Veterinário",
+        "admin":       "Administrador",
+    }.get(u.get("perfil",""), "Usuário")
+    _plano_raw = (u.get("plano") or "free").upper()
+    _plano_cor = {
+        "FREE":"#6B7280","PRO":"#40916C",
+        "VET":"#2563EB","ENTERPRISE":"#7C3AED"
+    }.get(_plano_raw, "#6B7280")
+    _expirado = u.get("plano_expirado") or u.get("status_conta") == "expirado"
+
+    # Saudação + perfil + plano numa linha
+    st.markdown(f"""
+<div style="display:flex;align-items:center;justify-content:space-between;
+     flex-wrap:wrap;gap:8px;margin-bottom:4px">
+  <div>
+    <span style="font-size:24px;font-weight:700;color:#1B4332">
+      {sau}, <strong>{_nome}</strong> 👋</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span style="font-size:12px;color:#6B7280">{_perfil_label}</span>
+    <span style="background:{_plano_cor};color:white;font-size:11px;
+          font-weight:700;padding:3px 10px;border-radius:20px;
+          letter-spacing:.5px">{_plano_raw}</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+    st.caption(datetime.now().strftime("%A, %d/%m/%Y — %H:%M"))
+
+    # Aviso de plano expirado — apenas na tela início
+    if _expirado:
+        st.warning(
+            "⚠️ **Seu plano expirou.** Você está no plano Free. "
+            "Acesse **Sistema → Planos** para renovar.",
+            icon="⚠️"
+        )
 
     lotes   = listar_lotes_usuario()
     _oid    = owner_id()
