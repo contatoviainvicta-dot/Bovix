@@ -5734,12 +5734,33 @@ with st.sidebar:
                 "margin:8px 0'></div>",
                 unsafe_allow_html=True
             )
-    # Logo Auroque no sidebar
-    st.sidebar.markdown("""
-<div style="padding:8px 0 12px">
-  <div style="display:flex;align-items:center;gap:10px">
-    <svg width="38" height="38" viewBox="0 0 44 44"
-         xmlns="http://www.w3.org/2000/svg">
+    # ── Cabeçalho sidebar ────────────────────────────────────────────
+    _sb_nome_raw = u.get("nome", "")
+    # Limpar sufixos técnicos do nome (ex: "Fazendeiro 2 - Fazenda X - Nome: Y")
+    _sb_fazenda = ""
+    if " - " in _sb_nome_raw:
+        _sb_fazenda = _sb_nome_raw.split(" - ")[-1].strip()
+        if " - Nome:" in _sb_fazenda:
+            _sb_fazenda = _sb_fazenda.split(" - Nome:")[0].strip()
+        if _sb_fazenda.startswith("Fazenda "):
+            _sb_fazenda = _sb_fazenda[8:].strip()
+    elif " - Fazenda" in _sb_nome_raw:
+        _sb_fazenda = _sb_nome_raw.split(" - Fazenda")[-1].strip()
+    else:
+        _sb_fazenda = _sb_nome_raw.split(" - Nome:")[-1].strip()             if " - Nome:" in _sb_nome_raw else ""
+
+    _sb_perfil = u.get("perfil", "fazendeiro").capitalize()
+    _sb_plano  = (u.get("plano") or "free").upper()
+    _plano_cor = {
+        "FREE": "#6B7280", "PRO": "#40916C",
+        "VET": "#2563EB", "ENTERPRISE": "#7C3AED"
+    }.get(_sb_plano, "#6B7280")
+
+    st.sidebar.markdown(f"""
+<div style="padding:12px 4px 10px">
+  <!-- Logo -->
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+    <svg width="36" height="36" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
       <polygon points="22,3 39,13 39,31 22,41 5,31 5,13"
                fill="none" stroke="#F5F0E8" stroke-width="2"/>
       <text x="22" y="30" font-family="system-ui,sans-serif"
@@ -5749,18 +5770,35 @@ with st.sidebar:
             stroke="#40916C" stroke-width="1.8"/>
     </svg>
     <div>
-      <div style="font-family:Georgia,serif;font-size:22px;
-           font-weight:700;color:#F5F0E8;letter-spacing:1px;
-           line-height:1">Auroque</div>
-      <div style="font-family:sans-serif;font-size:7px;color:#40916C;
-           letter-spacing:3px;margin-top:3px">GESTÃO PECUÁRIA</div>
+      <div style="font-family:Georgia,serif;font-size:20px;font-weight:700;
+           color:#F5F0E8;letter-spacing:1px;line-height:1">Auroque</div>
+      <div style="font-size:7px;color:#40916C;letter-spacing:3px;
+           margin-top:2px">GESTÃO PECUÁRIA</div>
+    </div>
+  </div>
+  <!-- Fazenda + Perfil -->
+  <div style="background:rgba(64,145,108,.15);border-radius:8px;
+       padding:8px 10px;margin-bottom:4px">
+    <div style="font-size:13px;font-weight:600;color:#F5F0E8;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+      🏡 {_sb_fazenda or 'Minha Fazenda'}</div>
+    <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+      <span style="font-size:11px;color:rgba(245,240,232,.6)">
+        {_sb_perfil}</span>
+      <span style="background:{_plano_cor};color:white;font-size:9px;
+            font-weight:700;padding:1px 6px;border-radius:4px;
+            letter-spacing:.5px">{_sb_plano}</span>
     </div>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-    st.divider()
-    st.caption("MENU")
+    st.sidebar.markdown(
+        "<div style='font-size:10px;color:rgba(245,240,232,.4);"
+        "letter-spacing:1px;text-transform:uppercase;"
+        "padding:2px 4px 6px'>Menu</div>",
+        unsafe_allow_html=True
+    )
 
     GRUPOS = {
         "Inicio": [
@@ -5825,15 +5863,17 @@ with st.sidebar:
             ("Estoque Medicamentos", "Controle de estoque"),
             ("Controle Reprodutivo", "IATF e prenhez"),
         ]
-        GRUPOS["Inteligencia"] = [
+        GRUPOS["Analises"] = [
             ("Dashboard Executivo",  "KPIs consolidados"),
             ("Dashboard Sanitario",  "Incidencias e alertas"),
             ("Analisar por Lote",    "GMD e desempenho"),
             ("Analisar Animal",      "Analise individual"),
+            ("Comparativo Lotes",    "Side by side"),
             ("Score de Saude",       "Ranking 0-100"),
             ("GMD Temporal",         "Evolucao no tempo"),
-            ("Comparativo Lotes",    "Side by side"),
             ("Pesquisar Ocorrencias","Busca avancada"),
+        ]
+        GRUPOS["Inteligencia IA"] = [
             ("Risco Sanitario IA",   "Score de risco do lote"),
             ("Previsao de Abate IA", "Predicao por animal"),
             ("Anomalias de Peso",    "Alertas inteligentes"),
@@ -5851,19 +5891,17 @@ with st.sidebar:
         ])
         GRUPOS["Sistema"] = [
             ("Importar CSV",         "Importar animais e pesagens"),
+            ("Exportar Relatorios",  "PDF e Excel"),
             ("Planos",               "Meu plano e limites"),
-            ("Onboarding",           "Configuracao inicial guiada"),
+            ("WhatsApp",             "Configurar alertas WhatsApp"),
             ("Mensagens",            "Inbox vet-fazendeiro"),
             ("Email Alertas",        "Notificacoes por email"),
-            ("WhatsApp",             "Configurar alertas WhatsApp"),
-            ("Exportar Relatorios",  "PDF e Excel"),
-            ("Notificacoes",         "E-mail e alertas"),
         ] + ([] if is_vet() else [
-            ("Refazer Tutorial",     "Wizard de primeiros passos"),
             ("Dados de Exemplo",     "Criar ou remover fazenda demo"),
+            ("Onboarding",           "Configuracao inicial guiada"),
         ])
 
-        # ── VETERINARIO: grupos clinicos ADICIONAIS (alem do fazendeiro) ──
+
         if is_vet():
             GRUPOS["Inicio"] = [
                 ("Meu Dashboard",       "Produtividade e configuracao"),
@@ -6199,14 +6237,6 @@ if page_fn:
         _css_global()
     except Exception:
         pass
-
-    # ── Banner de plano expirado ──────────────────────────────────
-    if u.get("plano_expirado") or u.get("status_conta") == "expirado":
-        st.warning(
-            "⚠️ **Seu plano expirou.** Você está usando o plano gratuito (Free). "
-            "Acesse **Sistema → Planos** para renovar e recuperar todos os recursos.",
-            icon="⚠️"
-        )
 
     page_fn(u)
 else:
