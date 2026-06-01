@@ -989,75 +989,71 @@ function parar(){
         # Parser
         def _parse_voz(texto):
             import re as _re
+
+            # Limpar palavras-chave antes de extrair dados
             texto_l = texto.lower().strip()
-            # Remover a palavra "peso" para nao confundir o parser
-            texto_sp = _re.sub(r'\bpeso\b', ' ', texto_l).strip()
+            texto_sp = _re.sub(
+                r'\b(peso|kg|quilos?|quilogramas?|kilos?)\b',
+                ' ', texto_l
+            )
+            texto_sp = _re.sub(r'\s+', ' ', texto_sp).strip()
+
             res = {"animal": None, "peso": None}
 
-            # PESO: pegar o ULTIMO numero >= 50 (peso de animal)
-            # "01 peso 350" → ignora 01, pega 350
+            # PESO: último número >= 50
             todos_nums = _re.findall(r'\d+(?:[.,]\d+)?', texto_sp)
             if todos_nums:
-                try:
-                    candidatos = [float(n.replace(",","."))
-                                  for n in todos_nums
-                                  if float(n.replace(",",".")) >= 50]
-                    res["peso"] = candidatos[-1] if candidatos else                                   float(todos_nums[-1].replace(",","."))
-                except Exception:
-                    pass
+                cands = []
+                for _n in todos_nums:
+                    _v = float(_n.replace(",", "."))
+                    if _v >= 50:
+                        cands.append(_v)
+                res["peso"] = cands[-1] if cands                     else float(todos_nums[-1].replace(",", "."))
 
-            # ANIMAL: multiplas estrategias em ordem de prioridade
+            # ANIMAL 1: prefixo explícito ("animal 01", "boi 02", "brinco B01")
+            _mx = _re.search(
+                r'(?:animal|boi|vaca|brinco|numero|n[uú]mero)'
+                r'\s+([A-Za-z0-9][A-Za-z0-9\-\.]{0,15})',
+                texto_sp, _re.I
+            )
+            if _mx:
+                res["animal"] = _mx.group(1).strip().upper()
 
-            # 1. Prefixos explicitos: "animal 01", "boi 02", "brinco B01"
-            for _pat in [
-                r'animal\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
-                r'boi\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
-                r'vaca\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
-                r'brinco\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
-                r'numero\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
-            ]:
-                _mx = _re.search(_pat, texto_sp, _re.I)
-                if _mx:
-                    res["animal"] = _mx.group(1).strip().upper()
-                    break
-
-            # 2. Identificador alfanumerico composto (B01, BOI-01, TST-001)
+            # ANIMAL 2: identificador alfanumérico composto (B01, BOI-01)
+            # Exige ao menos 1 letra E 1 número
             if not res["animal"]:
                 _mx = _re.search(
-                    r'\b([A-Za-z]+[\-]?\d+|\d+[\-]?[A-Za-z]+)\b',
+                    r'\b([A-Za-z]{1,6}[\-]?\d{1,4}|\d{1,4}[\-]?[A-Za-z]{1,6})\b',
                     texto_sp
                 )
                 if _mx:
-                    res["animal"] = _mx.group(1).strip().upper()
+                    _c = _mx.group(1).upper()
+                    if _re.search(r'[A-Za-z]', _c) and _re.search(r'\d', _c):
+                        res["animal"] = _c
 
-            # 3. Numero simples antes do peso: "01 350" ou "01 peso 350"
-            if not res["animal"] and todos_nums and len(todos_nums) >= 2:
+            # ANIMAL 3: número simples antes do peso ("01 340" → animal=01)
+            if not res["animal"] and todos_nums:
                 for _n in todos_nums:
-                    _v = float(_n.replace(",","."))
-                    if _v != res["peso"] and _v < 50:
-                        res["animal"] = _n.strip().lstrip("0") or _n.strip()
+                    _v = float(_n.replace(",", "."))
+                    if res["peso"] and _v == res["peso"]:
+                        continue
+                    if _v < 50:
+                        res["animal"] = _n.strip().zfill(2)
                         break
 
-            # 4. Fallback: primeiro token antes do numero grande
-            if not res["animal"] and todos_nums:
-                _peso_str = str(int(res["peso"])) if res["peso"] else ""
-                _parte = texto_sp.split(_peso_str)[0] if _peso_str else texto_sp
-                _tokens = _re.findall(r'[A-Za-z0-9]+', _parte)
-                if _tokens:
-                    res["animal"] = _tokens[-1].upper()
-
             # NORMALIZAR: buscar no mapa real do lote
-            # "1" encontra "01", busca parcial por prefixo
             if res["animal"] and _mapa_voz:
-                _ident = res["animal"].upper()
-                if _ident not in _mapa_voz:
-                    _ident_z = _ident.zfill(2)
-                    if _ident_z in _mapa_voz:
-                        res["animal"] = _ident_z
-                    else:
-                        # Busca parcial
+                _id = res["animal"].upper()
+                if _id not in _mapa_voz:
+                    _encontrou = False
+                    for _v2 in [_id, _id.zfill(2), _id.lstrip("0") or _id]:
+                        if _v2 in _mapa_voz:
+                            res["animal"] = _v2
+                            _encontrou = True
+                            break
+                    if not _encontrou:
                         for _k in _mapa_voz:
-                            if _ident in _k or _k in _ident or _ident_z in _k:
+                            if _id in _k or _k in _id:
                                 res["animal"] = _k
                                 break
 
