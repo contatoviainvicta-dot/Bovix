@@ -990,38 +990,79 @@ function parar(){
         def _parse_voz(texto):
             import re as _re
             texto_l = texto.lower().strip()
+            # Remover a palavra "peso" para nao confundir o parser
+            texto_sp = _re.sub(r'\bpeso\b', ' ', texto_l).strip()
             res = {"animal": None, "peso": None}
-            # Peso
-            m = _re.search(
-                r'(\d+(?:[.,]\d+)?)\s*(?:kg|quilo[sg]?|quilograma[sg]?)?',
-                texto_l
-            )
-            if m:
+
+            # PESO: pegar o ULTIMO numero >= 50 (peso de animal)
+            # "01 peso 350" → ignora 01, pega 350
+            todos_nums = _re.findall(r'\d+(?:[.,]\d+)?', texto_sp)
+            if todos_nums:
                 try:
-                    res["peso"] = float(m.group(1).replace(",","."))
+                    candidatos = [float(n.replace(",","."))
+                                  for n in todos_nums
+                                  if float(n.replace(",",".")) >= 50]
+                    res["peso"] = candidatos[-1] if candidatos else                                   float(todos_nums[-1].replace(",","."))
                 except Exception:
                     pass
-            # Animal
-            for pat in [
-                r'animal\s+(\S+)',
-                r'boi\s+(\S+)',
-                r'vaca\s+(\S+)',
-                r'brinco\s+(\S+)',
-                r'n[uú]mero\s+(\S+)',
-                r'([A-Z]{2,6}[-]?\d{1,4})',
+
+            # ANIMAL: multiplas estrategias em ordem de prioridade
+
+            # 1. Prefixos explicitos: "animal 01", "boi 02", "brinco B01"
+            for _pat in [
+                r'animal\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
+                r'boi\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
+                r'vaca\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
+                r'brinco\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
+                r'numero\s+([A-Za-z0-9][A-Za-z0-9\-\.]*)',
             ]:
-                mx = _re.search(pat, texto_l, _re.I)
-                if mx:
-                    res["animal"] = mx.group(1).strip().upper().replace(" ","-")
+                _mx = _re.search(_pat, texto_sp, _re.I)
+                if _mx:
+                    res["animal"] = _mx.group(1).strip().upper()
                     break
-            # Fallback: último token alfanumérico antes do número
+
+            # 2. Identificador alfanumerico composto (B01, BOI-01, TST-001)
             if not res["animal"]:
-                tokens = _re.findall(r'[A-Za-z0-9]+', texto)
-                nums   = [t for t in tokens if t.isdigit()]
-                alphas = [t for t in tokens if not t.isdigit()]
-                if alphas:
-                    res["animal"] = alphas[-1].upper()
+                _mx = _re.search(
+                    r'\b([A-Za-z]+[\-]?\d+|\d+[\-]?[A-Za-z]+)\b',
+                    texto_sp
+                )
+                if _mx:
+                    res["animal"] = _mx.group(1).strip().upper()
+
+            # 3. Numero simples antes do peso: "01 350" ou "01 peso 350"
+            if not res["animal"] and todos_nums and len(todos_nums) >= 2:
+                for _n in todos_nums:
+                    _v = float(_n.replace(",","."))
+                    if _v != res["peso"] and _v < 50:
+                        res["animal"] = _n.strip().lstrip("0") or _n.strip()
+                        break
+
+            # 4. Fallback: primeiro token antes do numero grande
+            if not res["animal"] and todos_nums:
+                _peso_str = str(int(res["peso"])) if res["peso"] else ""
+                _parte = texto_sp.split(_peso_str)[0] if _peso_str else texto_sp
+                _tokens = _re.findall(r'[A-Za-z0-9]+', _parte)
+                if _tokens:
+                    res["animal"] = _tokens[-1].upper()
+
+            # NORMALIZAR: buscar no mapa real do lote
+            # "1" encontra "01", busca parcial por prefixo
+            if res["animal"] and _mapa_voz:
+                _ident = res["animal"].upper()
+                if _ident not in _mapa_voz:
+                    _ident_z = _ident.zfill(2)
+                    if _ident_z in _mapa_voz:
+                        res["animal"] = _ident_z
+                    else:
+                        # Busca parcial
+                        for _k in _mapa_voz:
+                            if _ident in _k or _k in _ident or _ident_z in _k:
+                                res["animal"] = _k
+                                break
+
             return res
+
 
         # Mostrar cards de confirmação
         if _transcricao and len(_transcricao) > 2:
