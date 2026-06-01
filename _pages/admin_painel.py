@@ -14,7 +14,6 @@ except ImportError:
     def toast_aviso(m): st.warning(m)
     def empty_state(t, d, **k): st.info(f"{t} — {d}"); return False
     def erro_com_acao(e, a=""): st.error(str(e))
-import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date, datetime
 
