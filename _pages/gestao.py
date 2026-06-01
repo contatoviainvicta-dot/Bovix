@@ -1090,95 +1090,10 @@ button[kind="secondary"][data-testid*="voz_rerun"]{
             df_p_ws["Data"] = pd.to_datetime(df_p_ws["Data"])
             df_p_ws = df_p_ws.sort_values("Data")
 
-            # Gráficos em abas: lote | animal identificado por voz
-            _animal_voz = st.session_state.get("_voz_texto", "")
-            _p_voz = None
-            pass  # animal detectado inline abaixo
-
-            _tab_lote, _tab_animal = st.tabs([
-                "📊 Evolução do lote",
-                "🐄 Animal selecionado"
-            ])
-
-            with _tab_lote:
-                df_media = df_p_ws.groupby("Data")["Peso"].mean().reset_index()
-                st.caption("Peso médio diário de todos os animais do lote")
-                safe_line_chart(df_media.set_index("Data")["Peso"])
-
-            with _tab_animal:
-                # Detectar animal pela transcrição de voz ou pelo último salvo
-                _aid_graf = None
-                _anome_graf = None
-
-                # Tentar pegar do session_state (última pesagem por voz)
-                _txt_voz = st.session_state.get("_voz_texto", "")
-                if _txt_voz:
-                    import re as _re
-                    _t = _re.sub(
-                        r'(peso|kg|quilo[sg]?)', ' ', _txt_voz.lower()
-                    )
-                    _t = _re.sub(r'\s+', ' ', _t).strip()
-                    _nums = _re.findall(r'\d+(?:[.,]\d+)?', _t)
-                    _floats = [float(n.replace(',','.')) for n in _nums]
-                    _peqs = [n for n,v in zip(_nums,_floats)
-                             if v < 50 and v != (
-                                 [x for x in _floats if x>=50][-1]
-                                 if [x for x in _floats if x>=50] else None
-                             )]
-                    if _peqs:
-                        _cand = _peqs[0].zfill(2)
-                        _aid_graf  = _mapa_voz.get(_cand.upper())
-                        _anome_graf = _cand
-
-                # Seletor manual como fallback
-                _animais_lista = [
-                    (a[0], a[1]) for a in (_animais_lote_voz or [])
-                ]
-                if _animais_lista:
-                    _opts = {a[1]: a[0] for a in _animais_lista}
-                    _default = _anome_graf if _anome_graf in _opts else list(_opts.keys())[0]
-                    _sel = st.selectbox(
-                        "Animal",
-                        options=list(_opts.keys()),
-                        index=list(_opts.keys()).index(_default)
-                              if _default in _opts else 0,
-                        key="_graf_animal_sel"
-                    )
-                    _aid_graf   = _opts[_sel]
-                    _anome_graf = _sel
-
-                if _aid_graf:
-                    _pes_anim = listar_pesagens(_aid_graf) or []
-                    if _pes_anim:
-                        import pandas as _pd_g
-                        _df_a = _pd_g.DataFrame(
-                            _pes_anim,
-                            columns=["id","animal_id","Peso","Data","obs"]
-                            if len(_pes_anim[0]) > 4
-                            else ["id","animal_id","Peso","Data"]
-                        )
-                        _df_a["Data"] = _pd_g.to_datetime(_df_a["Data"])
-                        _df_a = _df_a.sort_values("Data")
-                        st.caption(
-                            f"Evolução de peso — {_anome_graf} "
-                            f"({len(_df_a)} pesagens)"
-                        )
-                        safe_line_chart(_df_a.set_index("Data")["Peso"])
-
-                        # KPIs rápidos do animal
-                        _k1, _k2, _k3 = st.columns(3)
-                        _k1.metric("Peso inicial",
-                                   f"{_df_a['Peso'].iloc[0]:.0f} kg")
-                        _k2.metric("Peso atual",
-                                   f"{_df_a['Peso'].iloc[-1]:.0f} kg",
-                                   delta=f"{_df_a['Peso'].iloc[-1]-_df_a['Peso'].iloc[0]:.0f} kg")
-                        _dias = max(1,(_df_a["Data"].iloc[-1]-_df_a["Data"].iloc[0]).days)
-                        _gmd  = (_df_a['Peso'].iloc[-1]-_df_a['Peso'].iloc[0])/_dias
-                        _k3.metric("GMD", f"{_gmd:.3f} kg/dia")
-                    else:
-                        st.info(f"Sem pesagens registradas para {_anome_graf}.")
-                else:
-                    st.info("Selecione um animal para ver a evolução de peso.")
+            # Gráfico: evolução do peso médio do lote
+            df_media = df_p_ws.groupby("Data")["Peso"].mean().reset_index()
+            st.caption("Peso médio diário de todos os animais do lote")
+            safe_line_chart(df_media.set_index("Data")["Peso"])
 
             st.subheader("Todas as pesagens")
             # Exibir com data formatada
