@@ -5806,7 +5806,8 @@ function sbParar(){
 </script>
 """
         with st.sidebar:
-            st.html(_html_btn_voz)
+            import streamlit.components.v1 as _stc_sb
+            _stc_sb.html(_html_btn_voz, height=150)
 
             # Se vier transcrição via query param, navegar para Pesagens
             _voz_param = st.query_params.get("_voz", "")
