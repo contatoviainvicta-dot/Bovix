@@ -5810,6 +5810,134 @@ with st.sidebar:
             unsafe_allow_html=True
         )
 
+    # ── Definição dos grupos do menu ─────────────────────────────────
+    GRUPOS = {
+        "Inicio": [
+            ("Inicio",               "Painel geral"),
+            ("Workspace do Lote",    "Visao completa do lote"),
+        ],
+    }
+
+    if is_admin():
+        GRUPOS["Analise"] = [
+            ("Dashboard Executivo",  "KPIs consolidados"),
+            ("Dashboard Sanitario",  "Incidencias e alertas"),
+            ("Analisar por Lote",    "GMD e desempenho"),
+            ("Analisar Animal",      "Analise individual"),
+            ("Score de Saude",       "Ranking 0-100"),
+            ("GMD Temporal",         "Evolucao no tempo"),
+            ("Comparativo Lotes",    "Side by side"),
+            ("Pesquisar Ocorrencias","Busca avancada"),
+        ]
+        GRUPOS["Inteligencia"] = [
+            ("Risco Sanitario IA",   "Score de risco do lote"),
+            ("Previsao de Abate IA", "Predicao por animal"),
+            ("Anomalias de Peso",    "Alertas inteligentes"),
+        ]
+        GRUPOS["Administracao"] = [
+            ("Painel Admin",         "MRR, usuarios e erros"),
+            ("Administracao",        "Usuarios e planos"),
+            ("Gestao Usuarios",      "Planos e acessos vet"),
+            ("Log Auditoria",        "Historico de acoes"),
+            ("Diagnostico DB",       "Schema do banco"),
+        ]
+        GRUPOS["Sistema"] = [
+            ("Importar CSV",         "Importar animais e pesagens"),
+            ("Exportar Relatorios",  "PDF e Excel"),
+            ("Notificacoes",         "E-mail e alertas"),
+            ("Mensagens",            "Inbox vet-fazendeiro"),
+        ]
+    else:
+        GRUPOS["Rebanho"] = [
+            ("Cadastrar Lote",       "Novo lote"),
+            ("Cadastrar Animal",     "Novo animal"),
+            ("Registrar Pesagem",    "Nova pesagem"),
+            ("Registrar Ocorrencia", "Nova ocorrencia"),
+            ("Buscar Animal",        "Busca por brinco"),
+            ("Status do Lote",       "Alterar status"),
+            ("Transferir Animal",    "Mover entre lotes"),
+            ("Registrar Morte",      "Baixa de animal"),
+            ("Editar Lote",          "Alterar lote"),
+            ("Editar Animal",        "Alterar animal"),
+            ("Editar Pesagens",      "Corrigir pesagens"),
+        ]
+        GRUPOS["Gestao Sanitaria"] = [
+            ("Prontuario Animal",    "Historico completo"),
+            ("Gerenciar Ocorrencias","Tratamentos e ocorrencias"),
+            ("Calendario Sanitario", "Vacinas e alertas"),
+            ("Estoque Medicamentos", "Controle de estoque"),
+            ("Controle Reprodutivo", "IATF e prenhez"),
+        ]
+        GRUPOS["Analises"] = [
+            ("Dashboard Executivo",  "KPIs consolidados"),
+            ("Dashboard Sanitario",  "Incidencias e alertas"),
+            ("Analisar por Lote",    "GMD e desempenho"),
+            ("Analisar Animal",      "Analise individual"),
+            ("Comparativo Lotes",    "Side by side"),
+            ("Score de Saude",       "Ranking 0-100"),
+            ("GMD Temporal",         "Evolucao no tempo"),
+            ("Pesquisar Ocorrencias","Busca avancada"),
+        ]
+        GRUPOS["Inteligencia IA"] = [
+            ("Risco Sanitario IA",   "Score de risco do lote"),
+            ("Previsao de Abate IA", "Predicao por animal"),
+            ("Anomalias de Peso",    "Alertas inteligentes"),
+        ] + ([] if is_vet() else [
+            ("Painel de Decisao",    "Lucro por lote"),
+        ])
+        GRUPOS["Financeiro"] = [
+            ("Dashboard Financeiro", "KPIs, DRE e projecao de abate"),
+            ("Previsao Abate",       "Data estimada de abate"),
+            ("Cotacao Cepea",        "Preco boi gordo"),
+            ("Mapa Piquetes",        "Pastagens"),
+        ] + ([] if is_vet() else [
+            ("Margem Real",          "Compra x Venda"),
+            ("Rastreabilidade GTA",  "GTA e SISBOV"),
+        ])
+        GRUPOS["Sistema"] = [
+            ("Importar CSV",         "Importar animais e pesagens"),
+            ("Exportar Relatorios",  "PDF e Excel"),
+            ("Planos",               "Meu plano e limites"),
+            ("WhatsApp",             "Configurar alertas WhatsApp"),
+            ("Mensagens",            "Inbox vet-fazendeiro"),
+            ("Email Alertas",        "Notificacoes por email"),
+        ] + ([] if is_vet() else [
+            ("Dados de Exemplo",     "Criar ou remover fazenda demo"),
+            ("Onboarding",           "Configuracao inicial guiada"),
+        ])
+
+        if is_vet():
+            GRUPOS["Inicio"] = [
+                ("Meu Dashboard",       "Produtividade e configuracao"),
+                ("Inicio",              "Painel geral"),
+                ("Workspace do Lote",   "Visao completa do lote"),
+                ("Meu CRMV",            "Registro profissional"),
+            ]
+            GRUPOS["Clinico"] = [
+                ("Receituario",         "Emissao de receitas"),
+                ("Diagnostico IA",      "Analise clinica com IA"),
+                ("Historico PDF",       "Historico clinico do animal"),
+                ("Monitoramento",       "Pos-tratamento e follow-up"),
+            ]
+            GRUPOS["Preventivo"] = [
+                ("Protocolos",          "Protocolos sanitarios"),
+                ("Campanhas",           "Vacinacao por safra"),
+                ("Controle Carencia",   "Periodo de abate"),
+                ("Mapa Epidemio",       "Epidemiologia cruzada"),
+            ]
+            GRUPOS["Laboratorio"] = [
+                ("Exames Lab",          "Exames laboratoriais"),
+                ("Painel Saude",        "Estatisticas do rebanho"),
+            ]
+            GRUPOS["Visitas Vet"] = [
+                ("Agenda Visitas",      "Visitas tecnicas"),
+                ("Relatorio Visita",    "Laudos de visita"),
+                ("Financeiro Vet",      "Honorarios e faturamento"),
+            ]
+
+    if "menu" not in st.session_state:
+        st.session_state.menu = "Inicio"
+
     for grupo, itens in GRUPOS.items():
         if not itens:
             continue
