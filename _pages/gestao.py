@@ -949,26 +949,35 @@ function pa(){
 
 function confirmar(){
   try{
-    // 1. Gravar texto na URL sem recarregar a página
+    // Gravar na URL via replaceState (sem reload)
     var url=new URL(window.parent.location.href);
     url.searchParams.set('_voz_txt', encodeURIComponent(txt));
     window.parent.history.replaceState({},'',url.toString());
 
-    // 2. Clicar no botão Streamlit oculto para forçar rerun
+    // Clicar no botão ↺ para forçar rerun sem perder sessão
     var btns = window.parent.document.querySelectorAll('button');
     for(var i=0;i<btns.length;i++){
-      if(btns[i].textContent.trim() === '_voz_rerun_'){
+      if(btns[i].textContent.trim() === '↺'){
         btns[i].click();
         return;
       }
     }
-
-    // 3. Fallback: recarregar preservando query params
-    window.parent.location.reload();
+    // Fallback: disparar evento de mudança no input de texto
+    var inputs = window.parent.document.querySelectorAll('input[type="text"]');
+    for(var j=0;j<inputs.length;j++){
+      var ph = inputs[j].placeholder || '';
+      if(ph.indexOf('01') >= 0 || ph.indexOf('peso') >= 0 || ph.indexOf('350') >= 0){
+        var nv = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
+        nv.set.call(inputs[j], txt);
+        inputs[j].dispatchEvent(new Event('input',{bubbles:true}));
+        inputs[j].dispatchEvent(new Event('change',{bubbles:true}));
+        return;
+      }
+    }
   }catch(e){
-    navigator.clipboard.writeText(txt).catch(function(){});
+    // Fallback final: mostrar texto para copiar
     document.getElementById('sv').textContent=
-      '📋 Cole o texto no campo abaixo';
+      'Cole no campo abaixo: ' + txt;
   }
 }
 </script>
