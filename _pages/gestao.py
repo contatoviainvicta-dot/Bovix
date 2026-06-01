@@ -975,10 +975,15 @@ function confirmar(){
 """
         _stc.html(_html_voz, height=200)
 
-        # Botão oculto — clicado pelo JS para forçar rerun do Streamlit
-        if st.button("_voz_rerun_", key="_btn_voz_rerun",
-                     label_visibility="hidden"):
-            pass  # apenas dispara o rerun
+        # Botão rerun — visível mas pequeno, clicado pelo JS
+        # CSS o torna quase invisível sem remover do DOM
+        st.markdown("""<style>
+button[kind="secondary"][data-testid*="voz_rerun"]{
+  opacity:0;height:1px;padding:0;margin:0;min-height:0;
+  pointer-events:none;overflow:hidden;}
+</style>""", unsafe_allow_html=True)
+        if st.button("↺", key="_btn_voz_rerun", type="secondary"):
+            pass  # dispara rerun
 
         # Ler transcrição do query param — disparado pelo botão "Usar esta transcrição"
         _voz_param = st.query_params.get("_voz_txt", "")
