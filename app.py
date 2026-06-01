@@ -5699,124 +5699,41 @@ with st.sidebar:
 
     # Alertas sidebar filtrados pelo usuario logado
     # Alertas sem cache - cada usuario ve apenas os seus proprios
-    # ── Botão de pesagem por voz na sidebar ──────────────────────────
+    # ── Atalhos rápidos na sidebar ──────────────────────────────────
     if not is_admin():
-        _html_btn_voz = """
-<style>
-#sb-btn-voz{
-  display:flex;align-items:center;justify-content:center;gap:10px;
-  background:linear-gradient(135deg,#1B4332,#2D6A4F);
-  color:#F5F0E8;border:none;border-radius:10px;
-  padding:13px 16px;font-size:15px;font-weight:600;
-  cursor:pointer;width:100%;margin:4px 0 8px;
-  box-shadow:0 3px 10px rgba(27,67,50,.4);
-  transition:all .18s;letter-spacing:.2px;
-}
-#sb-btn-voz:hover{background:linear-gradient(135deg,#2D6A4F,#40916C);
-  transform:translateY(-1px);box-shadow:0 5px 16px rgba(27,67,50,.5)}
-#sb-btn-voz.gravando{
-  background:linear-gradient(135deg,#C0392B,#E74C3C);
-  animation:sb-pulsar 1.1s infinite;
-}
-@keyframes sb-pulsar{
-  0%,100%{box-shadow:0 3px 10px rgba(192,57,43,.5)}
-  50%{box-shadow:0 5px 22px rgba(192,57,43,.85)}
-}
-#sb-status{font-size:11px;color:#9CA3AF;text-align:center;
-  min-height:16px;margin-bottom:6px;padding:0 4px}
-#sb-resultado{
-  display:none;background:#E8F5EE;border:1.5px solid #40916C;
-  border-radius:8px;padding:10px 12px;font-size:13px;
-  color:#1B4332;font-weight:600;margin-bottom:6px;
-  word-break:break-word;line-height:1.4;
-}
-</style>
-
-<button id="sb-btn-voz" onclick="sbToggle()">
-  🎤&nbsp; Pesagem por voz
-</button>
-<div id="sb-status">Toque e fale: animal e peso</div>
-<div id="sb-resultado"></div>
-
-<script>
-var sbRec=null, sbAtivo=false;
-
-function sbToggle(){ sbAtivo ? sbParar() : sbIniciar(); }
-
-function sbIniciar(){
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){
-    document.getElementById('sb-status').textContent=
-      '⚠️ Use Chrome ou Edge';
-    return;
-  }
-  sbRec=new SR();
-  sbRec.lang='pt-BR';
-  sbRec.continuous=false;
-  sbRec.interimResults=true;
-
-  sbRec.onstart=function(){
-    sbAtivo=true;
-    var b=document.getElementById('sb-btn-voz');
-    b.className='gravando';
-    b.innerHTML='⏹&nbsp; Parar';
-    document.getElementById('sb-status').textContent='🎙️ Ouvindo...';
-  };
-
-  sbRec.onresult=function(e){
-    var t='';
-    for(var i=e.resultIndex;i<e.results.length;i++)
-      t+=e.results[i][0].transcript;
-    var box=document.getElementById('sb-resultado');
-    box.style.display='block';
-    box.textContent='📝 '+t;
-    if(e.results[e.results.length-1].isFinal){
-      document.getElementById('sb-status').textContent='✅ Pronto - vá para Pesagens';
-      // Gravar na URL para o Streamlit ler
-      try{
-        var url=new URL(window.parent.location.href);
-        url.searchParams.set('_voz',encodeURIComponent(t));
-        window.parent.history.replaceState({},'',url.toString());
-        // Forçar rerun do Streamlit via click em elemento oculto
-        window.parent.dispatchEvent(new Event('popstate'));
-      }catch(err){}
-      sbParar();
-    }
-  };
-
-  sbRec.onerror=function(e){
-    var msgs={'not-allowed':'❌ Permissão negada',
-              'no-speech':'⚠️ Sem fala detectada'};
-    document.getElementById('sb-status').textContent=
-      msgs[e.error]||'❌ Erro: '+e.error;
-    sbParar();
-  };
-
-  sbRec.onend=function(){ sbParar(); };
-  sbRec.start();
-}
-
-function sbParar(){
-  sbAtivo=false;
-  var b=document.getElementById('sb-btn-voz');
-  b.className='';
-  b.innerHTML='🎤&nbsp; Pesagem por voz';
-  if(sbRec){try{sbRec.stop();}catch(e){} sbRec=null;}
-}
-</script>
-"""
         with st.sidebar:
-            import streamlit.components.v1 as _stc_sb
-            _stc_sb.html(_html_btn_voz, height=150)
-
-            # Se vier transcrição via query param, navegar para Pesagens
-            _voz_param = st.query_params.get("_voz", "")
-            if _voz_param:
-                st.session_state["_voz_transcricao_sb"] = _voz_param
-                st.session_state["menu"] = "Workspace do Lote"
-                st.query_params.clear()
-                st.rerun()
-
+            st.markdown(
+                "<div style='font-size:10px;color:rgba(245,240,232,.5);"
+                "letter-spacing:1px;text-transform:uppercase;"
+                "margin:4px 0 6px;padding:0 4px'>Acesso rápido</div>",
+                unsafe_allow_html=True
+            )
+            _atalhos = [
+                ("⚖️ Pesagem por voz",   "Workspace do Lote"),
+                ("📋 Prontuário",         "Prontuario Animal"),
+                ("💊 Receituário",        "Receituario"),
+                ("💰 Financeiro",         "Dashboard Financeiro"),
+                ("📥 Exportar dados",     "Exportar Relatorios"),
+            ] if is_vet() else [
+                ("⚖️ Pesagem por voz",   "Workspace do Lote"),
+                ("🐄 Cadastrar animal",   "Cadastrar Animal"),
+                ("💰 Financeiro",         "Dashboard Financeiro"),
+                ("📋 Prontuário",         "Prontuario Animal"),
+                ("📥 Exportar dados",     "Exportar Relatorios"),
+            ]
+            for _label, _destino in _atalhos:
+                if st.button(
+                    _label,
+                    key=f"_atl_{_destino}",
+                    use_container_width=True,
+                ):
+                    st.session_state.menu = _destino
+                    st.rerun()
+            st.markdown(
+                "<div style='height:1px;background:rgba(245,240,232,.15);"
+                "margin:8px 0'></div>",
+                unsafe_allow_html=True
+            )
     # Logo Auroque no sidebar
     st.sidebar.markdown("""
 <div style="padding:8px 0 12px">
