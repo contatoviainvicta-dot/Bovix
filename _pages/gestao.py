@@ -847,10 +847,7 @@ def page_workspace_do_lote(u):
             for a in (_animais_lote_voz or [])
         }
 
-        import streamlit.components.v1 as _components
-
-        # Componente de voz — a transcrição é exibida no HTML
-        # e copiada para um campo de texto Streamlit pelo usuário
+        # Componente de voz — usa st.html() (Streamlit >= 1.31)
         html_voz = """
 <style>
 #btn-voz{
@@ -963,7 +960,7 @@ function parar(){
 }
 </script>
 """
-        _components.html(html_voz, height=180)
+        st.html(html_voz)
 
         # Ler transcrição do query param (preenchido pelo JS)
         _params = st.query_params
