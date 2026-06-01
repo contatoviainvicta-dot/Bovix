@@ -847,7 +847,8 @@ def page_workspace_do_lote(u):
             for a in (_animais_lote_voz or [])
         }
 
-        # Componente de voz — usa st.html() (Streamlit >= 1.31)
+        # Componente de voz — usa components.v1.html (necessário para JS)
+        import streamlit.components.v1 as _stc
         html_voz = """
 <style>
 #btn-voz{
@@ -960,7 +961,7 @@ function parar(){
 }
 </script>
 """
-        st.html(html_voz)
+        _stc.html(html_voz, height=200)
 
         # Ler transcrição do query param (preenchido pelo JS)
         _params = st.query_params
