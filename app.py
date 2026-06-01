@@ -5090,8 +5090,12 @@ from _pages.sistema    import (page_inicio, page_buscar_animal, page_notificacoe
     page_log_auditoria, page_administracao, page_gestao_usuarios,
     page_configurar_whatsapp, page_exportar_dados)
 from _pages.crescimento import (page_importar_csv, page_onboarding,
-    page_planos, page_notificacoes_email, page_dados_exemplo,
-    page_ferramentas_publicas)
+    page_planos, page_notificacoes_email, page_dados_exemplo)
+try:
+    from _pages.crescimento import page_ferramentas_publicas
+except ImportError:
+    def page_ferramentas_publicas(u=None):
+        st.info("Ferramentas em manutenção. Tente novamente em instantes.")
 from _pages.dashboard_exec import page_dashboard_executivo
 from _pages.admin_painel   import page_painel_admin
 
