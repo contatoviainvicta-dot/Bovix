@@ -847,239 +847,168 @@ def page_workspace_do_lote(u):
             for a in (_animais_lote_voz or [])
         }
 
-        # Componente de voz — usa components.v1.html (necessário para JS)
+        # Inicializar session_state do campo de voz
+        if "_voz_key" not in st.session_state:
+            st.session_state["_voz_key"] = 0
+
+        # Campo de transcrição — ANTES do componente JS para o DOM existir
+        _transcricao = st.text_input(
+            "📝 Transcrição:",
+            value=st.session_state.get("_voz_texto", ""),
+            placeholder='Fale ou digite: ex: "01 350"',
+            key=f"_voz_input_{st.session_state['_voz_key']}",
+            label_visibility="collapsed",
+        )
+        # Atualizar session_state com o valor atual do campo
+        if _transcricao != st.session_state.get("_voz_texto", ""):
+            st.session_state["_voz_texto"] = _transcricao
+
         import streamlit.components.v1 as _stc
-        html_voz = """
+        _html_voz = f"""
 <style>
-#btn-voz{
+#bv{{
   display:flex;align-items:center;justify-content:center;gap:12px;
   background:#1B4332;color:#F5F0E8;border:none;border-radius:12px;
-  padding:16px 28px;font-size:17px;font-weight:600;cursor:pointer;
-  width:100%;margin-bottom:10px;transition:all .2s;
-  box-shadow:0 4px 12px rgba(27,67,50,.35);letter-spacing:.3px;
-}
-#btn-voz:hover{background:#2D6A4F;transform:translateY(-1px)}
-#btn-voz.gravando{
-  background:#E24B4A;animation:pulsar 1.1s infinite;
-}
-@keyframes pulsar{
-  0%,100%{box-shadow:0 4px 12px rgba(226,75,74,.4)}
-  50%{box-shadow:0 8px 28px rgba(226,75,74,.75)}
-}
-#status{font-size:13px;color:#6B7280;text-align:center;
-        min-height:18px;margin-bottom:8px}
-#box-resultado{
-  display:none;background:#E8F5EE;border:2px solid #40916C;
-  border-radius:10px;padding:14px 18px;font-size:16px;
-  color:#1B4332;font-weight:600;margin-bottom:8px;
-  word-break:break-word;
-}
-#instrucao{
-  font-size:12px;color:#9CA3AF;text-align:center;
-  display:none;margin-bottom:4px;
-}
+  padding:14px 24px;font-size:16px;font-weight:600;cursor:pointer;
+  width:100%;margin-bottom:8px;transition:all .2s;
+  box-shadow:0 4px 12px rgba(27,67,50,.35);
+}}
+#bv:hover{{background:#2D6A4F;transform:translateY(-1px)}}
+#bv.g{{background:#E24B4A;animation:p 1.1s infinite}}
+@keyframes p{{0%,100%{{box-shadow:0 4px 12px rgba(226,75,74,.4)}}
+  50%{{box-shadow:0 8px 28px rgba(226,75,74,.75)}}}}
+#sv{{font-size:12px;color:#6B7280;text-align:center;min-height:16px;margin-bottom:4px}}
+#rv{{display:none;background:#E8F5EE;border:2px solid #40916C;border-radius:8px;
+  padding:10px 14px;font-size:15px;font-weight:600;color:#1B4332;
+  margin-bottom:6px;word-break:break-word}}
 </style>
-
-<button id="btn-voz" onclick="toggle()">
-  🎤&nbsp;&nbsp;Registrar pesagem por voz
-</button>
-<div id="status">Clique e fale: lote, animal e peso</div>
-<div id="box-resultado"></div>
-<div id="instrucao">👆 Copie o texto acima para o campo abaixo</div>
-
+<button id="bv" onclick="tv()">🎤&nbsp;&nbsp;Registrar pesagem por voz</button>
+<div id="sv">Clique e fale: número do animal e peso. Ex: "01 peso 350"</div>
+<div id="rv"></div>
 <script>
-var rec=null, ativo=false;
-
-function toggle(){
-  ativo ? parar() : iniciar();
-}
-
-function iniciar(){
+var rc=null,at=false;
+function tv(){{at?pa():in_();}}
+function in_(){{
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){
-    document.getElementById('status').textContent=
-      '⚠️ Use Chrome ou Edge para reconhecimento de voz';
-    return;
-  }
-  rec=new SR();
-  rec.lang='pt-BR';
-  rec.continuous=false;
-  rec.interimResults=true;
-
-  var btn=document.getElementById('btn-voz');
-  var status=document.getElementById('status');
-  var box=document.getElementById('box-resultado');
-  var instr=document.getElementById('instrucao');
-
-  rec.onstart=function(){
-    ativo=true;
-    btn.className='gravando';
-    btn.innerHTML='⏹&nbsp;&nbsp;Parar gravação';
-    status.textContent='🎙️ Ouvindo... fale agora';
-  };
-
-  rec.onresult=function(e){
+  if(!SR){{document.getElementById('sv').textContent='⚠️ Use Chrome ou Edge';return;}}
+  rc=new SR();rc.lang='pt-BR';rc.continuous=false;rc.interimResults=true;
+  rc.onstart=function(){{
+    at=true;
+    document.getElementById('bv').className='g';
+    document.getElementById('bv').innerHTML='⏹&nbsp;&nbsp;Parar';
+    document.getElementById('sv').textContent='🎙️ Ouvindo...';
+  }};
+  rc.onresult=function(e){{
     var t='';
-    for(var i=e.resultIndex;i<e.results.length;i++){
-      t+=e.results[i][0].transcript;
-    }
-    box.style.display='block';
-    box.textContent='📝 '+t;
-    if(e.results[e.results.length-1].isFinal){
-      status.textContent='✅ Transcrição concluída';
-      instr.style.display='block';
-      // Tentar preencher automaticamente via Streamlit query param
-      try{
-        var url=new URL(window.parent.location.href);
-        url.searchParams.set('_voz',encodeURIComponent(t));
-        window.parent.history.replaceState({},'',url.toString());
-      }catch(err){}
-      parar();
-    }
-  };
-
-  rec.onerror=function(e){
-    var msgs={
-      'not-allowed':'❌ Permissão negada — clique no 🔒 da barra de endereço',
-      'no-speech':'⚠️ Nenhuma fala detectada. Tente novamente.',
-      'network':'⚠️ Erro de rede. Verifique a conexão.',
-    };
-    status.textContent=msgs[e.error]||'❌ Erro: '+e.error;
-    parar();
-  };
-
-  rec.onend=function(){ parar(); };
-  rec.start();
-}
-
-function parar(){
-  ativo=false;
-  var btn=document.getElementById('btn-voz');
-  btn.className='';
-  btn.innerHTML='🎤&nbsp;&nbsp;Registrar pesagem por voz';
-  if(rec){try{rec.stop();}catch(e){} rec=null;}
-}
+    for(var i=e.resultIndex;i<e.results.length;i++) t+=e.results[i][0].transcript;
+    document.getElementById('rv').style.display='block';
+    document.getElementById('rv').textContent='📝 '+t;
+    if(e.results[e.results.length-1].isFinal){{
+      document.getElementById('sv').textContent='✅ Pronto — edite se necessário';
+      // Preencher o campo Streamlit via DOM
+      var inp=window.parent.document.querySelector(
+        'input[data-testid="stTextInput"]'
+      );
+      if(!inp){{
+        // Tentar pelo placeholder
+        inp=window.parent.document.querySelector('input[placeholder*="01"]');
+      }}
+      if(inp){{
+        var nv=Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,'value'
+        );
+        nv.set.call(inp,t);
+        inp.dispatchEvent(new Event('input',{{bubbles:true}}));
+        inp.dispatchEvent(new Event('change',{{bubbles:true}}));
+      }}
+      pa();
+    }}
+  }};
+  rc.onerror=function(e){{
+    var m={{'not-allowed':'❌ Permissão de microfone negada',
+            'no-speech':'⚠️ Nenhuma fala. Tente novamente'}};
+    document.getElementById('sv').textContent=m[e.error]||'❌ Erro: '+e.error;
+    pa();
+  }};
+  rc.onend=function(){{pa();}};
+  rc.start();
+}}
+function pa(){{
+  at=false;
+  document.getElementById('bv').className='';
+  document.getElementById('bv').innerHTML='🎤&nbsp;&nbsp;Registrar pesagem por voz';
+  if(rc){{try{{rc.stop();}}catch(e){{}} rc=null;}}
+}}
 </script>
 """
-        _stc.html(html_voz, height=200)
+        _stc.html(_html_voz, height=170)
 
-        # Ler transcrição do query param (preenchido pelo JS)
-        _params = st.query_params
-        _texto_auto = _params.get("_voz", "")
-
-        # Ler transcrição vinda da sidebar (query param ou session_state)
-        _texto_sb = st.session_state.pop("_voz_transcricao_sb", "")
-        _valor_inicial = _texto_sb or _texto_auto
-
-        # Campo editável — recebe a transcrição OU digitação manual
-        _transcricao = st.text_input(
-            "📝 Cole ou edite a transcrição aqui:",
-            value=_valor_inicial,
-            placeholder='Ex: "lote oeste, animal 01, 350 kg"',
-            key="_voz_input",
-            help="Resultado da pesagem por voz. Edite se necessário."
-        )
-
-        # Limpar query param após uso
-        if _texto_auto:
-            st.query_params.clear()
-
-        # Parser
+        # Parser — robusto para "01 peso 350", "01 350", "01 340"
         def _parse_voz(texto):
-            import re as _re
+            import re as _r
+            # Remover palavras que atrapalham (peso, kg, quilos)
+            t = _r.sub(r'(peso|kg|quilo[sg]?|quilograma[sg]?)', ' ',
+                       texto.lower())
+            t = _r.sub(r'\s+', ' ', t).strip()
 
-            # Limpar palavras-chave antes de extrair dados
-            texto_l = texto.lower().strip()
-            texto_sp = _re.sub(
-                r'\b(peso|kg|quilos?|quilogramas?|kilos?)\b',
-                ' ', texto_l
-            )
-            texto_sp = _re.sub(r'\s+', ' ', texto_sp).strip()
+            # Todos os números do texto limpo
+            nums = _r.findall(r'\d+(?:[.,]\d+)?', t)
+            floats = [float(n.replace(',', '.')) for n in nums]
 
-            res = {"animal": None, "peso": None}
+            # PESO = último número >= 50
+            grandes = [v for v in floats if v >= 50]
+            peso = grandes[-1] if grandes else (floats[-1] if floats else None)
 
-            # PESO: último número >= 50
-            todos_nums = _re.findall(r'\d+(?:[.,]\d+)?', texto_sp)
-            if todos_nums:
-                cands = []
-                for _n in todos_nums:
-                    _v = float(_n.replace(",", "."))
-                    if _v >= 50:
-                        cands.append(_v)
-                res["peso"] = cands[-1] if cands                     else float(todos_nums[-1].replace(",", "."))
+            # ANIMAL = primeiro número < 50, normalizado com zfill(2)
+            pequenos = [n for n, v in zip(nums, floats)
+                        if v != peso and v < 50]
+            animal = pequenos[0].zfill(2) if pequenos else None
 
-            # ANIMAL 1: prefixo explícito ("animal 01", "boi 02", "brinco B01")
-            _mx = _re.search(
-                r'(?:animal|boi|vaca|brinco|numero|n[uú]mero)'
-                r'\s+([A-Za-z0-9][A-Za-z0-9\-\.]{0,15})',
-                texto_sp, _re.I
-            )
-            if _mx:
-                res["animal"] = _mx.group(1).strip().upper()
+            # Se só tem 1 número (ex: "350"), animal fica None
+            # Nesse caso usar o mapa para busca interativa
+            if not animal and len(floats) == 1:
+                peso = floats[0]
 
-            # ANIMAL 2: identificador alfanumérico composto (B01, BOI-01)
-            # Exige ao menos 1 letra E 1 número
-            if not res["animal"]:
-                _mx = _re.search(
-                    r'\b([A-Za-z]{1,6}[\-]?\d{1,4}|\d{1,4}[\-]?[A-Za-z]{1,6})\b',
-                    texto_sp
-                )
-                if _mx:
-                    _c = _mx.group(1).upper()
-                    if _re.search(r'[A-Za-z]', _c) and _re.search(r'\d', _c):
-                        res["animal"] = _c
-
-            # ANIMAL 3: número simples antes do peso ("01 340" → animal=01)
-            if not res["animal"] and todos_nums:
-                for _n in todos_nums:
-                    _v = float(_n.replace(",", "."))
-                    if res["peso"] and _v == res["peso"]:
-                        continue
-                    if _v < 50:
-                        res["animal"] = _n.strip().zfill(2)
-                        break
-
-            # NORMALIZAR: buscar no mapa real do lote
-            if res["animal"] and _mapa_voz:
-                _id = res["animal"].upper()
+            # Busca no mapa do lote
+            if animal and _mapa_voz:
+                _id = animal.upper()
                 if _id not in _mapa_voz:
-                    _encontrou = False
-                    for _v2 in [_id, _id.zfill(2), _id.lstrip("0") or _id]:
-                        if _v2 in _mapa_voz:
-                            res["animal"] = _v2
-                            _encontrou = True
+                    for _v in [_id, _id.zfill(2), _id.lstrip('0') or _id]:
+                        if _v in _mapa_voz:
+                            animal = _v
                             break
-                    if not _encontrou:
-                        for _k in _mapa_voz:
-                            if _id in _k or _k in _id:
-                                res["animal"] = _k
+                    else:
+                        for k in _mapa_voz:
+                            if _id in k or k in _id:
+                                animal = k
                                 break
 
-            return res
+            return {"animal": animal, "peso": peso}
 
+        # Usar o valor do campo (digitado ou colado)
+        _texto = st.session_state.get("_voz_texto", "") or _transcricao
 
-        # Mostrar cards de confirmação
-        if _transcricao and len(_transcricao) > 2:
-            _p = _parse_voz(_transcricao)
-
-            st.markdown("**🔍 Entendi o seguinte — confirme antes de salvar:**")
+        # Cards de confirmação
+        if _texto and len(_texto.strip()) > 1:
+            _p = _parse_voz(_texto)
+            st.markdown("**🔍 Confirme antes de salvar:**")
             _c1, _c2, _c3 = st.columns(3)
             with _c1:
                 st.markdown(f"""
-<div style="background:#E8F5EE;border:2px solid #1B4332;border-radius:10px;
-     padding:14px;text-align:center">
+<div style="background:#E8F5EE;border:2px solid #1B4332;
+     border-radius:10px;padding:14px;text-align:center">
   <div style="font-size:10px;color:#40916C;letter-spacing:1px;
        margin-bottom:4px">ANIMAL</div>
-  <div style="font-size:22px;font-weight:700;color:#1B4332">
+  <div style="font-size:24px;font-weight:700;color:#1B4332">
     {_p['animal'] or '?'}</div>
 </div>""", unsafe_allow_html=True)
             with _c2:
                 st.markdown(f"""
-<div style="background:#E8F5EE;border:2px solid #1B4332;border-radius:10px;
-     padding:14px;text-align:center">
+<div style="background:#E8F5EE;border:2px solid #1B4332;
+     border-radius:10px;padding:14px;text-align:center">
   <div style="font-size:10px;color:#40916C;letter-spacing:1px;
        margin-bottom:4px">PESO (kg)</div>
-  <div style="font-size:22px;font-weight:700;color:#1B4332">
+  <div style="font-size:24px;font-weight:700;color:#1B4332">
     {_p['peso'] or '?'}</div>
 </div>""", unsafe_allow_html=True)
             with _c3:
@@ -1088,22 +1017,21 @@ function parar(){
                                         key="_voz_dt",
                                         label_visibility="collapsed")
 
-            # Buscar animal no lote
             _aid = _mapa_voz.get((_p["animal"] or "").upper())
             if not _aid and _p["animal"]:
                 for k, v in _mapa_voz.items():
                     if _p["animal"] in k or k in _p["animal"]:
-                        _aid = v; break
+                        _aid = v
+                        break
 
             if _p["animal"] and not _aid:
                 st.warning(
-                    f"⚠️ **{_p['animal']}** não encontrado neste lote. "
-                    f"Disponíveis: {', '.join(list(_mapa_voz.keys())[:6])}"
+                    f"⚠️ **{_p['animal']}** não encontrado. "
+                    f"Disponíveis: {', '.join(list(_mapa_voz.keys())[:8])}"
                 )
 
-            st.markdown("<br>", unsafe_allow_html=True)
-            _b1, _b2 = st.columns([2, 1])
             _pode = bool(_aid and _p["peso"] and _p["peso"] > 0)
+            _b1, _b2 = st.columns([2, 1])
             with _b1:
                 if st.button("✅ Confirmar e salvar pesagem",
                              type="primary", key="btn_voz_ok",
@@ -1112,20 +1040,21 @@ function parar(){
                     try:
                         adicionar_pesagem(_aid, _p["peso"], str(_data_v))
                         toast_ok(
-                            f"✅ Pesagem salva — {_p['animal']} "
+                            f"✅ {_p['animal']} — "
                             f"{_p['peso']} kg em {fmt_data(str(_data_v))}"
                         )
-                        st.query_params.clear()
+                        # Limpar após salvar
+                        st.session_state["_voz_texto"] = ""
+                        st.session_state["_voz_key"] =                             st.session_state.get("_voz_key", 0) + 1
                         st.rerun()
                     except Exception as _ev:
                         toast_erro(f"Erro: {_ev}")
             with _b2:
-                if st.button("🔄 Nova pesagem", key="btn_voz_nova",
+                if st.button("🔄 Limpar", key="btn_voz_limpar",
                              use_container_width=True):
+                    st.session_state["_voz_texto"] = ""
+                    st.session_state["_voz_key"] =                         st.session_state.get("_voz_key", 0) + 1
                     st.rerun()
-
-            if not _pode and not _aid and _p["animal"]:
-                st.caption("Corrija o nome do animal ou selecione manualmente abaixo.")
 
         st.divider()
         # ── FIM PESAGEM POR VOZ ───────────────────────────────────────────
