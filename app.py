@@ -5080,8 +5080,12 @@ import os as _os
 _db_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'database.py')
 with open(_db_path, 'wb') as _f:
     _f.write(_db_bytes)
+# Garantir que o diretorio do script esta no sys.path
+import sys as _sys, os as _os2
+_script_dir = _os2.path.dirname(_os2.path.abspath(__file__))
+if _script_dir not in _sys.path:
+    _sys.path.insert(0, _script_dir)
 # Forcar reload do modulo se ja estava em cache
-import sys as _sys
 if 'database' in _sys.modules:
     del _sys.modules['database']
 del _DB_B64, _db_bytes, _db_path
