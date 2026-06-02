@@ -5110,20 +5110,14 @@ from datetime import date, datetime, timedelta
 # database importado via from database import * abaixo
 try:
     from database import *
-except KeyError as _e_db_key:
-    import logging as _log_db_imp
-    _log_db_imp.getLogger("auroque.app").error(
-        "KeyError no import de database: %s", _e_db_key
-    )
-    # Definir stubs mínimos para o app não crashar
-    def autenticar_usuario(*a, **k): return None
-    def inicializar_banco(*a, **k): pass
-    def listar_lotes(*a, **k): return []
-    def listar_animais_por_lote(*a, **k): return []
 except Exception as _e_db_any:
-    import logging as _log_db_imp
+    import logging as _log_db_imp, traceback as _tb_imp
     _log_db_imp.getLogger("auroque.app").error(
-        "Erro no import de database: %s", _e_db_any
+        "Erro no import de database: %s | %s",
+        type(_e_db_any).__name__, _e_db_any
+    )
+    _log_db_imp.getLogger("auroque.app").error(
+        "Traceback: %s", _tb_imp.format_exc()
     )
 
 # Importar pages APOS database estar disponivel
