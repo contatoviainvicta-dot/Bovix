@@ -573,6 +573,11 @@ _MIGRATIONS = [
             lote_id     INTEGER DEFAULT NULL
         )""",
     ]),
+    (11, "status_conta_e_last_login", [
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS status_conta TEXT DEFAULT 'ativo'",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS last_login TEXT DEFAULT NULL",
+        "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS owner_id INTEGER DEFAULT NULL",
+    ]),
 ]
 
 
@@ -1591,23 +1596,31 @@ def auto_registrar_usuario(nome, email, senha, perfil="fazendeiro"):
                 cur.execute(
                     f"INSERT INTO usuarios "
                     f"(nome,email,senha_hash,salt,perfil,ativo,"
-                    f" trial_inicio,plano,plano_expira,status_conta) "
-                    f"VALUES({p},{p},{p},{p},{p},1,{p},{p},{p},{p}) "
+                    f" trial_inicio,plano,plano_expira) "
+                    f"VALUES({p},{p},{p},{p},{p},1,{p},{p},{p}) "
                     f"RETURNING id",
                     (nome_limpo, email_limpo, h, salt, perfil,
-                     str(hoje), "trial", str(trial_fim), "trial"),
+                     str(hoje), "trial", str(trial_fim)),
                 )
                 uid = cur.fetchone()[0]
             else:
                 cur.execute(
                     f"INSERT INTO usuarios "
                     f"(nome,email,senha_hash,salt,perfil,ativo,"
-                    f" trial_inicio,plano,plano_expira,status_conta) "
-                    f"VALUES({p},{p},{p},{p},{p},1,{p},{p},{p},{p})",
+                    f" trial_inicio,plano,plano_expira) "
+                    f"VALUES({p},{p},{p},{p},{p},1,{p},{p},{p})",
                     (nome_limpo, email_limpo, h, salt, perfil,
-                     str(hoje), "trial", str(trial_fim), "trial"),
+                     str(hoje), "trial", str(trial_fim)),
                 )
                 uid = cur.lastrowid
+            # Atualizar status_conta separadamente (coluna pode ser nova)
+            try:
+                cur.execute(
+                    f"UPDATE usuarios SET status_conta='trial' WHERE id={p}",
+                    (uid,)
+                )
+            except Exception:
+                pass
             # owner_id = si mesmo
             cur.execute(
                 f"UPDATE usuarios SET owner_id={p} WHERE id={p}",
@@ -1670,8 +1683,9 @@ def autenticar_usuario(email, senha):
         cur.execute(
             f"SELECT id,nome,email,senha_hash,salt,perfil,fazenda_id,ativo,"
             f"COALESCE(owner_id,id) as owner_id,"
-            f"plano,plano_expira,status_conta "
-            f"FROM usuarios WHERE email={p}",
+            f"plano,plano_expira,"
+            f"COALESCE(status_conta,'ativo') as status_conta "
+            f"FROM usuarios WHERE LOWER(email)=LOWER({p})",
             (email,)
         )
         r = _fetchone(cur)
