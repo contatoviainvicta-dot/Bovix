@@ -1534,6 +1534,98 @@ def _is_bcrypt_hash(hash_str):
     """Detecta se string e hash bcrypt."""
     return bool(hash_str) and str(hash_str).startswith("$2")
 
+def email_valido(email):
+    """Valida formato de email."""
+    import re as _re
+    padrao = r".+@.+[.].+"
+    return bool(_re.match(padrao, (email or "").strip()))
+
+
+def email_ja_cadastrado(email):
+    """Verifica se o email já existe no banco."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT COUNT(*) FROM usuarios WHERE email={p}",
+                (email.strip().lower(),)
+            )
+            r = cur.fetchone()
+            return (r[0] if r else 0) > 0
+    except Exception as _e:
+        _log_war.debug("email_ja_cadastrado: %s", _e)
+        return False
+
+
+def auto_registrar_usuario(nome, email, senha, perfil="fazendeiro"):
+    """Registra novo usuário com trial de 14 dias.
+    Retorna: (sucesso: bool, mensagem: str, user_id: int|None)
+    """
+    from datetime import date, timedelta
+
+    # Validações
+    if not nome or len(nome.strip()) < 2:
+        return False, "Nome deve ter pelo menos 2 caracteres.", None
+    if not email_valido(email):
+        return False, "E-mail inválido. Verifique o formato.", None
+    if not senha or len(senha) < 6:
+        return False, "Senha deve ter pelo menos 6 caracteres.", None
+    if email_ja_cadastrado(email.strip().lower()):
+        return False, "Este e-mail já está cadastrado. Faça login.", None
+
+    # Datas do trial
+    hoje        = date.today()
+    trial_fim   = hoje + timedelta(days=14)
+
+    p = _ph()
+    try:
+        h    = _bcrypt_hash(senha)
+        salt = ""
+        nome_limpo  = nome.strip()
+        email_limpo = email.strip().lower()
+
+        with _conexao() as conn:
+            cur = conn.cursor()
+            if _usar_postgres():
+                cur.execute(
+                    f"INSERT INTO usuarios "
+                    f"(nome,email,senha_hash,salt,perfil,ativo,"
+                    f" trial_inicio,plano,plano_expira,status_conta) "
+                    f"VALUES({p},{p},{p},{p},{p},1,{p},{p},{p},{p}) "
+                    f"RETURNING id",
+                    (nome_limpo, email_limpo, h, salt, perfil,
+                     str(hoje), "trial", str(trial_fim), "trial"),
+                )
+                uid = cur.fetchone()[0]
+            else:
+                cur.execute(
+                    f"INSERT INTO usuarios "
+                    f"(nome,email,senha_hash,salt,perfil,ativo,"
+                    f" trial_inicio,plano,plano_expira,status_conta) "
+                    f"VALUES({p},{p},{p},{p},{p},1,{p},{p},{p},{p})",
+                    (nome_limpo, email_limpo, h, salt, perfil,
+                     str(hoje), "trial", str(trial_fim), "trial"),
+                )
+                uid = cur.lastrowid
+            # owner_id = si mesmo
+            cur.execute(
+                f"UPDATE usuarios SET owner_id={p} WHERE id={p}",
+                (uid, uid)
+            )
+            conn.commit()
+
+        _log_db.info(
+            "Novo usuário registrado: id=%s email=%s trial_ate=%s",
+            uid, email_limpo, trial_fim
+        )
+        return True, f"Conta criada! Seu trial gratuito vai até {trial_fim.strftime('%d/%m/%Y')}.", uid
+
+    except Exception as _e:
+        _log_err.error("auto_registrar_usuario: %s", _e)
+        return False, f"Erro ao criar conta: {_e}", None
+
+
 def criar_usuario(nome, email, senha, perfil="fazendeiro", fazenda_id=None, owner_id=None):
     """Cria usuario com hash bcrypt (sistema novo)."""
     p = _ph()
