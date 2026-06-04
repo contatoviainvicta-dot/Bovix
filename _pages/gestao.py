@@ -774,10 +774,30 @@ def page_workspace_do_lote(u):
         with c1_r:
             st.subheader("Informacoes do Lote")
             if lote_ws:
-                st.markdown(f"**Data de entrada:** {lote_ws[3]}")
+                # Formatar data: 2026-05-31 → 31 de maio de 2026
+                _dt_ent = lote_ws[3] or ""
+                try:
+                    from datetime import date as _dt_cls
+                    _meses_pt = {1:"janeiro",2:"fevereiro",3:"março",
+                                 4:"abril",5:"maio",6:"junho",
+                                 7:"julho",8:"agosto",9:"setembro",
+                                 10:"outubro",11:"novembro",12:"dezembro"}
+                    _d = _dt_cls.fromisoformat(str(_dt_ent)[:10])
+                    _dt_fmt = f"{_d.day} de {_meses_pt[_d.month]} de {_d.year}"
+                except Exception:
+                    _dt_fmt = str(_dt_ent)
+
+                # Formatar preço: 1250.0 → R$ 1.250,00
+                _preco_raw = lote_ws[9] if len(lote_ws) > 9 else 0
+                try:
+                    _preco_fmt = f"R$ {float(_preco_raw or 0):,.2f}".replace(",","X").replace(".",",").replace("X",".")
+                except Exception:
+                    _preco_fmt = "R$ 0,00"
+
+                st.markdown(f"**Data de entrada:** {_dt_fmt}")
                 st.write(f"**Transportadora:** {lote_ws[6] or 'Nao informada'}")
                 st.write(f"**Descricao:** {lote_ws[2] or 'Sem descricao'}")
-                st.markdown(f"**Preco por animal:** R$ {lote_ws[3] or 0}")
+                st.markdown(f"**Preço por animal:** {_preco_fmt}")
 
             st.subheader("Status dos animais")
             cont_ws = _ws['cont_status']
