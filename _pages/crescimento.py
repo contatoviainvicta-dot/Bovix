@@ -907,6 +907,17 @@ def page_ferramentas_publicas(u=None):
     from datetime import date, timedelta
     import math
 
+    # Helper CTA reutilizável
+    def _cta(msg):
+        st.markdown(f"""
+<div class="ferr-cta-inline">
+  <div class="ferr-cta-texto">💡 {msg}</div>
+  <a class="ferr-cta-link"
+     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
+    Testar grátis →
+  </a>
+</div>""", unsafe_allow_html=True)
+
     # ── CSS da página pública ─────────────────────────────────────────
     st.markdown("""
 <style>
@@ -966,326 +977,492 @@ def page_ferramentas_publicas(u=None):
 """, unsafe_allow_html=True)
 
     # ── Abas das ferramentas ──────────────────────────────────────────
-    _t1, _t2, _t3, _t4, _t5 = st.tabs([
-        "⚡ GMD",
-        "🔪 Previsão de Abate",
-        "💰 Custo / Arroba",
-        "📅 Calendário Sanitário",
-        "🌿 Lotação de Pastagem",
+    _tab_grupos = st.tabs([
+        "📐 Produção",
+        "💀 Mortalidade",
+        "🩺 Veterinário",
+        "📈 Projeções",
+        "💧 Nutrição e Água",
+        "💰 Financeiro",
     ])
+    (_tg_prod, _tg_mort, _tg_vet,
+     _tg_proj, _tg_nutr, _tg_fin) = _tab_grupos
 
-    # ── FERRAMENTA 1: GMD ─────────────────────────────────────────────
-    with _t1:
-        st.markdown("""<div class="ferr-card">
-<div class="ferr-card-titulo">⚡ Calculadora de GMD</div>
-<div class="ferr-card-sub">Ganho Médio Diário de peso do animal</div>
-</div>""", unsafe_allow_html=True)
+    # ────────────────────────────────────────────────────────────────
+    # ABA 1: PRODUÇÃO (GMD + Previsão de Abate + Lotação)
+    # ────────────────────────────────────────────────────────────────
+    with _tg_prod:
+        _s1, _s2, _s3 = st.tabs(["⚡ GMD", "🔪 Previsão de Abate", "🌿 Lotação"])
 
-        _c1, _c2, _c3 = st.columns(3)
-        with _c1:
-            _pi = st.number_input("Peso inicial (kg)", min_value=100.0,
-                                  max_value=800.0, value=300.0, step=5.0,
-                                  key="gmd_pi")
-        with _c2:
-            _pf = st.number_input("Peso final (kg)", min_value=100.0,
-                                  max_value=800.0, value=420.0, step=5.0,
-                                  key="gmd_pf")
-        with _c3:
-            _dias = st.number_input("Dias no período", min_value=1,
-                                    max_value=730, value=90, key="gmd_dias")
-
-        if _pf > _pi and _dias > 0:
-            _gmd = (_pf - _pi) / _dias
-            _class = ("Excelente 🟢" if _gmd >= 1.2
-                      else "Bom 🟡" if _gmd >= 0.8
-                      else "Abaixo do esperado 🔴")
-            st.markdown(f"""
-<div class="ferr-resultado">
-  <div class="ferr-res-label">GMD calculado</div>
+        with _s1:
+            st.markdown("**Calculadora de GMD** — Ganho Médio Diário")
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1: _pi = st.number_input("Peso inicial (kg)", 100.0, 800.0, 300.0, 5.0, key="gmd_pi")
+            with _c2: _pf = st.number_input("Peso final (kg)",   100.0, 800.0, 420.0, 5.0, key="gmd_pf")
+            with _c3: _dias = st.number_input("Dias", 1, 730, 90, key="gmd_dias")
+            if _pf > _pi and _dias > 0:
+                _gmd = (_pf - _pi) / _dias
+                _class = ("🟢 Excelente" if _gmd >= 1.2 else "🟡 Bom" if _gmd >= 0.8 else "🔴 Abaixo")
+                st.markdown(f"""<div class="ferr-resultado">
+  <div class="ferr-res-label">GMD</div>
   <div class="ferr-res-valor">{_gmd:.3f} kg/dia</div>
-  <div class="ferr-res-detalhe">
-    Ganho total: {_pf-_pi:.0f} kg em {_dias} dias · Classificação: {_class}
-  </div>
-</div>
-<div class="ferr-cta-inline">
-  <div class="ferr-cta-texto">
-    💡 No Auroque, o GMD é calculado automaticamente para cada animal do seu lote
-  </div>
-  <a class="ferr-cta-link"
-     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
-    Ver no meu rebanho →
-  </a>
-</div>
-""", unsafe_allow_html=True)
-        elif _pf <= _pi:
-            st.warning("O peso final deve ser maior que o peso inicial.")
-
-    # ── FERRAMENTA 2: PREVISÃO DE ABATE ───────────────────────────────
-    with _t2:
-        st.markdown("""<div class="ferr-card">
-<div class="ferr-card-titulo">🔪 Previsão de Abate</div>
-<div class="ferr-card-sub">Quando o animal atingirá o peso ideal de abate</div>
+  <div class="ferr-res-detalhe">Ganho total: {_pf-_pi:.0f} kg · {_class}</div>
 </div>""", unsafe_allow_html=True)
+            _cta("No Auroque o GMD é calculado automaticamente por animal")
 
-        _c1, _c2, _c3 = st.columns(3)
-        with _c1:
-            _pa_atual = st.number_input("Peso atual (kg)", min_value=100.0,
-                                        max_value=800.0, value=380.0, step=5.0,
-                                        key="abate_pa")
-        with _c2:
-            _pa_alvo  = st.number_input("Peso alvo de abate (kg)", min_value=100.0,
-                                        max_value=800.0, value=500.0, step=5.0,
-                                        key="abate_alvo")
-        with _c3:
-            _pa_gmd   = st.number_input("GMD esperado (kg/dia)", min_value=0.1,
-                                        max_value=3.0, value=1.0, step=0.05,
-                                        key="abate_gmd")
-
-        if _pa_alvo > _pa_atual and _pa_gmd > 0:
-            _dias_abate = math.ceil((_pa_alvo - _pa_atual) / _pa_gmd)
-            _data_abate = date.today() + timedelta(days=_dias_abate)
-            _arrobas    = _pa_alvo * 0.5 / 15
-            st.markdown(f"""
-<div class="ferr-resultado">
-  <div class="ferr-res-label">Previsão de abate</div>
-  <div class="ferr-res-valor">{_data_abate.strftime('%d/%m/%Y')}</div>
-  <div class="ferr-res-detalhe">
-    {_dias_abate} dias restantes ·
-    Peso faltando: {_pa_alvo-_pa_atual:.0f} kg ·
-    Rendimento estimado: {_arrobas:.1f} @
-  </div>
-</div>
-<div class="ferr-cta-inline">
-  <div class="ferr-cta-texto">
-    💡 O Auroque calcula isso automaticamente para todos os animais do lote
-  </div>
-  <a class="ferr-cta-link"
-     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
-    Testar grátis →
-  </a>
-</div>
-""", unsafe_allow_html=True)
-
-    # ── FERRAMENTA 3: CUSTO / ARROBA ──────────────────────────────────
-    with _t3:
-        st.markdown("""<div class="ferr-card">
-<div class="ferr-card-titulo">💰 Custo e Margem por Arroba</div>
-<div class="ferr-card-sub">
-  Calcule o custo de produção e a margem esperada na venda
-</div>
+        with _s2:
+            st.markdown("**Previsão de Abate** — Quando atingirá o peso alvo")
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1: _pa = st.number_input("Peso atual (kg)", 100.0, 800.0, 380.0, 5.0, key="ab_pa")
+            with _c2: _pa_alvo = st.number_input("Peso alvo (kg)", 100.0, 800.0, 500.0, 5.0, key="ab_alvo")
+            with _c3: _pa_gmd = st.number_input("GMD (kg/dia)", 0.1, 3.0, 1.0, 0.05, key="ab_gmd")
+            if _pa_alvo > _pa and _pa_gmd > 0:
+                import math as _math
+                _d = _math.ceil((_pa_alvo - _pa) / _pa_gmd)
+                from datetime import timedelta as _td2
+                _dt = date.today() + _td2(days=_d)
+                _arr = _pa_alvo * 0.5 / 15
+                st.markdown(f"""<div class="ferr-resultado">
+  <div class="ferr-res-label">Data prevista</div>
+  <div class="ferr-res-valor">{_dt.strftime('%d/%m/%Y')}</div>
+  <div class="ferr-res-detalhe">{_d} dias · {_arr:.1f} arrobas estimadas</div>
 </div>""", unsafe_allow_html=True)
+            _cta("O Auroque projeta o abate para todos os animais do lote automaticamente")
 
+        with _s3:
+            st.markdown("**Lotação de Pastagem** — Capacidade de suporte")
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                _area = st.number_input("Área (ha)", 1.0, 5000.0, 50.0, key="lot_area")
+                _capac = st.number_input("Capacidade (UA/ha)", 0.1, 10.0, 1.5, 0.1, key="lot_cap")
+            with _c2:
+                _peso_m = st.number_input("Peso médio dos animais (kg)", 100.0, 800.0, 400.0, key="lot_pm")
+                _tipo_p = st.selectbox("Pastagem", ["Brachiaria brizantha","Brachiaria decumbens",
+                    "Panicum Mombaça","Panicum Tanzânia","Tifton 85 (irrigado)"], key="lot_tp")
+            _ua_ani = _peso_m / 450
+            _ua_tot = _area * _capac
+            _n_ani  = int(_ua_tot / _ua_ani)
+            st.markdown(f"""<div class="ferr-resultado">
+  <div class="ferr-res-label">Animais suportados</div>
+  <div class="ferr-res-valor">{_n_ani}</div>
+  <div class="ferr-res-detalhe">{_ua_tot:.1f} UA total · {_ua_ani:.2f} UA/animal</div>
+</div>""", unsafe_allow_html=True)
+            _cta("No Auroque você monitora piquetes e rotação em tempo real")
+
+    # ────────────────────────────────────────────────────────────────
+    # ABA 2: MORTALIDADE
+    # ────────────────────────────────────────────────────────────────
+    with _tg_mort:
+        st.markdown("**Simulador de Prejuízo por Mortalidade**")
         _c1, _c2 = st.columns(2)
         with _c1:
-            _cv_compra  = st.number_input("Custo de compra (R$)", min_value=0.0,
-                                           value=3000.0, step=100.0, key="arr_compra")
-            _cv_racao   = st.number_input("Ração e suplementos (R$)", min_value=0.0,
-                                           value=800.0, step=50.0, key="arr_racao")
-            _cv_sanit   = st.number_input("Sanidade/veterinário (R$)", min_value=0.0,
-                                           value=150.0, step=10.0, key="arr_sanit")
+            _m_n   = st.number_input("Nº de animais no lote", 1, 10000, 100, key="mort_n")
+            _m_pm  = st.number_input("Peso médio (kg)", 100.0, 800.0, 400.0, 10.0, key="mort_pm")
         with _c2:
-            _cv_outros  = st.number_input("Outros custos (R$)", min_value=0.0,
-                                           value=200.0, step=10.0, key="arr_outros")
-            _cv_peso_v  = st.number_input("Peso de venda (kg)", min_value=100.0,
-                                           value=500.0, step=10.0, key="arr_peso")
-            _cv_preco_a = st.number_input("Preço da arroba (R$)", min_value=0.0,
-                                           value=320.0, step=5.0, key="arr_preco")
+            _m_arr = st.number_input("Valor da arroba (R$)", 100.0, 1000.0, 320.0, 5.0, key="mort_arr")
+            _m_tx  = st.number_input("Mortalidade (%)", 0.1, 100.0, 2.0, 0.1, key="mort_tx")
+        _m_mortos   = _m_n * _m_tx / 100
+        _m_arr_ani  = _m_pm * 0.5 / 15
+        _m_val_ani  = _m_arr_ani * _m_arr
+        _m_prejuizo = _m_mortos * _m_val_ani
+        _m_custo_m  = _m_prejuizo / _m_n if _m_n else 0
 
-        _custo_total = _cv_compra + _cv_racao + _cv_sanit + _cv_outros
-        _arrobas_v   = _cv_peso_v * 0.5 / 15
-        _receita     = _arrobas_v * _cv_preco_a
-        _margem      = _receita - _custo_total
-        _custo_at    = _custo_total / _arrobas_v if _arrobas_v > 0 else 0
-        _margem_pct  = (_margem / _custo_total * 100) if _custo_total > 0 else 0
-        _cor_m       = "#1B4332" if _margem >= 0 else "#E24B4A"
-
-        st.markdown(f"""
-<div class="ferr-resultado">
+        st.markdown(f"""<div class="ferr-resultado">
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
     <div>
-      <div class="ferr-res-label">Custo total</div>
-      <div class="ferr-res-valor" style="font-size:22px">
-        R$ {_custo_total:,.0f}</div>
+      <div class="ferr-res-label">Animais perdidos</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_m_mortos:.1f}</div>
     </div>
     <div>
-      <div class="ferr-res-label">Receita estimada</div>
-      <div class="ferr-res-valor" style="font-size:22px">
-        R$ {_receita:,.0f}</div>
+      <div class="ferr-res-label">Valor por animal</div>
+      <div class="ferr-res-valor" style="font-size:22px">R$ {_m_val_ani:,.0f}</div>
     </div>
     <div>
-      <div class="ferr-res-label">Margem</div>
-      <div class="ferr-res-valor" style="font-size:22px;color:{_cor_m}">
-        R$ {_margem:,.0f}</div>
+      <div class="ferr-res-label">Prejuízo total</div>
+      <div class="ferr-res-valor" style="font-size:22px;color:#E24B4A">
+        R$ {_m_prejuizo:,.0f}</div>
     </div>
   </div>
   <div class="ferr-res-detalhe" style="margin-top:8px">
-    Custo/@ R$ {_custo_at:.0f} ·
-    {_arrobas_v:.1f} arrobas ·
-    Margem {_margem_pct:.1f}%
+    Custo da mortalidade por animal vivo: R$ {_m_custo_m:,.2f}
   </div>
-</div>
-<div class="ferr-cta-inline">
-  <div class="ferr-cta-texto">
-    💡 No Auroque, o DRE completo é gerado automaticamente por lote
-  </div>
-  <a class="ferr-cta-link"
-     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
-    Ver DRE completo →
-  </a>
-</div>
-""", unsafe_allow_html=True)
-
-    # ── FERRAMENTA 4: CALENDÁRIO SANITÁRIO ───────────────────────────
-    with _t4:
-        st.markdown("""<div class="ferr-card">
-<div class="ferr-card-titulo">📅 Calendário Sanitário</div>
-<div class="ferr-card-sub">
-  Vacinas e procedimentos recomendados por fase do lote
-</div>
 </div>""", unsafe_allow_html=True)
+        _cta("No Auroque você registra mortes e o impacto é calculado automaticamente no DRE")
 
-        _fase = st.selectbox("Fase / categoria do lote", [
-            "Cria (0-6 meses)",
-            "Recria (7-18 meses)",
-            "Engorda (19-30 meses)",
-            "Vacas em produção",
-            "Touros",
-        ], key="cal_fase")
+    # ────────────────────────────────────────────────────────────────
+    # ABA 3: VETERINÁRIO
+    # ────────────────────────────────────────────────────────────────
+    with _tg_vet:
+        _v1, _v2, _v3, _v4 = st.tabs([
+            "💊 Dose", "💧 Fluidoterapia", "⚗️ Conversão kg↔mL", "🔬 Volume de Aplicação"
+        ])
 
-        _calendario = {
-            "Cria (0-6 meses)": [
-                ("Brucelose (fêmeas 3-8 meses)", "Obrigatória", "3-8 meses"),
-                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-                ("Clostridioses (polivalente)", "Recomendada", "2-3 meses"),
-                ("Raiva", "Recomendada", "Regiões de risco"),
-                ("Vermifugação estratégica", "Recomendada", "A cada 90 dias"),
-            ],
-            "Recria (7-18 meses)": [
-                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-                ("Raiva", "Recomendada", "Anual"),
-                ("Clostridioses (polivalente)", "Recomendada", "Anual"),
-                ("Vermifugação", "Recomendada", "A cada 90 dias"),
-                ("Carrapatos (banho/pour-on)", "Recomendada", "Monitorar"),
-            ],
-            "Engorda (19-30 meses)": [
-                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-                ("Clostridioses (polivalente)", "Recomendada", "Entrada no confinamento"),
-                ("Vermifugação estratégica", "Recomendada", "Entrada + 60 dias"),
-                ("Controle de carrapatos", "Recomendada", "Monitorar"),
-                ("IBR / BVD", "Recomendada", "Entrada no confinamento"),
-            ],
-            "Vacas em produção": [
-                ("Brucelose (não vacinadas)", "Obrigatória", "Verificar status"),
-                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-                ("Clostridioses", "Recomendada", "Anual — pré-parto"),
-                ("Leptospirose", "Recomendada", "Anual"),
-                ("Vermifugação pós-parto", "Recomendada", "30 dias pós-parto"),
-            ],
-            "Touros": [
-                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-                ("Brucelose (exame)", "Obrigatória", "Anual"),
-                ("Clostridioses", "Recomendada", "Anual"),
-                ("Leptospirose", "Recomendada", "Antes da estação"),
-                ("Exame andrológico", "Recomendada", "Anual — pré-estação"),
-            ],
-        }
-
-        import pandas as _pd_cal
-        _df_cal = _pd_cal.DataFrame(
-            _calendario[_fase],
-            columns=["Procedimento", "Tipo", "Frequência / Quando"]
-        )
-        st.dataframe(_df_cal, hide_index=True, use_container_width=True)
-
-        st.markdown(f"""
-<div class="ferr-cta-inline">
-  <div class="ferr-cta-texto">
-    💡 No Auroque, o calendário sanitário é gerado automaticamente
-    com alertas no celular via WhatsApp
+        with _v1:
+            st.markdown("**Calculadora de Dose de Medicamento**")
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1: _d_peso = st.number_input("Peso do animal (kg)", 10.0, 1000.0, 300.0, key="dose_peso")
+            with _c2: _d_dose = st.number_input("Dose (mg/kg)", 0.01, 100.0, 5.0, 0.01, key="dose_mgkg")
+            with _c3: _d_conc = st.number_input("Concentração do produto (mg/mL)", 0.1, 1000.0, 50.0, key="dose_conc")
+            _d_mg_total = _d_peso * _d_dose
+            _d_vol      = _d_mg_total / _d_conc
+            st.markdown(f"""<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div>
+      <div class="ferr-res-label">Dose total (mg)</div>
+      <div class="ferr-res-valor">{_d_mg_total:.1f} mg</div>
+    </div>
+    <div>
+      <div class="ferr-res-label">Volume a aplicar</div>
+      <div class="ferr-res-valor">{_d_vol:.2f} mL</div>
+    </div>
   </div>
-  <a class="ferr-cta-link"
-     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
-    Criar meu calendário →
-  </a>
-</div>
-""", unsafe_allow_html=True)
-
-    # ── FERRAMENTA 5: LOTAÇÃO DE PASTAGEM ─────────────────────────────
-    with _t5:
-        st.markdown("""<div class="ferr-card">
-<div class="ferr-card-titulo">🌿 Calculadora de Lotação de Pastagem</div>
-<div class="ferr-card-sub">
-  Quantos animais sua área suporta com segurança
-</div>
 </div>""", unsafe_allow_html=True)
+            _cta("No Auroque o receituário registra dose, via e controla a carência automaticamente")
 
-        _c1, _c2 = st.columns(2)
-        with _c1:
-            _area_ha  = st.number_input("Área total (hectares)", min_value=1.0,
-                                         value=50.0, step=1.0, key="lot_area")
-            _capac_ua = st.number_input("Capacidade de suporte (UA/ha)", min_value=0.1,
-                                         max_value=10.0, value=1.5, step=0.1,
-                                         key="lot_capac",
-                                         help="Brachiaria: 1-2 UA/ha · Panicum: 2-4 UA/ha · Intensivo: 4-8 UA/ha")
-        with _c2:
-            _peso_med = st.number_input("Peso médio dos animais (kg)", min_value=100.0,
-                                         value=400.0, step=10.0, key="lot_peso")
-            _tipo_past = st.selectbox("Tipo de pastagem", [
-                "Brachiaria brizantha",
-                "Brachiaria decumbens",
-                "Panicum maximum (Mombaça)",
-                "Panicum maximum (Tanzânia)",
-                "Tifton 85 (irrigado)",
-                "Outro",
-            ], key="lot_tipo")
-
-        # 1 UA = 450 kg de peso vivo
-        _ua_por_animal = _peso_med / 450
-        _ua_total      = _area_ha * _capac_ua
-        _n_animais     = math.floor(_ua_total / _ua_por_animal)
-        _ua_usada_pct  = (_ua_por_animal * _n_animais / _ua_total * 100)
-
-        _refs_capac = {
-            "Brachiaria brizantha":         "1,5 – 2,5 UA/ha",
-            "Brachiaria decumbens":          "1,0 – 1,8 UA/ha",
-            "Panicum maximum (Mombaça)":     "2,5 – 4,0 UA/ha",
-            "Panicum maximum (Tanzânia)":    "2,0 – 3,5 UA/ha",
-            "Tifton 85 (irrigado)":          "4,0 – 8,0 UA/ha",
-            "Outro":                         "Consulte um agrônomo",
-        }
-
-        st.markdown(f"""
-<div class="ferr-resultado">
+        with _v2:
+            st.markdown("**Calculadora de Fluidoterapia** — Reposição hídrica")
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1: _f_peso = st.number_input("Peso (kg)", 10.0, 1000.0, 200.0, key="flu_peso")
+            with _c2: _f_desd = st.selectbox("Grau de desidratação", ["5% (leve)","8% (moderada)","10% (grave)","12% (crítica)"], key="flu_desd")
+            with _c3: _f_h    = st.number_input("Horas para repor", 4, 48, 24, key="flu_h")
+            _f_pct  = float(_f_desd.split("%")[0]) / 100
+            _f_vol  = _f_peso * _f_pct * 1000  # mL
+            _f_taxa = _f_vol / _f_h             # mL/h
+            st.markdown(f"""<div class="ferr-resultado">
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
     <div>
-      <div class="ferr-res-label">Animais suportados</div>
-      <div class="ferr-res-valor">{_n_animais}</div>
+      <div class="ferr-res-label">Volume total</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_f_vol/1000:.1f} L</div>
     </div>
     <div>
-      <div class="ferr-res-label">UA total da área</div>
-      <div class="ferr-res-valor">{_ua_total:.1f} UA</div>
+      <div class="ferr-res-label">Taxa (mL/h)</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_f_taxa:.0f}</div>
     </div>
     <div>
-      <div class="ferr-res-label">UA por animal</div>
-      <div class="ferr-res-valor">{_ua_por_animal:.2f} UA</div>
+      <div class="ferr-res-label">Taxa (gotas/min)*</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_f_taxa/3:.0f}</div>
     </div>
+  </div>
+  <div class="ferr-res-detalhe">*Equipo macrogotas (20 gts/mL)</div>
+</div>""", unsafe_allow_html=True)
+            _cta("Registre os tratamentos e monitoramento pós-tratamento no Auroque")
+
+        with _v3:
+            st.markdown("**Conversor kg ↔ mL** — Equivalência de peso e volume")
+            _op = st.radio("Converter:", ["kg → mL (água/soro)", "mL → kg"], horizontal=True, key="conv_op")
+            if "kg → mL" in _op:
+                _cv = st.number_input("Valor em kg", 0.001, 1000.0, 1.0, key="conv_kg")
+                st.markdown(f"""<div class="ferr-resultado">
+  <div class="ferr-res-label">Equivalente em mL (densidade 1 g/mL)</div>
+  <div class="ferr-res-valor">{_cv*1000:.0f} mL = {_cv:.3f} L</div>
+</div>""", unsafe_allow_html=True)
+            else:
+                _cv2 = st.number_input("Valor em mL", 0.1, 1000000.0, 1000.0, key="conv_ml")
+                st.markdown(f"""<div class="ferr-resultado">
+  <div class="ferr-res-label">Equivalente em kg (densidade 1 g/mL)</div>
+  <div class="ferr-res-valor">{_cv2/1000:.4f} kg = {_cv2:.0f} g</div>
+</div>""", unsafe_allow_html=True)
+            _cta("Controle de medicamentos e estoque integrado no Auroque")
+
+        with _v4:
+            st.markdown("**Volume de Aplicação** — Dose por via de administração")
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                _vv_peso  = st.number_input("Peso do animal (kg)", 10.0, 1000.0, 300.0, key="vv_peso")
+                _vv_dose  = st.number_input("Dose prescrita (mL/kg ou mg/kg)", 0.001, 50.0, 0.1, 0.001, key="vv_dose")
+            with _c2:
+                _vv_tipo  = st.selectbox("Unidade da dose", ["mL/kg","mg/kg"], key="vv_tipo")
+                _vv_conc  = st.number_input("Concentração (mg/mL) — se mg/kg", 1.0, 1000.0, 100.0, key="vv_conc",
+                                             disabled=(_vv_tipo=="mL/kg"))
+            if _vv_tipo == "mL/kg":
+                _vv_vol = _vv_peso * _vv_dose
+            else:
+                _vv_mg  = _vv_peso * _vv_dose
+                _vv_vol = _vv_mg / _vv_conc
+            st.markdown(f"""<div class="ferr-resultado">
+  <div class="ferr-res-label">Volume a aplicar</div>
+  <div class="ferr-res-valor">{_vv_vol:.2f} mL</div>
+  <div class="ferr-res-detalhe">Para animal de {_vv_peso:.0f} kg</div>
+</div>""", unsafe_allow_html=True)
+            _cta("No Auroque, receituários e volumes ficam registrados no prontuário do animal")
+
+    # ────────────────────────────────────────────────────────────────
+    # ABA 4: PROJEÇÕES
+    # ────────────────────────────────────────────────────────────────
+    with _tg_proj:
+        _p1, _p2 = st.tabs(["📈 Projeção de Peso", "📉 Impacto Queda de GMD"])
+
+        with _p1:
+            st.markdown("**Projeção de Peso** — Evolução estimada do lote")
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1: _pp_pi  = st.number_input("Peso atual (kg)", 100.0, 800.0, 300.0, key="pp_pi")
+            with _c2: _pp_gmd = st.number_input("GMD esperado (kg/dia)", 0.1, 3.0, 1.0, 0.05, key="pp_gmd")
+            with _c3: _pp_d   = st.number_input("Projetar por (dias)", 10, 365, 90, key="pp_dias")
+
+            import pandas as _pd_pp
+            _datas = [date.today() + timedelta(days=i*10) for i in range(_pp_d//10+1)]
+            _pesos = [_pp_pi + _pp_gmd * i * 10 for i in range(_pp_d//10+1)]
+            _df_pp = _pd_pp.DataFrame({"Data": _datas, "Peso (kg)": _pesos})
+            _df_pp["Data"] = _pd_pp.to_datetime(_df_pp["Data"])
+            _p_final = _pp_pi + _pp_gmd * _pp_d
+            _arr_final = _p_final * 0.5 / 15
+
+            st.markdown(f"""<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+    <div><div class="ferr-res-label">Peso em {_pp_d} dias</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_p_final:.0f} kg</div></div>
+    <div><div class="ferr-res-label">Ganho total</div>
+      <div class="ferr-res-valor" style="font-size:22px">+{_pp_gmd*_pp_d:.0f} kg</div></div>
+    <div><div class="ferr-res-label">Arrobas estimadas</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_arr_final:.1f} @</div></div>
+  </div>
+</div>""", unsafe_allow_html=True)
+            try:
+                safe_line_chart(_df_pp.set_index("Data")["Peso (kg)"])
+            except Exception:
+                st.line_chart(_df_pp.set_index("Data")["Peso (kg)"])
+            _cta("No Auroque a projeção é calculada com dados reais de pesagem do lote")
+
+        with _p2:
+            st.markdown("**Impacto Financeiro da Queda do GMD**")
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                _ig_n    = st.number_input("Nº de animais", 1, 10000, 50, key="ig_n")
+                _ig_gmd1 = st.number_input("GMD atual (kg/dia)", 0.1, 3.0, 1.2, 0.01, key="ig_g1")
+                _ig_gmd2 = st.number_input("GMD com queda (kg/dia)", 0.1, 3.0, 0.8, 0.01, key="ig_g2")
+            with _c2:
+                _ig_dias = st.number_input("Período (dias)", 10, 365, 90, key="ig_d")
+                _ig_arr  = st.number_input("Valor da arroba (R$)", 100.0, 1000.0, 320.0, key="ig_arr")
+            _ig_gmd_dif  = max(0, _ig_gmd1 - _ig_gmd2)
+            _ig_kg_perd  = _ig_gmd_dif * _ig_dias * _ig_n
+            _ig_arr_perd = _ig_kg_perd * 0.5 / 15
+            _ig_val_perd = _ig_arr_perd * _ig_arr
+            _ig_dias_ext = (_ig_kg_perd / _ig_n) / _ig_gmd2 if _ig_gmd2 > 0 else 0
+
+            st.markdown(f"""<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+    <div><div class="ferr-res-label">Kg não produzidos</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_ig_kg_perd:,.0f} kg</div></div>
+    <div><div class="ferr-res-label">Arrobas perdidas</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_ig_arr_perd:,.1f} @</div></div>
+    <div><div class="ferr-res-label">Impacto financeiro</div>
+      <div class="ferr-res-valor" style="font-size:22px;color:#E24B4A">
+        R$ {_ig_val_perd:,.0f}</div></div>
+    <div><div class="ferr-res-label">Dias extras no confinamento</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_ig_dias_ext:.0f} dias</div></div>
+  </div>
+</div>""", unsafe_allow_html=True)
+            _cta("Monitore o GMD em tempo real e receba alertas de anomalias no Auroque")
+
+    # ────────────────────────────────────────────────────────────────
+    # ABA 5: NUTRIÇÃO E ÁGUA
+    # ────────────────────────────────────────────────────────────────
+    with _tg_nutr:
+        _n1, _n2 = st.tabs(["🧂 Sal Mineral", "💧 Água do Rebanho"])
+
+        with _n1:
+            st.markdown("**Consumo de Sal Mineral** — Estimativa de fornecimento")
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1: _sm_n    = st.number_input("Nº de animais", 1, 10000, 100, key="sm_n")
+            with _c2: _sm_peso = st.number_input("Peso médio (kg)", 50.0, 800.0, 350.0, key="sm_p")
+            with _c3: _sm_cat  = st.selectbox("Categoria", [
+                "Recria / Engorda (0.05-0.08% PV)",
+                "Lactação (0.08-0.10% PV)",
+                "Seca / Mantença (0.03-0.05% PV)"
+            ], key="sm_cat")
+
+            _sm_pct = 0.065 if "Recria" in _sm_cat else 0.09 if "Lactação" in _sm_cat else 0.04
+            _sm_dia_ani = _sm_peso * _sm_pct / 100 * 1000  # g/dia/animal
+            _sm_dia_tot = _sm_dia_ani * _sm_n / 1000        # kg/dia total
+            _sm_mes     = _sm_dia_tot * 30
+            _sm_saco    = math.ceil(_sm_mes / 30)           # sacos 30kg
+
+            st.markdown(f"""<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+    <div><div class="ferr-res-label">g/dia/animal</div>
+      <div class="ferr-res-valor" style="font-size:20px">{_sm_dia_ani:.0f} g</div></div>
+    <div><div class="ferr-res-label">kg/dia (lote)</div>
+      <div class="ferr-res-valor" style="font-size:20px">{_sm_dia_tot:.1f}</div></div>
+    <div><div class="ferr-res-label">kg/mês</div>
+      <div class="ferr-res-valor" style="font-size:20px">{_sm_mes:.0f}</div></div>
+    <div><div class="ferr-res-label">Sacos 30kg/mês</div>
+      <div class="ferr-res-valor" style="font-size:20px">{_sm_saco}</div></div>
+  </div>
+</div>""", unsafe_allow_html=True)
+            _cta("Controle o estoque de insumos e sal mineral integrado no Auroque")
+
+        with _n2:
+            st.markdown("**Necessidade de Água do Rebanho** — Estimativa diária")
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1: _ag_n    = st.number_input("Nº de animais", 1, 10000, 100, key="ag_n")
+            with _c2: _ag_peso = st.number_input("Peso médio (kg)", 50.0, 800.0, 350.0, key="ag_p")
+            with _c3: _ag_temp = st.selectbox("Temperatura ambiente", [
+                "Fria (<15°C)", "Amena (15-25°C)", "Quente (25-35°C)", "Muito quente (>35°C)"
+            ], key="ag_temp")
+
+            _ag_litros_base = _ag_peso * 0.08   # 8% PV base
+            _ag_mult = 0.8 if "Fria" in _ag_temp else 1.0 if "Amena" in _ag_temp else 1.3 if "Quente (" in _ag_temp else 1.6
+            _ag_lpa   = _ag_litros_base * _ag_mult
+            _ag_ltot  = _ag_lpa * _ag_n
+            _ag_m3    = _ag_ltot / 1000
+
+            st.markdown(f"""<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <div><div class="ferr-res-label">L/dia/animal</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_ag_lpa:.0f} L</div></div>
+    <div><div class="ferr-res-label">L/dia (lote)</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_ag_ltot:,.0f} L</div></div>
+    <div><div class="ferr-res-label">m³/dia</div>
+      <div class="ferr-res-valor" style="font-size:22px">{_ag_m3:.1f} m³</div></div>
+  </div>
+  <div class="ferr-res-detalhe">Base: 8% do peso vivo · fator temperatura: {_ag_mult}x</div>
+</div>""", unsafe_allow_html=True)
+            _cta("Dimensione bebedouros e açudes com base no seu rebanho real no Auroque")
+
+    # ────────────────────────────────────────────────────────────────
+    # ABA 6: FINANCEIRO
+    # ────────────────────────────────────────────────────────────────
+    with _tg_fin:
+        _f1, _f2, _f3 = st.tabs(["💰 Custo/Arroba", "🐄 Custo por Animal", "💀 Custo da Mortalidade"])
+
+        with _f1:
+            st.markdown("**Custo e Margem por Arroba**")
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                _cv_compra = st.number_input("Custo de compra (R$)", 0.0, 50000.0, 3000.0, key="arr_co")
+                _cv_racao  = st.number_input("Ração e suplementos (R$)", 0.0, 20000.0, 800.0, key="arr_ra")
+                _cv_sanit  = st.number_input("Sanidade/veterinário (R$)", 0.0, 5000.0, 150.0, key="arr_sa")
+            with _c2:
+                _cv_outros = st.number_input("Outros custos (R$)", 0.0, 10000.0, 200.0, key="arr_ou")
+                _cv_peso_v = st.number_input("Peso de venda (kg)", 100.0, 800.0, 500.0, key="arr_pv")
+                _cv_preco  = st.number_input("Preço da arroba (R$)", 100.0, 1000.0, 320.0, key="arr_pr")
+            _ct = _cv_compra + _cv_racao + _cv_sanit + _cv_outros
+            _arrobas = _cv_peso_v * 0.5 / 15
+            _receita = _arrobas * _cv_preco
+            _margem  = _receita - _ct
+            _custo_at = _ct / _arrobas if _arrobas > 0 else 0
+            _cor_m = "#1B4332" if _margem >= 0 else "#E24B4A"
+            st.markdown(f"""<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+    <div><div class="ferr-res-label">Custo total</div>
+      <div class="ferr-res-valor" style="font-size:18px">R$ {_ct:,.0f}</div></div>
+    <div><div class="ferr-res-label">Receita</div>
+      <div class="ferr-res-valor" style="font-size:18px">R$ {_receita:,.0f}</div></div>
+    <div><div class="ferr-res-label">Custo/@</div>
+      <div class="ferr-res-valor" style="font-size:18px">R$ {_custo_at:.0f}</div></div>
+    <div><div class="ferr-res-label">Margem</div>
+      <div class="ferr-res-valor" style="font-size:18px;color:{_cor_m}">
+        R$ {_margem:,.0f}</div></div>
+  </div>
+</div>""", unsafe_allow_html=True)
+            _cta("DRE completo e automático por lote no Auroque")
+
+        with _f2:
+            st.markdown("**Custo por Animal** — Distribuição dos custos do lote")
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                _ca_n    = st.number_input("Nº de animais", 1, 10000, 50, key="ca_n")
+                _ca_comp = st.number_input("Custo total de compra (R$)", 0.0, 500000.0, 150000.0, key="ca_co")
+                _ca_rac  = st.number_input("Ração total (R$)", 0.0, 200000.0, 40000.0, key="ca_ra")
+            with _c2:
+                _ca_san  = st.number_input("Sanidade total (R$)", 0.0, 50000.0, 7500.0, key="ca_sa")
+                _ca_mao  = st.number_input("Mão de obra (R$)", 0.0, 50000.0, 9000.0, key="ca_mo")
+                _ca_out  = st.number_input("Outros (R$)", 0.0, 50000.0, 3500.0, key="ca_ou")
+            _ca_tot     = _ca_comp + _ca_rac + _ca_san + _ca_mao + _ca_out
+            _ca_por_ani = _ca_tot / _ca_n if _ca_n else 0
+            st.markdown(f"""<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div><div class="ferr-res-label">Custo total do lote</div>
+      <div class="ferr-res-valor">R$ {_ca_tot:,.0f}</div></div>
+    <div><div class="ferr-res-label">Custo por animal</div>
+      <div class="ferr-res-valor">R$ {_ca_por_ani:,.0f}</div></div>
   </div>
   <div class="ferr-res-detalhe" style="margin-top:8px">
-    Referência {_tipo_past}: {_refs_capac[_tipo_past]} ·
-    Ocupação: {_ua_usada_pct:.0f}% da capacidade
-  </div>
-</div>
-<div class="ferr-cta-inline">
-  <div class="ferr-cta-texto">
-    💡 No Auroque você monitora piquetes e rotação de pastagem em tempo real
-  </div>
-  <a class="ferr-cta-link"
-     href="https://2qemgappujzfxkzrbez75v7.streamlit.app" target="_blank">
-    Conhecer o Auroque →
-  </a>
-</div>
-""", unsafe_allow_html=True)
+    Ração: {_ca_rac/_ca_tot*100:.1f}% · Compra: {_ca_comp/_ca_tot*100:.1f}%
+    · Sanidade: {_ca_san/_ca_tot*100:.1f}%</div>
+</div>""" if _ca_tot > 0 else '<div class="ferr-resultado">Preencha os valores acima</div>',
+unsafe_allow_html=True)
+            _cta("Lance custos por categoria e veja o DRE real de cada lote no Auroque")
 
+        with _f3:
+            st.markdown("**Custo da Mortalidade** — Impacto no resultado")
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                _cm_n    = st.number_input("Nº de animais", 1, 10000, 100, key="cm_n")
+                _cm_cv   = st.number_input("Custo variável/animal (R$)", 0.0, 20000.0, 4150.0, key="cm_cv")
+            with _c2:
+                _cm_mort = st.number_input("Animais mortos", 0, 1000, 3, key="cm_mo")
+                _cm_arr  = st.number_input("Valor da arroba (R$)", 100.0, 1000.0, 320.0, key="cm_ar")
+                _cm_pm   = st.number_input("Peso médio (kg)", 100.0, 800.0, 400.0, key="cm_pm")
+            _cm_custo_dir = _cm_mort * _cm_cv
+            _cm_rec_perd  = _cm_mort * (_cm_pm * 0.5/15) * _cm_arr
+            _cm_total     = _cm_custo_dir + _cm_rec_perd
+            _cm_tx        = _cm_mort / _cm_n * 100 if _cm_n else 0
+            st.markdown(f"""<div class="ferr-resultado">
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+    <div><div class="ferr-res-label">Custo investido perdido</div>
+      <div class="ferr-res-valor" style="font-size:18px">R$ {_cm_custo_dir:,.0f}</div></div>
+    <div><div class="ferr-res-label">Receita não realizada</div>
+      <div class="ferr-res-valor" style="font-size:18px">R$ {_cm_rec_perd:,.0f}</div></div>
+    <div><div class="ferr-res-label">Impacto total</div>
+      <div class="ferr-res-valor" style="font-size:18px;color:#E24B4A">
+        R$ {_cm_total:,.0f}</div></div>
+  </div>
+  <div class="ferr-res-detalhe">Taxa de mortalidade: {_cm_tx:.2f}%</div>
+</div>""", unsafe_allow_html=True)
+            _cta("No Auroque, mortes são registradas e o impacto aparece automaticamente no DRE")
+
+    # ── Calendário Sanitário (mantido separado) ───────────────────────
+    st.divider()
+    st.markdown("### 📅 Calendário Sanitário")
+    _fase = st.selectbox("Fase / categoria do lote", [
+        "Cria (0-6 meses)", "Recria (7-18 meses)", "Engorda (19-30 meses)",
+        "Vacas em produção", "Touros",
+    ], key="cal_fase2")
+    _calendario = {
+        "Cria (0-6 meses)": [
+            ("Brucelose (fêmeas 3-8 meses)", "Obrigatória", "3-8 meses"),
+            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+            ("Clostridioses (polivalente)", "Recomendada", "2-3 meses"),
+            ("Raiva", "Recomendada", "Regiões de risco"),
+            ("Vermifugação estratégica", "Recomendada", "A cada 90 dias"),
+        ],
+        "Recria (7-18 meses)": [
+            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+            ("Raiva", "Recomendada", "Anual"),
+            ("Clostridioses", "Recomendada", "Anual"),
+            ("Vermifugação", "Recomendada", "A cada 90 dias"),
+            ("Controle de carrapatos", "Recomendada", "Monitorar"),
+        ],
+        "Engorda (19-30 meses)": [
+            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+            ("Clostridioses", "Recomendada", "Entrada no confinamento"),
+            ("Vermifugação estratégica", "Recomendada", "Entrada + 60 dias"),
+            ("Controle de carrapatos", "Recomendada", "Monitorar"),
+            ("IBR / BVD", "Recomendada", "Entrada no confinamento"),
+        ],
+        "Vacas em produção": [
+            ("Brucelose", "Obrigatória", "Verificar status"),
+            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+            ("Clostridioses", "Recomendada", "Anual — pré-parto"),
+            ("Leptospirose", "Recomendada", "Anual"),
+            ("Vermifugação pós-parto", "Recomendada", "30 dias pós-parto"),
+        ],
+        "Touros": [
+            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+            ("Brucelose (exame)", "Obrigatória", "Anual"),
+            ("Clostridioses", "Recomendada", "Anual"),
+            ("Leptospirose", "Recomendada", "Antes da estação"),
+            ("Exame andrológico", "Recomendada", "Anual — pré-estação"),
+        ],
+    }
+    import pandas as _pd_cal2
+    _df_cal = _pd_cal2.DataFrame(_calendario[_fase],
+                                  columns=["Procedimento","Tipo","Frequência"])
+    st.dataframe(_df_cal, hide_index=True, use_container_width=True)
+    _cta("Calendário sanitário automatizado com alertas WhatsApp no Auroque")
+
+    # ── Rodapé CTA ────────────────────────────────────────────────────
     # ── Rodapé CTA ────────────────────────────────────────────────────
     st.divider()
     st.markdown("""
