@@ -1693,8 +1693,32 @@ def autenticar_usuario(email, senha):
     if not r or not r["ativo"]:
         return None
 
-    # Verificar senha (bcrypt ou hash legado)
-    if _hash_senha(senha, r.get("salt","")) != r.get("senha_hash",""):
+    # Verificar senha — suporta bcrypt (novo) e SHA256 (legado)
+    _hash_db = r.get("senha_hash", "")
+    _salt_db = r.get("salt", "")
+    _senha_ok = False
+
+    if _hash_db.startswith("$2b$") or _hash_db.startswith("$2a$"):
+        # Hash bcrypt puro
+        try:
+            import bcrypt as _bcrypt
+            _senha_ok = _bcrypt.checkpw(
+                senha.encode("utf-8"), _hash_db.encode("utf-8")
+            )
+        except Exception:
+            _senha_ok = False
+    elif _hash_db.startswith("SHA256$"):
+        # Fallback bcrypt sem lib: SHA256$salt$hash
+        try:
+            _, _s, _h = _hash_db.split("$", 2)
+            _senha_ok = (_hash_senha(senha, _s) == _h)
+        except Exception:
+            _senha_ok = False
+    else:
+        # Hash SHA256 legado
+        _senha_ok = (_hash_senha(senha, _salt_db) == _hash_db)
+
+    if not _senha_ok:
         return None
 
     # ── Verificar expiração do plano ──────────────────────────────
