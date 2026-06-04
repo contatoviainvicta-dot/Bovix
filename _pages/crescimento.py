@@ -984,9 +984,10 @@ def page_ferramentas_publicas(u=None):
         "📈 Projeções",
         "💧 Nutrição e Água",
         "💰 Financeiro",
+        "📅 Sanitário",
     ])
     (_tg_prod, _tg_mort, _tg_vet,
-     _tg_proj, _tg_nutr, _tg_fin) = _tab_grupos
+     _tg_proj, _tg_nutr, _tg_fin, _tg_san) = _tab_grupos
 
     # ────────────────────────────────────────────────────────────────
     # ABA 1: PRODUÇÃO (GMD + Previsão de Abate + Lotação)
@@ -1412,57 +1413,61 @@ unsafe_allow_html=True)
 </div>""", unsafe_allow_html=True)
             _cta("No Auroque, mortes são registradas e o impacto aparece automaticamente no DRE")
 
-    # ── Calendário Sanitário (mantido separado) ───────────────────────
-    st.divider()
-    st.markdown("### 📅 Calendário Sanitário")
-    _fase = st.selectbox("Fase / categoria do lote", [
-        "Cria (0-6 meses)", "Recria (7-18 meses)", "Engorda (19-30 meses)",
-        "Vacas em produção", "Touros",
-    ], key="cal_fase2")
-    _calendario = {
-        "Cria (0-6 meses)": [
-            ("Brucelose (fêmeas 3-8 meses)", "Obrigatória", "3-8 meses"),
-            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-            ("Clostridioses (polivalente)", "Recomendada", "2-3 meses"),
-            ("Raiva", "Recomendada", "Regiões de risco"),
-            ("Vermifugação estratégica", "Recomendada", "A cada 90 dias"),
-        ],
-        "Recria (7-18 meses)": [
-            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-            ("Raiva", "Recomendada", "Anual"),
-            ("Clostridioses", "Recomendada", "Anual"),
-            ("Vermifugação", "Recomendada", "A cada 90 dias"),
-            ("Controle de carrapatos", "Recomendada", "Monitorar"),
-        ],
-        "Engorda (19-30 meses)": [
-            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-            ("Clostridioses", "Recomendada", "Entrada no confinamento"),
-            ("Vermifugação estratégica", "Recomendada", "Entrada + 60 dias"),
-            ("Controle de carrapatos", "Recomendada", "Monitorar"),
-            ("IBR / BVD", "Recomendada", "Entrada no confinamento"),
-        ],
-        "Vacas em produção": [
-            ("Brucelose", "Obrigatória", "Verificar status"),
-            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-            ("Clostridioses", "Recomendada", "Anual — pré-parto"),
-            ("Leptospirose", "Recomendada", "Anual"),
-            ("Vermifugação pós-parto", "Recomendada", "30 dias pós-parto"),
-        ],
-        "Touros": [
-            ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
-            ("Brucelose (exame)", "Obrigatória", "Anual"),
-            ("Clostridioses", "Recomendada", "Anual"),
-            ("Leptospirose", "Recomendada", "Antes da estação"),
-            ("Exame andrológico", "Recomendada", "Anual — pré-estação"),
-        ],
-    }
-    import pandas as _pd_cal2
-    _df_cal = _pd_cal2.DataFrame(_calendario[_fase],
-                                  columns=["Procedimento","Tipo","Frequência"])
-    st.dataframe(_df_cal, hide_index=True, use_container_width=True)
-    _cta("Calendário sanitário automatizado com alertas WhatsApp no Auroque")
+    # ────────────────────────────────────────────────────────────────
+    # ABA 7: SANITÁRIO (Calendário)
+    # ────────────────────────────────────────────────────────────────
+    with _tg_san:
+        st.markdown("**Calendário Sanitário** — Vacinas e procedimentos por fase")
+        _fase = st.selectbox("Fase / categoria do lote", [
+            "Cria (0-6 meses)", "Recria (7-18 meses)", "Engorda (19-30 meses)",
+            "Vacas em produção", "Touros",
+        ], key="cal_fase2")
+        _calendario = {
+            "Cria (0-6 meses)": [
+                ("Brucelose (fêmeas 3-8 meses)", "Obrigatória", "3-8 meses"),
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Clostridioses (polivalente)", "Recomendada", "2-3 meses"),
+                ("Raiva", "Recomendada", "Regiões de risco"),
+                ("Vermifugação estratégica", "Recomendada", "A cada 90 dias"),
+            ],
+            "Recria (7-18 meses)": [
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Raiva", "Recomendada", "Anual"),
+                ("Clostridioses", "Recomendada", "Anual"),
+                ("Vermifugação", "Recomendada", "A cada 90 dias"),
+                ("Controle de carrapatos", "Recomendada", "Monitorar"),
+            ],
+            "Engorda (19-30 meses)": [
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Clostridioses", "Recomendada", "Entrada no confinamento"),
+                ("Vermifugação estratégica", "Recomendada", "Entrada + 60 dias"),
+                ("Controle de carrapatos", "Recomendada", "Monitorar"),
+                ("IBR / BVD", "Recomendada", "Entrada no confinamento"),
+            ],
+            "Vacas em produção": [
+                ("Brucelose", "Obrigatória", "Verificar status"),
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Clostridioses", "Recomendada", "Anual — pré-parto"),
+                ("Leptospirose", "Recomendada", "Anual"),
+                ("Vermifugação pós-parto", "Recomendada", "30 dias pós-parto"),
+            ],
+            "Touros": [
+                ("Febre Aftosa", "Obrigatória", "Campanhas oficiais"),
+                ("Brucelose (exame)", "Obrigatória", "Anual"),
+                ("Clostridioses", "Recomendada", "Anual"),
+                ("Leptospirose", "Recomendada", "Antes da estação"),
+                ("Exame andrológico", "Recomendada", "Anual — pré-estação"),
+            ],
+        }
+        import pandas as _pd_cal2
+        _df_cal = _pd_cal2.DataFrame(
+            _calendario[_fase],
+            columns=["Procedimento", "Tipo", "Frequência / Quando"]
+        )
+        st.dataframe(_df_cal, hide_index=True, use_container_width=True)
+        _cta("Calendário sanitário automatizado com alertas WhatsApp no Auroque")
 
-    # ── Rodapé CTA ────────────────────────────────────────────────────
+    # ── Rodapé CTA ────────────────────────────────────────────────────    # ── Rodapé CTA ────────────────────────────────────────────────────
     # ── Rodapé CTA ────────────────────────────────────────────────────
     st.divider()
     st.markdown("""
