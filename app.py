@@ -345,119 +345,181 @@ if st.session_state.get("menu") == "Ferramentas" and st.session_state.usuario is
     st.stop()
 
 if st.session_state.usuario is None:
-    # ── CSS da tela de login ──────────────────────────────────
+    # ── CSS: sem scroll, tudo visível numa tela ──────────────────────
     st.markdown("""
 <style>
-[data-testid="stAppViewContainer"] > .main {
-    background: linear-gradient(135deg, #f5f7fa 0%, #e8f5ee 100%);
+[data-testid="stAppViewContainer"]>.main{
+  background:linear-gradient(135deg,#f0f4f0 0%,#e8f5ee 100%);
+  padding-top:0!important;
 }
-[data-testid="stSidebar"] { display: none !important; }
-[data-testid="collapsedControl"] { display: none !important; }
+[data-testid="stSidebar"]{display:none!important}
+[data-testid="collapsedControl"]{display:none!important}
+[data-testid="stMain"]>.block-container{
+  padding:1rem 1rem 0.5rem!important;
+  max-width:900px;
+}
+/* Inputs compactos */
+div[data-testid="stTextInput"] input{padding:6px 10px!important;font-size:14px!important}
+div[data-testid="stTextInput"] label{font-size:13px!important}
+div[data-testid="stForm"]{border:none!important;padding:0!important}
+div[data-testid="stTabs"] button{font-size:13px!important;padding:6px 12px!important}
+/* Botão compacto */
+div[data-testid="stFormSubmitButton"] button{padding:8px!important;font-size:14px!important}
 </style>
 """, unsafe_allow_html=True)
 
-    # ── Layout 2 colunas - esquerda menor, formulário visível sem scroll ──
+    # ── Cabeçalho compacto ────────────────────────────────────────────
+    st.markdown("""
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+  <svg width="28" height="28" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="22,3 39,13 39,31 22,41 5,31 5,13"
+             fill="none" stroke="#1B4332" stroke-width="2.5"/>
+    <text x="22" y="30" font-family="system-ui" font-size="20"
+          font-weight="300" fill="#1B4332" text-anchor="middle">A</text>
+    <line x1="13" y1="34" x2="31" y2="34" stroke="#40916C" stroke-width="2"/>
+  </svg>
+  <div style="display:flex;align-items:baseline;gap:8px">
+    <span style="font-family:Georgia,serif;font-size:20px;font-weight:700;color:#1B4332">
+      Auroque</span>
+    <span style="font-size:9px;color:#40916C;letter-spacing:3px">GESTÃO PECUÁRIA</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Duas colunas: info | formulário ──────────────────────────────
     _col_esq, _col_dir = st.columns([1, 1], gap="large")
 
     with _col_esq:
         st.markdown("""
-<div style="padding:24px 16px 0">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-    <svg width="40" height="40" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="22,3 39,13 39,31 22,41 5,31 5,13"
-               fill="none" stroke="#1B4332" stroke-width="2.2"/>
-      <text x="22" y="30" font-family="system-ui,sans-serif"
-            font-size="20" font-weight="300" fill="#1B4332"
-            text-anchor="middle">A</text>
-      <line x1="13" y1="34" x2="31" y2="34"
-            stroke="#40916C" stroke-width="1.8"/>
-    </svg>
-    <div>
-      <div style="font-family:Georgia,serif;font-size:22px;font-weight:700;
-           color:#1B4332;line-height:1">Auroque</div>
-      <div style="font-size:9px;color:#40916C;letter-spacing:3px">
-        GESTÃO PECUÁRIA</div>
-    </div>
-  </div>
-  <h2 style="font-family:Georgia,serif;font-size:26px;font-weight:700;
-       color:#1B4332;line-height:1.25;margin:0 0 10px">
+<div style="padding:0 4px">
+  <h2 style="font-family:Georgia,serif;font-size:19px;font-weight:700;
+       color:#1B4332;line-height:1.25;margin:0 0 8px">
     Gerencie seu rebanho com inteligência
   </h2>
-  <p style="font-size:14px;color:#4B5563;line-height:1.5;margin:0 0 18px">
-    Controle animais, pesagens, saúde e finanças em um só lugar.
+  <p style="font-size:12px;color:#4B5563;margin:0 0 10px;line-height:1.4">
+    Animais, pesagens, saúde e finanças em um só lugar.
   </p>
-  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">
-    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151">
-      <span style="color:#40916C;font-weight:700">✓</span>
-      Lotes, pesagens e GMD automático</div>
-    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151">
-      <span style="color:#40916C;font-weight:700">✓</span>
-      Receituários e controle de carência</div>
-    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151">
-      <span style="color:#40916C;font-weight:700">✓</span>
-      DRE, margem real e projeção de abate</div>
-    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151">
-      <span style="color:#40916C;font-weight:700">✓</span>
-      IA para risco sanitário e anomalias</div>
+  <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:12px">
+    <div style="font-size:12px;color:#374151">
+      <span style="color:#40916C;font-weight:700">✓</span> Lotes e GMD automático</div>
+    <div style="font-size:12px;color:#374151">
+      <span style="color:#40916C;font-weight:700">✓</span> Receituários e carência</div>
+    <div style="font-size:12px;color:#374151">
+      <span style="color:#40916C;font-weight:700">✓</span> DRE e projeção de abate</div>
+    <div style="font-size:12px;color:#374151">
+      <span style="color:#40916C;font-weight:700">✓</span> IA para risco sanitário</div>
+    <div style="font-size:12px;color:#374151">
+      <span style="color:#40916C;font-weight:700">✓</span> Pesagem por voz 🎤</div>
   </div>
-  <p style="font-size:11px;color:#9CA3AF;margin:0">
-    contato@auroque.com.br</p>
+  <div style="background:#1B4332;border-radius:8px;padding:8px 12px;margin-bottom:10px">
+    <div style="font-size:12px;color:#40916C;font-weight:600">🚀 14 dias grátis</div>
+    <div style="font-size:11px;color:rgba(245,240,232,.7)">
+      Sem cartão · Cancele quando quiser</div>
+  </div>
+  <div style="font-size:10px;color:#9CA3AF">contato@auroque.com.br</div>
 </div>
 """, unsafe_allow_html=True)
-
-    with _col_dir:
-        st.markdown("<div style='padding:4px 0'></div>", unsafe_allow_html=True)
-
-        # Botão de acesso às ferramentas gratuitas
-        if st.button("🧮 Ferramentas gratuitas para pecuária",
-                     use_container_width=True, key="btn_ferramentas_pub"):
+        if st.button("🧮 Calculadoras gratuitas", use_container_width=True,
+                     key="btn_ferramentas_pub",
+                     help="GMD · Previsão de abate · Custo/@ · Pastagem"):
             st.session_state["menu"] = "Ferramentas"
             st.rerun()
 
-        st.markdown(
-            "<div style='text-align:center;font-size:11px;color:#9CA3AF;"
-            "margin:4px 0 8px'>GMD · Previsão de abate · Custo/@"
-            " · Calendário sanitário · Lotação</div>",
-            unsafe_allow_html=True
-        )
+    with _col_dir:
+        _tab_login, _tab_reg = st.tabs(["🔑 Entrar", "🚀 Criar conta"])
 
-        # ── Abas: Entrar | Criar conta ────────────────────────────────
-        _tab_login, _tab_reg = st.tabs(["🔑 Entrar", "🚀 Criar conta grátis"])
+        # ── ABA LOGIN ─────────────────────────────────────────────────
+        with _tab_login:
+            if not usuario_existe():
+                st.info("Primeiro acesso: crie a conta de administrador.")
+                with st.form("form_first"):
+                    nome  = st.text_input("Nome")
+                    email = st.text_input("E-mail")
+                    senha = st.text_input("Senha", type="password")
+                    perf  = st.selectbox("Perfil", ["admin","veterinario","fazendeiro"])
+                    if st.form_submit_button("Criar conta", type="primary",
+                                             use_container_width=True):
+                        if nome and email and senha:
+                            uid = criar_usuario(nome, email, senha, perf)
+                            ativar_trial(uid)
+                            email_boas_vindas(email, nome)
+                            st.success("Conta criada! Faça login.")
+                            st.rerun()
+                        else:
+                            st.error("Preencha todos os campos.")
+            else:
+                with st.form("form_login"):
+                    email = st.text_input("E-mail", placeholder="seu@email.com")
+                    senha = st.text_input("Senha", type="password",
+                                          placeholder="••••••••")
+                    submit = st.form_submit_button("Entrar →", type="primary",
+                                                   use_container_width=True)
+                    if submit:
+                        email_norm = (email or "").strip().lower()
+                        _bloq, _n_tent, _seg_rest = verificar_bloqueio_login(email_norm)
+                        if _bloq:
+                            _min_rest = max(1, _seg_rest // 60 + 1)
+                            st.error(f"Conta bloqueada. Aguarde {_min_rest} min.")
+                        else:
+                            u = autenticar_usuario(email, senha)
+                            if u:
+                                try:
+                                    _lim_login = obter_limites_usuario(u["id"])
+                                    _status_login = (_lim_login or {}).get(
+                                        "status_conta", "ativo")
+                                except Exception:
+                                    _status_login = "ativo"
+                                if _status_login == "suspenso":
+                                    st.error("Conta suspensa. Fale com o suporte.")
+                                elif _status_login == "pendente":
+                                    st.warning("Conta aguardando aprovação.")
+                                else:
+                                    limpar_tentativas_login(email_norm)
+                                    st.session_state.menu          = "Inicio"
+                                    st.session_state.wizard_passo  = 1
+                                    st.session_state.wizard_pulado = False
+                                    st.session_state.onboarding_ok = None
+                                    if u.get("perfil") == "admin":
+                                        u["owner_id"] = None
+                                    elif not u.get("owner_id"):
+                                        u["owner_id"] = u["id"]
+                                    st.session_state.usuario = u
+                                    st.rerun()
+                            else:
+                                registrar_tentativa_login(email_norm)
+                                _bloq2, _n2, _ = verificar_bloqueio_login(email_norm)
+                                restantes = max(0, 5 - _n2)
+                                if _bloq2:
+                                    st.error("Muitas tentativas. Bloqueado por 10 min.")
+                                else:
+                                    st.error(f"E-mail ou senha incorretos. "
+                                             f"Tentativas restantes: {restantes}")
 
+        # ── ABA CADASTRO ──────────────────────────────────────────────
         with _tab_reg:
-            st.markdown("**Trial gratuito de 14 dias · Sem cartão de crédito**")
             with st.form("form_registro"):
-                _r_nome  = st.text_input("Seu nome", placeholder="Ex: João Silva")
-                _r_email = st.text_input("E-mail",   placeholder="seu@email.com")
-                _r_perfil = st.radio(
-                    "Você é:",
-                    ["🐄 Fazendeiro / Proprietário", "🩺 Médico Veterinário"],
-                    horizontal=True, key="_reg_perfil"
-                )
+                _r_nome  = st.text_input("Nome", placeholder="João Silva")
+                _r_email = st.text_input("E-mail", placeholder="seu@email.com")
+                _r_perfil = st.radio("Você é:", ["🐄 Fazendeiro", "🩺 Veterinário"],
+                                     horizontal=True, key="_reg_perfil")
                 _r_senha = st.text_input("Senha (mín. 6 caracteres)",
                                           type="password")
                 _r_conf  = st.text_input("Confirmar senha", type="password")
-                _r_termos = st.checkbox(
-                    "Concordo com os termos de uso e política de privacidade"
-                )
+                _r_termos = st.checkbox("Concordo com os termos de uso")
                 _r_submit = st.form_submit_button(
-                    "🚀 Criar minha conta gratuita",
+                    "🚀 Criar conta — 14 dias grátis",
                     type="primary", use_container_width=True
                 )
-
                 if _r_submit:
-                    # Validações no front
                     if not _r_termos:
-                        st.error("Aceite os termos de uso para continuar.")
+                        st.error("Aceite os termos para continuar.")
                     elif _r_senha != _r_conf:
                         st.error("As senhas não coincidem.")
                     elif len(_r_senha) < 6:
-                        st.error("A senha deve ter pelo menos 6 caracteres.")
+                        st.error("Senha: mínimo 6 caracteres.")
                     else:
                         try:
-                            from database import (auto_registrar_usuario,
-                                                  email_valido,
-                                                  email_ja_cadastrado)
+                            from database import auto_registrar_usuario
                             _perfil_reg = ("veterinario"
                                            if "Veterinário" in _r_perfil
                                            else "fazendeiro")
@@ -467,7 +529,7 @@ if st.session_state.usuario is None:
                             )
                             if _ok:
                                 st.success(f"✅ {_msg}")
-                                st.info("Agora faça login na aba **Entrar** ao lado.")
+                                st.info("Agora clique na aba **Entrar**.")
                                 try:
                                     email_boas_vindas(_r_email, _r_nome)
                                 except Exception:
@@ -475,87 +537,8 @@ if st.session_state.usuario is None:
                             else:
                                 st.error(f"❌ {_msg}")
                         except Exception as _er:
-                            st.error(f"Erro ao criar conta: {_er}")
+                            st.error(f"Erro: {_er}")
 
-        with _tab_login:
-            pass  # formulário abaixo (fora das abas para compatibilidade)
-
-    if not usuario_existe():
-        st.info("Primeiro acesso: crie sua conta de administrador.")
-        with st.form("form_first"):
-            nome  = st.text_input("Nome")
-            email = st.text_input("E-mail")
-            senha = st.text_input("Senha", type="password")
-            perf  = st.selectbox("Perfil", ["admin","veterinario","fazendeiro"])
-            if st.form_submit_button("Criar conta"):
-                if nome and email and senha:
-                    uid = criar_usuario(nome, email, senha, perf)
-                    ativar_trial(uid)
-                    email_boas_vindas(email, nome)
-                    st.success("Conta criada! Faca login.")
-                    st.rerun()
-                else:
-                    st.error("Preencha todos os campos.")
-    else:
-        with st.form("form_login"):
-            email = st.text_input("E-mail")
-            senha = st.text_input("Senha", type="password")
-            submit = st.form_submit_button("Entrar")
-
-            if submit:
-                email_norm = (email or "").strip().lower()
-
-                # Rate limiting persistente no banco
-                _bloq, _n_tent, _seg_rest = verificar_bloqueio_login(email_norm)
-                if _bloq:
-                    _min_rest = max(1, _seg_rest // 60 + 1)
-                    st.error(
-                        f"Conta bloqueada por seguranca. "
-                        f"Aguarde {_min_rest} minuto(s) e tente novamente."
-                    )
-                else:
-                    u = autenticar_usuario(email, senha)
-                    if u:
-                        # Verificar status da conta
-                        try:
-                            _lim_login = obter_limites_usuario(u["id"])
-                            _status_login = (_lim_login or {}).get("status_conta", "ativo")
-                        except Exception:
-                            _status_login = "ativo"
-
-                        if _status_login == "suspenso":
-                            st.error("Sua conta esta suspensa. "
-                                    "Entre em contato com o administrador.")
-                        elif _status_login == "pendente":
-                            st.warning("Sua conta esta aguardando aprovacao.")
-                        else:
-                            # Login OK
-                            limpar_tentativas_login(email_norm)
-                            st.session_state.menu         = "Inicio"
-                            st.session_state.wizard_passo = 1
-                            st.session_state.wizard_pulado = False
-                            st.session_state.onboarding_ok = None
-                            if u.get("perfil") == "admin":
-                                u["owner_id"] = None
-                            elif not u.get("owner_id"):
-                                u["owner_id"] = u["id"]
-                            st.session_state.usuario = u
-                            st.rerun()
-                    else:
-                        # Registrar tentativa falha no banco
-                        registrar_tentativa_login(email_norm)
-                        _bloq2, _n2, _ = verificar_bloqueio_login(email_norm)
-                        restantes = max(0, 5 - _n2)
-                        if _bloq2:
-                            st.error(
-                                "Muitas tentativas falhadas. "
-                                "Conta bloqueada por 10 minutos."
-                            )
-                        else:
-                            st.error(
-                                f"E-mail ou senha incorretos. "
-                                f"Tentativas restantes: {restantes}"
-                            )
     st.stop()
 
 u = st.session_state.usuario
