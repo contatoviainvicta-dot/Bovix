@@ -63,44 +63,118 @@ def fmt_data_hora(data):
 
 # ── GRÁFICOS SEGUROS (protegidos contra df vazio/NaN) ───────────
 def safe_line_chart(df, titulo=None, empty_msg="Dados insuficientes para o gráfico."):
-    """st.line_chart protegido contra df vazio, None e NaN."""
+    """st.line_chart protegido contra df vazio, None e NaN.
+    Usa matplotlib como fallback para compatibilidade com Python 3.14+.
+    """
     import streamlit as st
     import pandas as pd
+
+    if df is None or (hasattr(df, 'empty') and df.empty):
+        if titulo: st.caption(titulo)
+        st.info(empty_msg)
+        return
+
     try:
-        if df is None or (hasattr(df, 'empty') and df.empty):
-            if titulo: st.caption(titulo)
-            st.info(empty_msg)
-            return
-        # Limpar NaN e inf
         df = pd.DataFrame(df).replace([float('inf'), float('-inf')], None)
         df = df.dropna(how='all')
         if df.empty:
             st.info(empty_msg)
             return
-        if titulo: st.caption(titulo)
+        if titulo:
+            st.caption(titulo)
+        # Tentar st.line_chart nativo
         st.line_chart(df)
-    except Exception as e:
-        st.info(f"Gráfico indisponível: {e}")
+    except Exception:
+        # Fallback: matplotlib (compatível com Python 3.14+)
+        try:
+            import matplotlib.pyplot as plt
+            import matplotlib.dates as mdates
+
+            fig, ax = plt.subplots(figsize=(10, 3))
+            fig.patch.set_facecolor('#FAFAFA')
+            ax.set_facecolor('#FAFAFA')
+
+            df_plot = pd.DataFrame(df)
+            for col in df_plot.columns:
+                ax.plot(df_plot.index, df_plot[col],
+                        color='#1B4332', linewidth=2, marker='o',
+                        markersize=4, label=str(col))
+
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color('#E5E7EB')
+            ax.spines['bottom'].set_color('#E5E7EB')
+            ax.tick_params(colors='#6B7280', labelsize=9)
+            ax.grid(axis='y', color='#F3F4F6', linewidth=0.8)
+
+            # Formatar eixo X se for datas
+            if hasattr(df_plot.index, 'dtype') and 'datetime' in str(df_plot.index.dtype):
+                ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
+                fig.autofmt_xdate(rotation=30)
+
+            if len(df_plot.columns) > 1:
+                ax.legend(fontsize=8)
+
+            plt.tight_layout()
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+        except Exception as e2:
+            st.info(f"Gráfico indisponível: {e2}")
 
 
 def safe_bar_chart(df, titulo=None, empty_msg="Dados insuficientes para o gráfico."):
-    """st.bar_chart protegido contra df vazio, None e NaN."""
+    """st.bar_chart protegido contra df vazio, None e NaN.
+    Usa matplotlib como fallback para compatibilidade com Python 3.14+.
+    """
     import streamlit as st
     import pandas as pd
+
+    if df is None or (hasattr(df, 'empty') and df.empty):
+        if titulo: st.caption(titulo)
+        st.info(empty_msg)
+        return
+
     try:
-        if df is None or (hasattr(df, 'empty') and df.empty):
-            if titulo: st.caption(titulo)
-            st.info(empty_msg)
-            return
         df = pd.DataFrame(df).replace([float('inf'), float('-inf')], None)
         df = df.dropna(how='all')
         if df.empty:
             st.info(empty_msg)
             return
-        if titulo: st.caption(titulo)
+        if titulo:
+            st.caption(titulo)
         st.bar_chart(df)
-    except Exception as e:
-        st.info(f"Gráfico indisponível: {e}")
+    except Exception:
+        try:
+            import matplotlib.pyplot as plt
+
+            fig, ax = plt.subplots(figsize=(10, 3))
+            fig.patch.set_facecolor('#FAFAFA')
+            ax.set_facecolor('#FAFAFA')
+
+            df_plot = pd.DataFrame(df)
+            x = range(len(df_plot))
+            for i, col in enumerate(df_plot.columns):
+                offset = i * 0.8 / max(len(df_plot.columns), 1)
+                ax.bar([xi + offset for xi in x], df_plot[col],
+                       width=0.8 / max(len(df_plot.columns), 1),
+                       color='#1B4332', alpha=0.85, label=str(col))
+
+            ax.set_xticks(list(x))
+            ax.set_xticklabels([str(i) for i in df_plot.index],
+                               rotation=30, fontsize=9)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.tick_params(colors='#6B7280', labelsize=9)
+            ax.grid(axis='y', color='#F3F4F6', linewidth=0.8)
+
+            if len(df_plot.columns) > 1:
+                ax.legend(fontsize=8)
+
+            plt.tight_layout()
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+        except Exception as e2:
+            st.info(f"Gráfico indisponível: {e2}")
 
 
 # ── TOAST HELPERS ─────────────────────────────────────────────
