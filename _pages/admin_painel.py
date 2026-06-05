@@ -111,7 +111,7 @@ def page_painel_admin(u):
               if d["qtd"] > 0])
             if not df_plano.empty:
                 st.dataframe(df_plano, hide_index=True,
-                           width="stretch")
+                           use_container_width=True)
 
             # Gráfico pizza por plano
             por_plano_vals = {
@@ -136,7 +136,7 @@ def page_painel_admin(u):
                 "Valor":     fmt_brl(a["valor"]),
                 "Descrição": a["descricao"],
             } for a in mrr_data["ajustes"]])
-            st.dataframe(df_adj, hide_index=True, width="stretch")
+            st.dataframe(df_adj, hide_index=True, use_container_width=True)
 
         with st.form("form_ajuste_mrr"):
             aj1,aj2 = st.columns(2)
@@ -203,7 +203,7 @@ def page_painel_admin(u):
                 "Trial início":str(r[7])[:10] if r[7] else "-",
                 "Lim. animais":r[8],
             } for r in usuarios])
-            st.dataframe(df_u, hide_index=True, width="stretch")
+            st.dataframe(df_u, hide_index=True, use_container_width=True)
 
         # Gráfico ativos por dia (access_log)
         st.divider()
@@ -314,7 +314,7 @@ def page_painel_admin(u):
                 "Data":         _fmt_dt(e[5]),
             } for e in erros_email])
             st.dataframe(df_email_err, hide_index=True,
-                        width="stretch")
+                        use_container_width=True)
 
     # ── ABA 5: AÇÕES ADMIN ───────────────────────────────────────────────
     with t5:
@@ -368,4 +368,4 @@ def page_painel_admin(u):
                 "Plano": r[4].upper(),
                 "Login": _fmt_dt(r[6]),
             } for r in todos])
-            st.dataframe(df_todos, hide_index=True, width="stretch")
+            st.dataframe(df_todos, hide_index=True, use_container_width=True)
