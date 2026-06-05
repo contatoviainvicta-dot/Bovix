@@ -223,7 +223,11 @@ def page_receituario(u):
                     st.rerun()
 
     with t2:
-        receitas = listar_receitas(vet_id=u["id"])
+        try:
+            receitas = listar_receitas(vet_id=u["id"])
+        except Exception:
+            receitas = []
+            st.warning("⚠️ Erro ao carregar receitas. Tente novamente.")
         if not receitas:
             st.info("Nenhuma receita emitida ainda.")
         else:
