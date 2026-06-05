@@ -392,7 +392,7 @@ def page_onboarding(u):
             "Configuracao completa! Voce ja pode usar todos os recursos do Auroque."
         )
         if st.button("Ir para o inicio", type="primary"):
-            st.session_state["_page"] = "Inicio"
+            st.session_state.menu = "Inicio"
             st.rerun()
         return
 
@@ -403,136 +403,144 @@ def page_onboarding(u):
 
 
 def _passos_ui(u, oid, prog):
-    """Renderiza os 6 passos do onboarding."""
+    """Renderiza os passos do onboarding — versão simplificada e sem loop."""
     from database import (
         listar_lotes, listar_animais_por_lote,
-        obter_crmv_usuario, adicionar_vacina_agenda,
+        obter_crmv_usuario,
     )
+    lotes    = listar_lotes(owner_id=oid) or []
+    total_an = sum(len(listar_animais_por_lote(l[0])) for l in lotes)
 
-    # PASSO 1: Perfil
+    # ── PASSO 1: Perfil ───────────────────────────────────────────────
     _passo_header(1, "Complete seu perfil", prog["perfil"])
     if not prog["perfil"]:
         with st.expander("Configurar agora", expanded=True):
             with st.form("ob_perfil"):
-                nome_p = st.text_input("Nome completo", value=u.get("nome",""))
+                nome_p = st.text_input("Nome completo",
+                                        value=u.get("nome", ""))
                 if is_vet():
                     crmv_p = st.text_input(
                         "CRMV",
                         value=obter_crmv_usuario(u["id"]) or "",
                         placeholder="CRMV-SP 12345"
                     )
-                if st.form_submit_button("Salvar perfil", type="primary"):
-                    from database import atualizar_crmv
+                else:
+                    crmv_p = ""
+                if st.form_submit_button("Salvar perfil",
+                                          type="primary",
+                                          use_container_width=True):
                     if is_vet() and crmv_p:
+                        from database import atualizar_crmv
                         atualizar_crmv(u["id"], crmv_p)
                     marcar_passo_onboarding(oid, "perfil")
                     toast_ok("Perfil salvo!")
                     st.rerun()
     else:
-        st.caption("Perfil configurado")
+        st.caption("✅ Perfil configurado")
 
-    # PASSO 2: Fazenda
-    _passo_header(2, "Configure sua fazenda", prog["fazenda"])
-    if not prog["fazenda"]:
-        with st.expander("Configurar agora", expanded=True):
-            st.info(
-                "Sua conta ja representa sua fazenda no Auroque. "
-                "Verifique se os dados de cadastro estao corretos."
-            )
-            if st.button("Confirmar e continuar", key="ob_faz"):
-                marcar_passo_onboarding(oid, "fazenda")
-                st.rerun()
-    else:
-        st.caption("Fazenda configurada")
-
-    # PASSO 3: Lote
-    _passo_header(3, "Crie seu primeiro lote", prog["lote"])
-    lotes = listar_lotes(owner_id=oid)
+    # ── PASSO 2: Lote ────────────────────────────────────────────────
+    # Não usa auto-marcar para evitar loop com dados demo
+    _tem_lote_real = any(
+        "Demo" not in (l[1] or "") for l in lotes
+    )
+    _passo_header(2, "Crie seu primeiro lote real", prog["lote"])
     if not prog["lote"]:
-        if lotes:
-            marcar_passo_onboarding(oid, "lote")
-            st.rerun()
-        else:
-            with st.expander("Criar lote agora", expanded=True):
-                st.info("Va em **Gestao → Lotes** para criar seu primeiro lote.")
-                if st.button("Abrir Lotes", key="ob_lote"):
-                    st.session_state["_page"] = "Lote"
+        with st.expander("Criar lote agora", expanded=True):
+            if lotes:
+                st.info(
+                    "Você tem um **Lote Demo** criado automaticamente para "
+                    "explorar o sistema. Quando quiser, crie seu lote real abaixo."
+                )
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                if st.button("➕ Cadastrar lote real", type="primary",
+                             key="ob_lote", use_container_width=True):
+                    marcar_passo_onboarding(oid, "lote")
+                    st.session_state.menu = "Cadastrar Lote"
+                    st.rerun()
+            with _c2:
+                if st.button("Pular por agora", key="ob_lote_skip",
+                             use_container_width=True):
+                    marcar_passo_onboarding(oid, "lote")
                     st.rerun()
     else:
-        st.caption(f"{len(lotes)} lote(s) cadastrado(s)")
+        st.caption(f"✅ {len(lotes)} lote(s) cadastrado(s)")
 
-    # PASSO 4: Animais
-    _passo_header(4, "Cadastre seus animais", prog["animais"])
-    total_an = sum(
-        len(listar_animais_por_lote(l[0])) for l in lotes
-    ) if lotes else 0
+    # ── PASSO 3: Animais ─────────────────────────────────────────────
+    _passo_header(3, "Cadastre seus animais", prog["animais"])
     if not prog["animais"]:
-        if total_an > 0:
-            marcar_passo_onboarding(oid, "animais")
-            st.rerun()
-        else:
-            with st.expander("Cadastrar agora", expanded=True):
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("Cadastrar manualmente", key="ob_an_man"):
-                        st.session_state["_page"] = "Animal"
-                        st.rerun()
-                with c2:
-                    if st.button("Importar CSV", key="ob_an_csv"):
-                        st.session_state["_page"] = "Importar CSV"
-                        st.rerun()
+        with st.expander("Cadastrar agora", expanded=True):
+            if total_an > 0:
+                st.info(
+                    f"Você tem **{total_an} animal(is)** no sistema "
+                    "(incluindo os do lote demo). Cadastre seus animais reais:"
+                )
+            _c1, _c2, _c3 = st.columns(3)
+            with _c1:
+                if st.button("🐄 Cadastrar animal", type="primary",
+                             key="ob_an_man", use_container_width=True):
+                    marcar_passo_onboarding(oid, "animais")
+                    st.session_state.menu = "Cadastrar Animal"
+                    st.rerun()
+            with _c2:
+                if st.button("📂 Importar CSV",
+                             key="ob_an_csv", use_container_width=True):
+                    marcar_passo_onboarding(oid, "animais")
+                    st.session_state.menu = "Importar CSV"
+                    st.rerun()
+            with _c3:
+                if st.button("Pular", key="ob_an_skip",
+                             use_container_width=True):
+                    marcar_passo_onboarding(oid, "animais")
+                    st.rerun()
     else:
-        st.caption(f"{total_an} animal(is) cadastrado(s)")
+        st.caption(f"✅ {total_an} animal(is) cadastrado(s)")
 
-    # PASSO 5: Calendario
-    _passo_header(5, "Configure o calendario sanitario", prog["calendario"])
+    # ── PASSO 4: Calendário sanitário ────────────────────────────────
+    _passo_header(4, "Configure o calendário sanitário", prog["calendario"])
     if not prog["calendario"]:
         with st.expander("Configurar agora", expanded=True):
             st.info(
-                "Va em **Financeiro & Saude → Calendario Sanitario** "
-                "para agendar suas primeiras vacinas."
+                "Agende vacinas e procedimentos e receba alertas automáticos."
             )
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("Abrir Calendario", key="ob_cal"):
-                    st.session_state["_page"] = "Calendario Sanitario"
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                if st.button("📅 Abrir Calendário", type="primary",
+                             key="ob_cal", use_container_width=True):
+                    marcar_passo_onboarding(oid, "calendario")
+                    st.session_state.menu = "Calendario Sanitario"
                     st.rerun()
-            with c2:
-                if st.button("Pular por agora", key="ob_cal_skip"):
+            with _c2:
+                if st.button("Pular por agora", key="ob_cal_skip",
+                             use_container_width=True):
                     marcar_passo_onboarding(oid, "calendario")
                     st.rerun()
     else:
-        st.caption("Calendario configurado")
+        st.caption("✅ Calendário configurado")
 
-    # PASSO 6: Alertas
-    _passo_header(6, "Configure seus alertas", prog["alertas"])
+    # ── PASSO 5: Alertas ─────────────────────────────────────────────
+    _passo_header(5, "Configure seus alertas", prog["alertas"])
     if not prog["alertas"]:
         with st.expander("Configurar agora", expanded=True):
             st.info(
-                "Os alertas do Auroque funcionam automaticamente: "
-                "vacinas pendentes, medicamentos em baixo estoque "
-                "e partos previstos aparecem na sua tela inicial."
+                "Os alertas funcionam automaticamente — vacinas pendentes, "
+                "carências e projeções aparecem no seu painel."
             )
-            email_al = st.text_input(
-                "Email para alertas diarios (opcional)",
-                placeholder="seuemail@gmail.com"
-            )
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("Salvar e concluir", type="primary", key="ob_alerta"):
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                if st.button("✅ Entendido, concluir!", type="primary",
+                             key="ob_alerta", use_container_width=True):
                     marcar_passo_onboarding(oid, "alertas")
-                    if email_al:
-                        from database import enviar_email_boas_vindas
-                        enviar_email_boas_vindas(u.get("nome",""), email_al)
                     st.balloons()
-                    st.success("Configuracao concluida! Bem-vindo ao Auroque!")
+                    st.success("Configuração concluída! Bem-vindo ao Auroque! 🎉")
                     st.rerun()
-            with c2:
-                if st.button("Pular", key="ob_alerta_skip"):
+            with _c2:
+                if st.button("Pular", key="ob_alerta_skip",
+                             use_container_width=True):
                     marcar_passo_onboarding(oid, "alertas")
                     st.rerun()
     else:
-        st.caption("Alertas configurados")
+        st.caption("✅ Alertas configurados")
 
 
 def _passo_header(num, titulo, completo):
