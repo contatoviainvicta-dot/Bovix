@@ -6140,6 +6140,133 @@ def onboarding_completo(user_id):
         return True  # Em caso de erro, nao bloquear
 
 
+
+def criar_dados_demo(owner_id):
+    """Cria fazenda demo com dados fictícios para novo usuário.
+    Chamada automaticamente no primeiro login.
+    """
+    from datetime import date, timedelta
+    import random
+    p = _ph()
+    _log_db.info("Criando dados demo para owner_id=%s", owner_id)
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            # Verificar se já tem lote (não criar duplicado)
+            cur.execute(
+                f"SELECT COUNT(*) FROM lotes WHERE owner_id={p}", (owner_id,)
+            )
+            r = cur.fetchone()
+            if r and r[0] > 0:
+                return True  # já tem dados
+
+            # Lote demo
+            dt_entrada = str(date.today() - timedelta(days=90))
+            if _usar_postgres():
+                cur.execute(
+                    f"INSERT INTO lotes (nome,descricao,data_entrada,"
+                    f"qtd_comprada,qtd_recebida,preco_por_animal,owner_id,status)"
+                    f" VALUES ({p},{p},{p},{p},{p},{p},{p},{p}) RETURNING id",
+                    ("Lote Demo — Nelore 2025",
+                     "Lote criado automaticamente para demonstração",
+                     dt_entrada, 8, 8, 2800.00, owner_id, "ATIVO")
+                )
+                lote_id = cur.fetchone()[0]
+            else:
+                cur.execute(
+                    f"INSERT INTO lotes (nome,descricao,data_entrada,"
+                    f"qtd_comprada,qtd_recebida,preco_por_animal,owner_id,status)"
+                    f" VALUES ({p},{p},{p},{p},{p},{p},{p},{p})",
+                    ("Lote Demo — Nelore 2025",
+                     "Lote criado automaticamente para demonstração",
+                     dt_entrada, 8, 8, 2800.00, owner_id, "ATIVO")
+                )
+                lote_id = cur.lastrowid
+            conn.commit()
+
+            # 8 animais demo
+            animais = [
+                ("DEMO-01","Nelore","M",24,320),("DEMO-02","Nelore","M",22,305),
+                ("DEMO-03","Nelore","M",24,332),("DEMO-04","Angus","M",20,348),
+                ("DEMO-05","Angus","M",21,338),("DEMO-06","Nelore","F",18,280),
+                ("DEMO-07","Nelore","F",20,295),("DEMO-08","Angus","M",23,355),
+            ]
+            animal_ids = []
+            for ident, raca, sexo, idade, peso in animais:
+                if _usar_postgres():
+                    cur.execute(
+                        f"INSERT INTO animais (identificacao,raca,sexo,"
+                        f"idade_meses,peso_entrada,lote_id,ativo,status)"
+                        f" VALUES ({p},{p},{p},{p},{p},{p},1,'ATIVO') RETURNING id",
+                        (ident, raca, sexo, idade, peso, lote_id)
+                    )
+                    animal_ids.append(cur.fetchone()[0])
+                else:
+                    cur.execute(
+                        f"INSERT INTO animais (identificacao,raca,sexo,"
+                        f"idade_meses,peso_entrada,lote_id,ativo,status)"
+                        f" VALUES ({p},{p},{p},{p},{p},{p},1,'ATIVO')",
+                        (ident, raca, sexo, idade, peso, lote_id)
+                    )
+                    animal_ids.append(cur.lastrowid)
+            conn.commit()
+
+            # Pesagens ao longo de 90 dias
+            pesos_base = [320,305,332,348,338,280,295,355]
+            for i, aid in enumerate(animal_ids):
+                peso = pesos_base[i]
+                for dias_atras in [90, 60, 30, 0]:
+                    peso += random.randint(18, 32)
+                    dt = str(date.today() - timedelta(days=dias_atras))
+                    cur.execute(
+                        f"INSERT INTO pesagens (animal_id,peso,data)"
+                        f" VALUES ({p},{p},{p})",
+                        (aid, round(peso, 1), dt)
+                    )
+            conn.commit()
+
+            # Custos demo
+            for cat, desc, val, dias in [
+                ("racao","Ração concentrada — 3 meses",4200.00,80),
+                ("medicamento","Vermifugação e vacinas",480.00,75),
+                ("mao_de_obra","Mão de obra — 3 meses",1800.00,70),
+                ("veterinario","Visita técnica",350.00,45),
+            ]:
+                dt = str(date.today() - timedelta(days=dias))
+                cur.execute(
+                    f"INSERT INTO custos_lote"
+                    f" (lote_id,categoria,descricao,valor,data_lancamento,owner_id)"
+                    f" VALUES ({p},{p},{p},{p},{p},{p})",
+                    (lote_id, cat, desc, val, dt, owner_id)
+                )
+            conn.commit()
+
+        # Marcar demo como criado
+        marcar_onboarding_completo(owner_id)
+        _log_db.info("Dados demo criados: lote_id=%s, %d animais",
+                     lote_id, len(animal_ids))
+        return True
+    except Exception as _e:
+        _log_err.error("criar_dados_demo: %s", _e)
+        return False
+
+
+def is_primeiro_login(user_id):
+    """Verifica se é o primeiro login do usuário (sem lotes cadastrados)."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT COUNT(*) FROM lotes WHERE owner_id={p}",
+                (user_id,)
+            )
+            r = cur.fetchone()
+            return (r[0] if r else 0) == 0
+    except Exception:
+        return False
+
+
 # ── IMPORTACAO CSV ────────────────────────────────────────────
 def importar_animais_csv(lote_id, linhas_csv):
     """Importa animais de lista de dicts.
