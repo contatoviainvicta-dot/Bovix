@@ -319,7 +319,13 @@ def page_dashboard_executivo(u):
             "frete e outros para calcular a margem real."
         )
 
-        lotes_ativos = [l for l in listar_lotes(owner_id=oid)]
+        try:
+            lotes_ativos = [l for l in listar_lotes(owner_id=oid)]
+        except Exception as _e_dash:
+            st.error("⚠️ Erro temporário ao carregar o dashboard. "
+                     "Aguarde e tente novamente.")
+            st.caption(f"Detalhe: {_e_dash}")
+            st.stop()
         if not lotes_ativos:
             st.warning("Nenhum lote disponível.")
         else:
