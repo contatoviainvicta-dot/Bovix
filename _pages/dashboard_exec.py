@@ -224,7 +224,7 @@ def page_dashboard_executivo(u):
             st.dataframe(
                 df_rank,
                 hide_index=True,
-                width="stretch",
+                use_container_width=True,
             )
 
             # Top 3 e bottom 1
@@ -302,7 +302,7 @@ def page_dashboard_executivo(u):
                 "Peso atual":    f"{c['peso_atual']} kg",
                 "Receita proj.": fmt_brl(c["receita_proj"]),
             } for c in cal])
-            st.dataframe(df_cal, hide_index=True, width="stretch")
+            st.dataframe(df_cal, hide_index=True, use_container_width=True)
 
             total_proj = sum(c["receita_proj"] for c in cal)
             st.metric("Receita total projetada (todos os lotes)",
@@ -384,7 +384,7 @@ def page_dashboard_executivo(u):
                 st.dataframe(
                     df_cust[["Data","Categoria","Descrição","Valor","Obs"]],
                     hide_index=True,
-                    width="stretch"
+                    use_container_width=True
                 )
                 total_c = sum(float(c[4]) for c in custos)
                 st.metric("Total de custos variáveis", fmt_brl(total_c))
@@ -430,7 +430,7 @@ def page_dashboard_executivo(u):
                     columns=["Categoria", "Total"]
                 )
                 df_cv["Total"] = df_cv["Total"].apply(fmt_brl)
-                st.dataframe(df_cv, hide_index=True, width="stretch")
+                st.dataframe(df_cv, hide_index=True, use_container_width=True)
 
     # ── ABA 6: REGISTRAR VENDA ───────────────────────────────────────────
     with t6:
@@ -600,7 +600,7 @@ def page_dashboard_executivo(u):
                 "Encerrado": fmt_data(l[10]) if l[10] else "-",
                 "Animais":   l[4],
             } for l in lotes_enc])
-            st.dataframe(df_enc, hide_index=True, width="stretch")
+            st.dataframe(df_enc, hide_index=True, use_container_width=True)
         else:
             empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
 
@@ -617,7 +617,7 @@ def page_dashboard_executivo(u):
                 "Peso":        f"{float(v[5]):.0f} kg",
                 "Valor liq.":  fmt_brl(v[8]),
             } for v in vendas])
-            st.dataframe(df_vend, hide_index=True, width="stretch")
+            st.dataframe(df_vend, hide_index=True, use_container_width=True)
             total_vend = sum(float(v[8]) for v in vendas)
             st.metric("Total recebido de vendas", fmt_brl(total_vend))
         else:
@@ -749,4 +749,4 @@ def page_dashboard_executivo(u):
                     "Margem":    fmt_brl(c["margem"]),
                     "Acumulada": fmt_brl(c["margem_acum"]),
                 } for c in curva])
-                st.dataframe(df_tab, hide_index=True, width="stretch")
+                st.dataframe(df_tab, hide_index=True, use_container_width=True)
