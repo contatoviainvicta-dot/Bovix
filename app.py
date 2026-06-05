@@ -461,7 +461,11 @@ div[data-testid="stFormSubmitButton"] button{padding:8px!important;font-size:14p
                             _min_rest = max(1, _seg_rest // 60 + 1)
                             st.error(f"Conta bloqueada. Aguarde {_min_rest} min.")
                         else:
-                            u = autenticar_usuario(email, senha)
+                            try:
+                                u = autenticar_usuario(email, senha)
+                            except Exception as _e_auth:
+                                st.error("Erro temporário ao autenticar. Tente novamente.")
+                                u = None
                             if u:
                                 try:
                                     _lim_login = obter_limites_usuario(u["id"])
