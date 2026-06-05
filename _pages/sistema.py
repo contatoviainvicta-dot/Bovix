@@ -151,7 +151,11 @@ def page_inicio(u):
             icon="⚠️"
         )
 
-    lotes   = listar_lotes_usuario()
+    try:
+        lotes   = listar_lotes_usuario()
+    except Exception as _e_lotes:
+        st.error("⚠️ Erro ao carregar dados. Aguarde e recarregue a página.")
+        lotes = []
     _oid    = owner_id()
     _is_faz = is_fazendeiro()
     _is_vet = is_vet()
