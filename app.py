@@ -619,7 +619,7 @@ if u and not is_admin():
                     marcar_onboarding_completo(u["id"])
                     st.rerun()
             with c3:
-                if st.button("Comecar →", type="primary", key="wiz_p1_next", width="stretch"):
+                if st.button("Comecar →", type="primary", key="wiz_p1_next", use_container_width=True):
                     st.session_state.wizard_passo = 2
                     st.rerun()
             st.stop()
@@ -685,7 +685,7 @@ if u and not is_admin():
                     st.rerun()
             with col2:
                 if st.button("Sim, criar dados de exemplo", type="primary",
-                            key="wiz_yes_demo", width="stretch"):
+                            key="wiz_yes_demo", use_container_width=True):
                     with st.spinner("Criando fazenda de exemplo..."):
                         try:
                             r = criar_dados_exemplo(u["id"])
@@ -722,7 +722,7 @@ if u and not is_admin():
             st.write("")
 
             if st.button("Ir para o Dashboard →", type="primary",
-                        key="wiz_finish", width="stretch"):
+                        key="wiz_finish", use_container_width=True):
                 marcar_onboarding_completo(u["id"])
                 st.session_state.wizard_pulado = True
                 st.session_state.menu = "Inicio"
@@ -1066,7 +1066,7 @@ with st.sidebar:
                 label = f"**{nome_item}**" if ativo else nome_item
                 _key_menu = f"menu_{grupo}_{nome_item}".replace(" ","_")
                 if st.button(label, key=_key_menu,
-                             width='stretch', help=desc):
+                             use_container_width=True, help=desc):
                     st.session_state.menu = nome_item
             st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
             continue
@@ -1082,7 +1082,7 @@ with st.sidebar:
                 label = f"**✦ {nome_item}**" if ativo else nome_item
                 _key_menu2 = f"menu_{grupo}_{nome_item}".replace(" ","_")
                 if st.button(label, key=_key_menu2,
-                             width='stretch', help=desc):
+                             use_container_width=True, help=desc):
                     st.session_state.menu = nome_item
                     st.rerun()
 
