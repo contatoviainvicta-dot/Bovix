@@ -6057,7 +6057,6 @@ def enviar_email_alerta_diario(nome, email, alertas):
 # ── ONBOARDING ────────────────────────────────────────────────
 _PASSOS_ONBOARDING = [
     ("perfil",     "Complete seu perfil"),
-    ("fazenda",    "Configure sua fazenda"),
     ("lote",       "Crie seu primeiro lote"),
     ("animais",    "Cadastre seus animais"),
     ("calendario", "Configure o calendario sanitario"),
