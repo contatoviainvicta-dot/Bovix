@@ -74,7 +74,7 @@ def page_cadastrar_lote(u):
             m1,m2 = st.columns(2)
             with m1: tipo_alim = st.selectbox("Alimentacao", ["Pasto","Confinamento","Semi-confinamento"])
             with m2: tipo_diet = st.selectbox("Dieta", ["Capim","Racao","Silagem","Misto"])
-            salvar = st.form_submit_button("Salvar Lote", width='stretch', type="primary")
+            salvar = st.form_submit_button("Salvar Lote", use_container_width=True, type="primary")
         if salvar:
             if not nome:               st.error("Informe o nome do lote")
             elif qtd_rec > qtd_comp:   st.error("Qtd recebida nao pode ser maior que comprada")
@@ -132,7 +132,7 @@ def page_cadastrar_animal(u):
                 with b1: raca   = st.text_input("Raca", placeholder="Nelore")
                 with b2: sexo   = st.selectbox("Sexo", ["indefinido","macho","femea"])
                 with b3: p_alvo = st.number_input("Peso alvo abate (kg)", 0.0)
-                salvar = st.form_submit_button("Cadastrar Animal", width='stretch', type="primary")
+                salvar = st.form_submit_button("Cadastrar Animal", use_container_width=True, type="primary")
             if salvar:
                 if not ident:
                     st.error("Informe a identificacao do animal")
@@ -197,7 +197,7 @@ def page_registrar_pesagem(u):
                 p1,p2 = st.columns(2)
                 with p1: peso   = st.number_input("Peso (kg) *", 0.0, 1000.0, step=0.5)
                 with p2: data_p = st.date_input("Data")
-                salvar = st.form_submit_button("Salvar Pesagem", width='stretch', type="primary")
+                salvar = st.form_submit_button("Salvar Pesagem", use_container_width=True, type="primary")
             if salvar:
                 if peso <= 0:    st.error("Peso invalido")
                 elif peso > 1000: st.error("Peso muito alto")
@@ -242,7 +242,7 @@ def page_registrar_ocorrencia(u):
                 with oc4: custo_oc = st.number_input("Custo (R$)", 0.0)
                 with oc5: dias_oc  = st.number_input("Dias recuperacao", 0)
                 with oc6: stat_oc  = st.selectbox("Status", ["Em tratamento","Resolvido"])
-                salvar = st.form_submit_button("Salvar Ocorrencia", width='stretch', type="primary")
+                salvar = st.form_submit_button("Salvar Ocorrencia", use_container_width=True, type="primary")
             if salvar:
                 oid = adicionar_ocorrencia(animal_id, str(data_oc), tipo_oc, desc_oc, grav_oc, custo_oc, dias_oc, stat_oc)
                 registrar_auditoria(u["id"], "ocorrencia", "ocorrencias", oid, f"{tipo_oc}/{grav_oc}")
@@ -282,7 +282,7 @@ def page_registrar_morte(u):
                     with m2:
                         custo_m = st.number_input("Custo da perda (R$)", 0.0)
                         desc_m  = st.text_area("Descricao")
-                    salvar = st.form_submit_button("Registrar Morte", width='stretch', type="primary")
+                    salvar = st.form_submit_button("Registrar Morte", use_container_width=True, type="primary")
                 if salvar:
                     registrar_morte(dict_am[anim_sel_m], str(data_m), causa_m, desc_m, custo_m)
                     registrar_auditoria(u["id"], "morte_animal", "animais", dict_am[anim_sel_m], f"{anim_sel_m} - {causa_m}")
@@ -296,7 +296,7 @@ def page_registrar_morte(u):
             morts = listar_mortalidade(dict_l2[filtro_m])
             if morts:
                 df_m = pd.DataFrame(morts, columns=["ID","Animal ID","Animal","Data","Causa","Descricao","Custo Perda"])
-                st.dataframe(df_m, width='stretch')
+                st.dataframe(df_m, use_container_width=True)
                 st.metric("Custo total perdas", fmt_brl(sum(m[6] for m in morts if m[6])))
             else:
                 st.info("Nenhuma morte registrada.")
@@ -442,7 +442,7 @@ def page_editar_lote(u):
                     desc_e     = st.text_area("Descricao",        value=lote[2] or "", height=70)
                     st.caption(f"Qtd recebida atual: {ativos_reais} animais ativos (atualizado automaticamente)")
                     preco_e    = st.number_input("Preco por animal (R$)", 0.0, step=50.0)
-                salvar_e = st.form_submit_button("Salvar alteracoes", type="primary", width='stretch')
+                salvar_e = st.form_submit_button("Salvar alteracoes", type="primary", use_container_width=True)
             if salvar_e:
                 if not nome_e:
                     st.error("Informe o nome do lote.")
@@ -583,10 +583,10 @@ def page_editar_animal(u):
             # Botoes rapidos de selecao
             _bc1, _bc2, _bc3 = st.columns(3)
             if _bc1.button("Selecionar todos", key="ex_sel_todos",
-                           width='stretch'):
+                           use_container_width=True):
                 st.session_state["ex_todos_flag"] = True
             if _bc2.button("Desmarcar todos", key="ex_desel_todos",
-                           width='stretch'):
+                           use_container_width=True):
                 st.session_state["ex_todos_flag"] = False
             _bc3.caption(f"{len(_anim_filtrados)} animais no lote")
 
@@ -608,7 +608,7 @@ def page_editar_animal(u):
                     "Idade":  st.column_config.TextColumn("Idade",  disabled=True),
                 },
                 hide_index=True,
-                width='stretch',
+                use_container_width=True,
                 key="ex_data_editor"
             )
 
@@ -680,7 +680,7 @@ def page_editar_pesagens(u):
                     df_ps["Animal"] = df_ps["Animal ID"].map(nomes_map)
                     df_ps = df_ps[["ID","Animal","Peso (kg)","Data"]]
                 df_ps["Data"] = pd.to_datetime(df_ps["Data"]).dt
-                st.dataframe(df_ps, width='stretch')
+                st.dataframe(df_ps, use_container_width=True)
 
                 st.divider()
                 st.subheader("Selecionar pesagem para editar")
@@ -702,7 +702,7 @@ def page_editar_pesagens(u):
                         with fe2:
                             data_nova = st.date_input("Data",
                                                        value=pd.to_datetime(pes_cur[3]).date() if pes_cur else date.today())
-                        if st.form_submit_button("Salvar correcao", type="primary", width='stretch'):
+                        if st.form_submit_button("Salvar correcao", type="primary", use_container_width=True):
                             if peso_novo <= 0:       st.error("Peso invalido.")
                             elif peso_novo > 1000:   st.error("Peso muito alto.")
                             else:
@@ -860,7 +860,7 @@ def page_gerenciar_ocorrencias(u):
                                                ["Em tratamento","Resolvido"],
                                                index=0 if stat_cur=="Em tratamento" else 1)
                 desc_oe   = st.text_area("Descricao", value=oc_cur[4] or "")
-                salvar_oc = st.form_submit_button("Salvar alteracoes", type="primary", width='stretch')
+                salvar_oc = st.form_submit_button("Salvar alteracoes", type="primary", use_container_width=True)
 
             if salvar_oc:
                 atualizar_ocorrencia(oc_id, tipo_oe, desc_oe, grav_oe, custo_oe, dias_oe, stat_oe, str(data_oe))
@@ -942,7 +942,7 @@ def page_transferir_animal(u):
         anim_s = st.selectbox("Animal para transferir", list(dict_a.keys()), key="tr_anim")
         animal_id = dict_a[anim_s]
         motivo = st.text_input("Motivo (opcional)", placeholder="Ex: Quarentena, Reagrupamento, Doenca")
-        if st.button("Transferir animal", type="primary", width='stretch'):
+        if st.button("Transferir animal", type="primary", use_container_width=True):
             res = transferir_animal(animal_id, lote_dest_id, motivo, u["id"])
             if res["ok"]:
                 registrar_auditoria(u["id"], "transferir_animal", "animais", animal_id,
@@ -959,7 +959,7 @@ def page_transferir_animal(u):
         motivo_m = st.text_input("Motivo", placeholder="Ex: Reagrupamento", key="tr_mot_m")
         if selecionados:
             st.info(f"{len(selecionados)} animal(is) selecionado(s)")
-            if st.button(f"Transferir {len(selecionados)} animal(is)", type="primary", width='stretch'):
+            if st.button(f"Transferir {len(selecionados)} animal(is)", type="primary", use_container_width=True):
                 ok_count = 0
                 for nome in selecionados:
                     aid_m = int(nome.split("ID ")[1].rstrip(")"))
@@ -979,7 +979,7 @@ def page_transferir_animal(u):
             df_mov = pd.DataFrame(movs,
                 columns=["ID", "Animal ID", "Animal", "Lote Origem", "Lote Destino", "Data", "Motivo"])
             st.dataframe(df_mov[["Animal", "Lote Origem", "Lote Destino", "Data", "Motivo"]],
-                         width='stretch')
+                         use_container_width=True)
         else:
             st.info("Nenhuma transferencia registrada para este lote.")
 
@@ -1107,7 +1107,7 @@ def page_status_do_lote(u):
                               if l[10] and str(l[10]) not in ("","None") else "-",
                 "Animais comprados": l[4],
             } for l in lotes_enc])
-            st.dataframe(df_enc, hide_index=True, width="stretch")
+            st.dataframe(df_enc, hide_index=True, use_container_width=True)
         else:
             empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
 
