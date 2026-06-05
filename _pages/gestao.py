@@ -708,12 +708,18 @@ def page_workspace_do_lote(u):
             cont_status = contagem_status_animais(lid),
         )
 
-    _ws = _ws_dados(lote_ws_id)
-    lote_ws        = _ws['lote']
-    lote_ws_status = _ws['status']
-    rs_ws          = _ws['rs']
-    animais_ws     = _ws['animais']
-    mort_ws        = _ws['mort']
+    try:
+        _ws = _ws_dados(lote_ws_id)
+        lote_ws        = _ws['lote']
+        lote_ws_status = _ws['status']
+        rs_ws          = _ws['rs']
+        animais_ws     = _ws['animais']
+        mort_ws        = _ws['mort']
+    except Exception as _e_ws:
+        st.error("⚠️ Erro temporário ao carregar os dados do lote. "
+                 "Aguarde alguns segundos e tente novamente.")
+        st.caption(f"Detalhe técnico: {_e_ws}")
+        st.stop()
     gmds_ws_map    = _ws['gmds_map']
     gmds_ws        = [g for g in gmds_ws_map.values() if g >= 0]
     gmd_ws         = sum(gmds_ws)/len(gmds_ws) if gmds_ws else 0
@@ -1103,7 +1109,11 @@ button[kind="secondary"][data-testid*="voz_rerun"]{
         st.divider()
         # ── FIM PESAGEM POR VOZ ───────────────────────────────────────────
 
-        plote_ws = listar_pesagens_lote(lote_ws_id)
+        try:
+            plote_ws = listar_pesagens_lote(lote_ws_id)
+        except Exception:
+            plote_ws = []
+            st.warning("⚠️ Erro ao carregar pesagens. Tente recarregar a página.")
         if plote_ws:
             df_p_ws = pd.DataFrame(plote_ws,
                 columns=["ID","LoteID","Peso","Data","Animal","AnimalID"])
