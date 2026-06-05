@@ -406,7 +406,7 @@ def page_inicio(u):
                     if _tags: st.warning(" | ".join(_tags))
                     else:     st.caption("Sem alertas")
                     if st.button("Ver lote", key=f"btn_lote_{l[0]}",
-                                 width='stretch'):
+                                 use_container_width=True):
                         st.session_state.menu = "Workspace do Lote"
                         st.session_state["ws_lote_id"] = l[0]
                         st.rerun()
@@ -430,7 +430,7 @@ def page_inicio(u):
                     unsafe_allow_html=True
                 )
                 if st.button(_label, key=f"grid_btn_{_bi}",
-                             width='stretch'):
+                             use_container_width=True):
                     st.session_state.menu = _menu; st.rerun()
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -541,7 +541,7 @@ def page_inicio(u):
                         with cc2:
                             if st.button(
                                 "Abrir", key=f"vet_lote_{_fl[0]}",
-                                width='stretch'
+                                use_container_width=True
                             ):
                                 st.session_state.menu = "Workspace do Lote"
                                 st.session_state["ws_lote_id"] = _fl[0]
@@ -775,7 +775,7 @@ def page_notificacoes(u):
         usuarios = listar_usuarios()
         if usuarios:
             df_u = pd.DataFrame(usuarios, columns=["ID","Nome","Email","Perfil","Fazenda"])
-            st.dataframe(df_u, width='stretch')
+            st.dataframe(df_u, use_container_width=True)
         with st.form("form_conv"):
             uid_c = st.number_input("ID usuario para converter para PAGO", 1, step=1)
             if st.form_submit_button("Converter para pago"):
@@ -800,7 +800,7 @@ def page_log_auditoria(u):
         logs = listar_auditoria(lim, dict_us[uf])
         if logs:
             df_log = pd.DataFrame(logs, columns=["ID","Usuario","Acao","Tabela","Reg ID","Detalhe","Data/Hora"])
-            st.dataframe(df_log, width='stretch')
+            st.dataframe(df_log, use_container_width=True)
             st.metric("Total registros", len(logs))
         else: st.info("Nenhum registro.")
 
@@ -882,7 +882,7 @@ def page_administracao(u):
             usuarios = listar_usuarios()
             if usuarios:
                 df_u = pd.DataFrame(usuarios, columns=["ID","Nome","Email","Perfil","Fazenda"])
-                st.dataframe(df_u, width='stretch')
+                st.dataframe(df_u, use_container_width=True)
             st.subheader("Criar usuario")
             with st.form("form_user"):
                 au1,au2 = st.columns(2)
@@ -1086,7 +1086,7 @@ def page_gestao_usuarios(u):
             ])
             st.dataframe(
                 df_ac[["Veterinario","Fazenda","Status","Data Solicitacao","Data Aprovacao"]],
-                width='stretch'
+                use_container_width=True
             )
             st.divider()
             st.subheader("Revogar acesso")
