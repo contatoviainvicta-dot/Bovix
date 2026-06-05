@@ -120,7 +120,7 @@ u):
             )
             st.dataframe(
                 df_v[["","Lote","Vacina","Previsto","Realizado","Status","Obs"]],
-                width='stretch', hide_index=True
+                use_container_width=True, hide_index=True
             )
         else:
             st.info("Nenhuma vacina agendada.")
@@ -491,7 +491,7 @@ def page_estoque_medicamentos(u):
                             "Data":        _fmt_data_med(_uh[2]),
                             "Quantidade":  f"{float(_uh[3]):.1f}".replace('.',','),
                         })
-                    st.dataframe(pd.DataFrame(_rows_hist), width='stretch', hide_index=True)
+                    st.dataframe(pd.DataFrame(_rows_hist), use_container_width=True, hide_index=True)
                 else:
                     st.info("Nenhum uso registrado ainda.")
             except Exception as e:
@@ -562,7 +562,7 @@ def page_controle_reprodutivo(u):
         partos = listar_partos_previstos()
         if partos:
             df_p = pd.DataFrame(partos, columns=["ID","Animal","Lote","Parto Previsto","Tipo"])
-            st.dataframe(df_p, width='stretch')
+            st.dataframe(df_p, use_container_width=True)
         else: st.info("Nenhum parto previsto nos proximos 30 dias.")
 
     # ============================================================
@@ -579,7 +579,7 @@ def page_mapa_piquetes(u):
         pqs = listar_piquetes()
         if pqs:
             df_pq = pd.DataFrame(pqs, columns=["ID","Fazenda","Nome","Area ha","Cap UA"])
-            st.dataframe(df_pq, width='stretch')
+            st.dataframe(df_pq, use_container_width=True)
             p1,p2 = st.columns(2)
             p1.metric("Total piquetes", len(pqs))
             p2.metric("Area total (ha)", f"{sum(p[3] for p in pqs):.1f}")
@@ -588,7 +588,7 @@ def page_mapa_piquetes(u):
             hist = historico_piquete(dict_pq[sel_pq])
             if hist:
                 df_h = pd.DataFrame(hist, columns=["ID","Lote","Entrada","Saida"])
-                st.dataframe(df_h, width='stretch')
+                st.dataframe(df_h, use_container_width=True)
             else: st.info("Nenhum historico.")
         else: st.info("Nenhum piquete cadastrado.")
     with t2:
@@ -1146,7 +1146,7 @@ button[kind="secondary"][data-testid*="voz_rerun"]{
             )
             st.dataframe(
                 df_exib.rename(columns={"Peso":"Peso (kg)"}),
-                width='stretch'
+                use_container_width=True
             )
             st.caption(f"Total: {len(plote_ws)} pesagens | {df_p_ws['Animal'].nunique()} animais")
         else:
@@ -1173,7 +1173,7 @@ button[kind="secondary"][data-testid*="voz_rerun"]{
                 em_trat = df_oc_ws[df_oc_ws["Status"]=="Em tratamento"]
                 if len(em_trat) > 0:
                     st.warning(f"{len(em_trat)} ocorrencia(s) em tratamento")
-                    st.dataframe(em_trat[["Animal","Data","Tipo","Gravidade"]], width='stretch')
+                    st.dataframe(em_trat[["Animal","Data","Tipo","Gravidade"]], use_container_width=True)
             else:
                 st.info("Nenhuma ocorrencia registrada.")
 
@@ -1251,7 +1251,7 @@ button[kind="secondary"][data-testid*="voz_rerun"]{
         col_r1, col_r2 = st.columns(2)
 
         with col_r1:
-            if st.button("Gerar Excel do lote", width='stretch', type="primary"):
+            if st.button("Gerar Excel do lote", use_container_width=True, type="primary"):
                 try:
                     pesagens_dict = {a[0]: listar_pesagens(a[0]) for a in animais_ws}
                     ocorr_dict    = {a[0]: listar_ocorrencias(a[0]) for a in animais_ws}
@@ -1265,7 +1265,7 @@ button[kind="secondary"][data-testid*="voz_rerun"]{
                     st.error(f"Erro: {e}")
 
         with col_r2:
-            if st.button("Gerar PDF do lote", width='stretch'):
+            if st.button("Gerar PDF do lote", use_container_width=True):
                 try:
                     secoes = [
                         dict(titulo="Animais", df=pd.DataFrame(
@@ -1575,7 +1575,7 @@ def page_prontuario_animal(u):
                     df_p["Data"] = pd.to_datetime(df_p["Data"])
                     df_p = df_p.sort_values("Data")
                     safe_line_chart(df_p.set_index("Data")["Peso"])
-                    st.dataframe(df_p[["Data","Peso"]].rename(columns={"Peso":"Peso (kg)"}), width='stretch')
+                    st.dataframe(df_p[["Data","Peso"]].rename(columns={"Peso":"Peso (kg)"}), use_container_width=True)
                 else: st.info("Sem pesagens.")
 
             with t4:
@@ -1583,14 +1583,14 @@ def page_prontuario_animal(u):
                 if ocs:
                     df_oc = pd.DataFrame(ocs, columns=["ID","Animal","Data","Tipo","Desc","Grav","Custo","Dias","Status"])
                     df_oc["Data"] = pd.to_datetime(df_oc["Data"])
-                    st.dataframe(df_oc[["Data","Tipo","Grav","Desc","Custo","Status"]], width='stretch')
+                    st.dataframe(df_oc[["Data","Tipo","Grav","Desc","Custo","Status"]], use_container_width=True)
                     st.metric("Custo total tratamentos", fmt_brl(sum(o[6] for o in ocs if o[6])))
                 else: st.info("Nenhuma ocorrencia registrada.")
                 repros = listar_reproducao(animal_id)
                 if repros:
                     st.subheader("Historico Reprodutivo")
                     df_r = pd.DataFrame(repros, columns=["ID","Animal","Cio","Tipo","Diag","Result","Parto Prev","Parto Real","Obs"])
-                    st.dataframe(df_r[["Cio","Tipo","Result","Parto Prev","Parto Real"]], width='stretch')
+                    st.dataframe(df_r[["Cio","Tipo","Result","Parto Prev","Parto Real"]], use_container_width=True)
 
     # ── Monitoramentos pos-tratamento ────────────────────────────────────────
     try:
