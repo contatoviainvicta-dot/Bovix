@@ -488,6 +488,20 @@ div[data-testid="stFormSubmitButton"] button{padding:8px!important;font-size:14p
                                     elif not u.get("owner_id"):
                                         u["owner_id"] = u["id"]
                                     st.session_state.usuario = u
+                                    # Verificar primeiro login e criar dados demo
+                                    try:
+                                        from database import (
+                                            is_primeiro_login,
+                                            criar_dados_demo
+                                        )
+                                        _uid_login = u.get("owner_id") or u["id"]
+                                        if is_primeiro_login(_uid_login):
+                                            st.session_state["_primeiro_login"] = True
+                                            criar_dados_demo(_uid_login)
+                                        else:
+                                            st.session_state["_primeiro_login"] = False
+                                    except Exception:
+                                        st.session_state["_primeiro_login"] = False
                                     st.rerun()
                             else:
                                 registrar_tentativa_login(email_norm)
@@ -1281,6 +1295,79 @@ _ROTAS = {
 
 page_fn = _ROTAS.get(menu)
 if page_fn:
+    # ── Modal de boas-vindas — primeiro login ────────────────────────
+    if st.session_state.get("_primeiro_login") and not is_admin():
+        st.markdown("""
+<style>
+.ob-modal{
+  background:white;border-radius:16px;padding:32px 36px;
+  box-shadow:0 8px 40px rgba(0,0,0,.18);max-width:680px;
+  margin:0 auto 24px;
+}
+.ob-titulo{font-family:Georgia,serif;font-size:26px;font-weight:700;
+  color:#1B4332;margin:0 0 6px}
+.ob-sub{font-size:14px;color:#6B7280;margin:0 0 24px}
+.ob-steps{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+.ob-step{flex:1;min-width:160px;background:#F5F9F7;border-radius:10px;
+  padding:14px 16px;border:2px solid #D1FAE5}
+.ob-step-num{font-size:22px;margin-bottom:6px}
+.ob-step-titulo{font-size:13px;font-weight:700;color:#1B4332;margin-bottom:3px}
+.ob-step-desc{font-size:11px;color:#6B7280;line-height:1.4}
+</style>
+<div class="ob-modal">
+  <div class="ob-titulo">👋 Bem-vindo ao Auroque!</div>
+  <div class="ob-sub">
+    Criamos uma fazenda demo com dados reais para você explorar o sistema.
+    Siga os 3 passos abaixo para começar — ou explore por conta própria.
+  </div>
+  <div class="ob-steps">
+    <div class="ob-step">
+      <div class="ob-step-num">1️⃣</div>
+      <div class="ob-step-titulo">Explore o Workspace</div>
+      <div class="ob-step-desc">
+        Veja os 8 animais demo, pesagens e o gráfico de evolução do lote
+      </div>
+    </div>
+    <div class="ob-step">
+      <div class="ob-step-num">2️⃣</div>
+      <div class="ob-step-titulo">Registre uma pesagem</div>
+      <div class="ob-step-desc">
+        Experimente a pesagem por voz falando "01 peso 350"
+      </div>
+    </div>
+    <div class="ob-step">
+      <div class="ob-step-num">3️⃣</div>
+      <div class="ob-step-titulo">Cadastre seu lote real</div>
+      <div class="ob-step-desc">
+        Quando quiser, vá em Rebanho → Cadastrar Lote e adicione seus dados
+      </div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+        _ob1, _ob2, _ob3 = st.columns([1, 1, 1])
+        with _ob1:
+            if st.button("🐄 Ver Workspace do Lote",
+                         type="primary", use_container_width=True,
+                         key="ob_workspace"):
+                st.session_state["_primeiro_login"] = False
+                st.session_state.menu = "Workspace do Lote"
+                st.rerun()
+        with _ob2:
+            if st.button("📋 Cadastrar meu lote real",
+                         use_container_width=True, key="ob_lote"):
+                st.session_state["_primeiro_login"] = False
+                st.session_state.menu = "Cadastrar Lote"
+                st.rerun()
+        with _ob3:
+            if st.button("Pular → Explorar sozinho",
+                         use_container_width=True, key="ob_pular"):
+                st.session_state["_primeiro_login"] = False
+                st.rerun()
+
+        st.stop()
+
     # Banner onboarding para usuarios novos
     try:
         from database import onboarding_completo as _ob_ok
