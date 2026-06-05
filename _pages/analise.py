@@ -273,7 +273,7 @@ def page_analisar_animal(u):
                     df["Data"] = pd.to_datetime(df["Data"])
                     df = df.sort_values("Data")
                     safe_line_chart(df.set_index("Data")["Peso"])
-                    st.dataframe(df[["Data","Peso"]].rename(columns={"Peso":"Peso (kg)"}), width='stretch')
+                    st.dataframe(df[["Data","Peso"]].rename(columns={"Peso":"Peso (kg)"}), use_container_width=True)
                     if len(df) > 1:
                         dias = (df["Data"].iloc[-1]-df["Data"].iloc[0]).days
                         if dias > 0:
@@ -293,7 +293,7 @@ def page_analisar_animal(u):
                 if ocorrencias:
                     df_oc = pd.DataFrame(ocorrencias, columns=["id","animal_id","data","tipo","descricao","gravidade","custo","dias_rec","status"])
                     df_oc["data"] = pd.to_datetime(df_oc["data"])
-                    st.dataframe(df_oc[["data","tipo","gravidade","descricao","custo","status"]], width='stretch')
+                    st.dataframe(df_oc[["data","tipo","gravidade","descricao","custo","status"]], use_container_width=True)
                     custo_tot = df_oc["custo"].fillna(0).sum()
                     st.metric("Custo total tratamentos", fmt_brl(custo_tot))
                 else:
@@ -342,7 +342,7 @@ def page_score_de_saude(u):
                                "GMD": sc["gmd"], "Ocorrencias": sc["n_ocorrencias"],
                                "Em Carencia": "Sim" if car["em_carencia"] else "Nao"})
             df_sc = pd.DataFrame(scores).sort_values("Score", ascending=False)
-            st.dataframe(df_sc, width='stretch')
+            st.dataframe(df_sc, use_container_width=True)
             c1,c2,c3 = st.columns(3)
             c1.metric("Score medio",   f"{df_sc['Score'].mean():.1f}")
             c2.metric("Melhor animal", df_sc.iloc[0]["Animal"])
@@ -371,7 +371,7 @@ def page_gmd_temporal(u):
         if pontos:
             df_g = pd.DataFrame(pontos, columns=["Data","GMD medio (kg/dia)"]).set_index("Data")
             safe_line_chart(df_g)
-            st.dataframe(df_g, width='stretch')
+            st.dataframe(df_g, use_container_width=True)
             ult = pontos[-1][1]; pri = pontos[0][1]
             st.metric("GMD atual", f"{ult:.3f} kg/dia", delta=f"{ult-pri:+.3f} vs inicio")
             if ult-pri < -0.1:   st.error("GMD em queda - revisar nutricao")
@@ -432,7 +432,7 @@ def page_comparativo_lotes(u):
                               "Mortalidade %": tm["taxa"], "Prenhez %": round(tp["taxa"],1),
                               "Lucro R$": round(lucro,2)})
             df_c = pd.DataFrame(dados).set_index("Lote")
-            st.dataframe(df_c, width='stretch')
+            st.dataframe(df_c, use_container_width=True)
             c1,c2 = st.columns(2)
             with c1: st.subheader("GMD medio"); safe_bar_chart(df_c["GMD medio"])
             with c2: st.subheader("Lucro R$");  safe_bar_chart(df_c["Lucro R$"])
@@ -475,7 +475,7 @@ def page_pesquisar_ocorrencias(u):
         p3.metric("Custo total",   fmt_brl(df_oc['custo'].fillna(0).sum()))
         p4.metric("Gravidade Alta", len(df_oc[df_oc["gravidade"]=="Alta"]))
         t1,t2 = st.tabs(["Registros","Graficos"])
-        with t1: st.dataframe(df_oc[["data","tipo","gravidade","descricao","custo","status"]], width='stretch')
+        with t1: st.dataframe(df_oc[["data","tipo","gravidade","descricao","custo","status"]], use_container_width=True)
         with t2:
             c1,c2 = st.columns(2)
             with c1: safe_bar_chart(df_oc["tipo"].value_counts())
@@ -503,7 +503,7 @@ def page_risco_sanitario_ia(u):
         df_r = pd.DataFrame(resumo_todos)
         df_r = df_r[['lote_nome','risco_nivel','risco_score','animais_ativos','principal_risco']]
         df_r.columns = ['Lote','Nivel','Score','Animais','Principal Risco']
-        st.dataframe(df_r, width='stretch', hide_index=True)
+        st.dataframe(df_r, use_container_width=True, hide_index=True)
     else:
         empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
 
@@ -653,7 +653,7 @@ def page_previsao_de_abate_ia(u):
 
             st.dataframe(
                 df_prev.style.apply(_cor_status, subset=['Status']),
-                width='stretch', hide_index=True
+                use_container_width=True, hide_index=True
             )
 
             # Grafico de dias restantes
@@ -738,7 +738,7 @@ def page_previsao_abate(u):
                     "Receita Est.": round(prev["peso_alvo"]*preco_kg,2), "Confianca": prev["confianca"]})
         if resultados:
             df_prev = pd.DataFrame(resultados).sort_values("Dias Rest.")
-            st.dataframe(df_prev, width='stretch')
+            st.dataframe(df_prev, use_container_width=True)
             pr1,pr2 = st.columns(2)
             pr1.metric("Animais analisados", len(resultados))
             pr2.metric("Receita total estimada", fmt_brl(sum(r['Receita Est.'] for r in resultados)))
