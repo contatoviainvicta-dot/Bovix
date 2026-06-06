@@ -71,7 +71,8 @@ from _pages.analise    import (page_dashboard_sanitario, page_analisar_por_lote,
     page_anomalias_de_peso, page_previsao_abate)
 from _pages.gestao     import (page_calendario_sanitario, page_estoque_medicamentos,
     page_controle_reprodutivo, page_mapa_piquetes,
-    page_workspace_do_lote, page_prontuario_animal)
+    page_workspace_do_lote, page_prontuario_animal,
+    page_vender_lote, page_historico_lotes)
 from _pages.financeiro import (page_painel_de_decisao, page_dashboard_executivo,
     page_margem_real, page_cotacao_cepea, page_rastreabilidade_gta)
 from _pages.relatorios import (page_exportar_relatorios, page_backup)
@@ -966,6 +967,8 @@ with st.sidebar:
             ("Editar Lote",          "Alterar lote"),
             ("Editar Animal",        "Alterar animal"),
             ("Editar Pesagens",      "Corrigir pesagens"),
+            ("Vender Lote",          "Registrar venda do lote"),
+            ("Historico Lotes",      "Lotes vendidos e DRE"),
         ]
         GRUPOS["Gestao Sanitaria"] = [
             ("Prontuario Animal",    "Historico completo"),
@@ -1284,6 +1287,8 @@ _ROTAS = {
     "Dashboard Financeiro": page_dashboard_executivo,
     "Painel Admin":         page_painel_admin,
     "Ferramentas":          page_ferramentas_publicas,
+    "Vender Lote":          page_vender_lote,
+    "Historico Lotes":      page_historico_lotes,
     "Dados de Exemplo":     page_dados_exemplo,
     "WhatsApp":             page_configurar_whatsapp,
     "Exportar Relatorios":  page_exportar_dados,
