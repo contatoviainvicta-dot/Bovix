@@ -1451,16 +1451,34 @@ def excluir_pesagem(pesagem_id):
         cur = conn.cursor()
         cur.execute(f"DELETE FROM pesagens WHERE id={p}", (pesagem_id,))
 
-def listar_pesagens_lote(lote_id):
+def listar_pesagens_lote(lote_id, incluir_vendidos=False):
+    """Lista pesagens do lote. Por padrão exclui animais vendidos/inativos."""
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
-        cur.execute(
-            f"SELECT p.id,a.lote_id,p.peso,p.data,a.identificacao,a.id as animal_id FROM pesagens p JOIN animais a ON a.id=p.animal_id WHERE a.lote_id={p} ORDER BY p.data ASC",
-            (lote_id,),
-        )
+        if incluir_vendidos:
+            cur.execute(
+                f"SELECT p.id,a.lote_id,p.peso,p.data,a.identificacao,"
+                f"a.id as animal_id "
+                f"FROM pesagens p JOIN animais a ON a.id=p.animal_id "
+                f"WHERE a.lote_id={p} ORDER BY p.data ASC",
+                (lote_id,),
+            )
+        else:
+            # Excluir pesagens de animais vendidos ou inativos
+            cur.execute(
+                f"SELECT p.id,a.lote_id,p.peso,p.data,a.identificacao,"
+                f"a.id as animal_id "
+                f"FROM pesagens p JOIN animais a ON a.id=p.animal_id "
+                f"WHERE a.lote_id={p} "
+                f"AND COALESCE(a.ativo,1)=1 "
+                f"AND UPPER(COALESCE(a.status,'ATIVO')) != 'VENDIDO' "
+                f"ORDER BY p.data ASC",
+                (lote_id,),
+            )
         rows = _fetch(cur)
-        return [(r["id"],r["lote_id"],r["peso"],r["data"],r["identificacao"],r["animal_id"]) for r in rows]
+        return [(r["id"],r["lote_id"],r["peso"],r["data"],
+                 r["identificacao"],r["animal_id"]) for r in rows]
 
 
 # ── OCORRENCIAS ──────────────────────────────────────────────────────────────
@@ -3590,6 +3608,7 @@ def listar_pesagens_todos_animais(lote_id):
             f"SELECT p.id,p.animal_id,p.peso,p.data,a.identificacao"
             f" FROM pesagens p JOIN animais a ON a.id=p.animal_id"
             f" WHERE a.lote_id={p} AND COALESCE(a.ativo,1)=1"
+            f" AND UPPER(COALESCE(a.status,'ATIVO')) != 'VENDIDO'"
             f" ORDER BY p.animal_id,p.data ASC",
             (lote_id,),
         )
