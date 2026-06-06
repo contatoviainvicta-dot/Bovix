@@ -1099,7 +1099,7 @@ def atualizar_lote(lote_id, nome, descricao, data_entrada, qtd_comprada, qtd_rec
             f"SELECT COUNT(*) FROM animais "
             f"WHERE lote_id={p} "
             f"AND COALESCE(ativo,1)=1 "
-            f"AND UPPER(COALESCE(status,'ATIVO')) != 'VENDIDO'",
+            f"AND UPPER(COALESCE(status,'ATIVO')) NOT IN ('VENDIDO','MORTO','DESCARTADO')",
             (lote_id,)
         )
         ativos = cur.fetchone()[0]
@@ -1309,20 +1309,39 @@ def listar_animais_por_status(lote_id, status=None):
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
-        if status:
+        if status and status.upper() == 'VENDIDO':
+            # Mostrar só vendidos — para histórico/relatório
             cur.execute(
-                f"SELECT id,identificacao,idade,lote_id,COALESCE(status,'ATIVO') as status"
-                f" FROM animais WHERE lote_id={p} AND COALESCE(status,'ATIVO')={p} ORDER BY id",
+                f"SELECT id,identificacao,idade,lote_id,"
+                f"UPPER(COALESCE(status,'ATIVO')) as status"
+                f" FROM animais WHERE lote_id={p}"
+                f" AND UPPER(COALESCE(status,'ATIVO'))='VENDIDO'"
+                f" ORDER BY id",
+                (lote_id,),
+            )
+        elif status:
+            # Filtro específico — excluindo VENDIDO dos ativos
+            cur.execute(
+                f"SELECT id,identificacao,idade,lote_id,"
+                f"UPPER(COALESCE(status,'ATIVO')) as status"
+                f" FROM animais WHERE lote_id={p}"
+                f" AND UPPER(COALESCE(status,'ATIVO'))=UPPER({p})"
+                f" ORDER BY id",
                 (lote_id, status),
             )
         else:
+            # Sem filtro — excluir VENDIDO (padrão do workspace)
             cur.execute(
-                f"SELECT id,identificacao,idade,lote_id,COALESCE(status,'ATIVO') as status"
-                f" FROM animais WHERE lote_id={p} ORDER BY id",
+                f"SELECT id,identificacao,idade,lote_id,"
+                f"UPPER(COALESCE(status,'ATIVO')) as status"
+                f" FROM animais WHERE lote_id={p}"
+                f" AND UPPER(COALESCE(status,'ATIVO')) != 'VENDIDO'"
+                f" ORDER BY id",
                 (lote_id,),
             )
         rows = _fetch(cur)
-        return [(r['id'],r['identificacao'],r['idade'],r['lote_id'],r['status']) for r in rows]
+        return [(r['id'],r['identificacao'],r['idade'],r['lote_id'],r['status'])
+                for r in rows]
 
 def contagem_status_animais(lote_id):
     p = _ph()
@@ -2726,6 +2745,16 @@ def marcar_animal_vendido(animal_id, data_venda=None, preco_kg=0,
             f"UPDATE animais SET status='VENDIDO', ativo=0 WHERE id={p}",
             (animal_id,)
         )
+        # Normalizar status existentes para MAIÚSCULO se necessário
+        try:
+            cur.execute(
+                f"UPDATE animais SET status=UPPER(status) "
+                f"WHERE lote_id=(SELECT lote_id FROM animais WHERE id={p})"
+                f" AND status != UPPER(status)",
+                (animal_id,)
+            )
+        except Exception:
+            pass
         conn.commit()
     # Registrar ocorrencia no prontuario
     try:
@@ -3947,7 +3976,7 @@ def _garantir_status_animal_lote():
         cur = conn.cursor()
         try:
             if _usar_postgres():
-                cur.execute("ALTER TABLE animais ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Ativo'")
+                cur.execute("ALTER TABLE animais ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ATIVO'")
                 cur.execute("ALTER TABLE lotes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Ativo'")
             else:
                 for tbl, col in [('animais','status'),('lotes','status')]:
