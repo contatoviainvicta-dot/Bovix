@@ -2773,6 +2773,41 @@ def encerrar_lote(lote_id, data_encerramento=None, motivo="venda_total"):
     return True
 
 
+
+def registrar_receita_parcial(lote_id, data_venda, preco_arroba,
+                               peso_total, frigorifico="", obs=""):
+    """Registra receita de venda parcial no lote SEM encerrar o ciclo.
+    O lote permanece ATIVO. Diferente de registrar_venda_lote que encerra.
+    """
+    p = _ph()
+    arrobas = peso_total * 0.5 / 15
+    receita = arrobas * preco_arroba
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            # Lançar como custo negativo (receita) na tabela custos_lote
+            cur.execute(
+                f"INSERT INTO custos_lote "
+                f"(lote_id, categoria, descricao, valor, data_lancamento, owner_id) "
+                f"SELECT {p},'venda_parcial',{p},{p},{p},owner_id "
+                f"FROM lotes WHERE id={p}",
+                (lote_id,
+                 f"Venda parcial — {frigorifico or 'sem frigorífico'} | {obs or ''}",
+                 -round(receita, 2),  # negativo = receita
+                 data_venda,
+                 lote_id)
+            )
+            conn.commit()
+        _log_db.info(
+            "Receita parcial lote %s: R$ %.2f (%.1f@ @ R$ %.2f)",
+            lote_id, receita, arrobas, preco_arroba
+        )
+        return True, round(receita, 2), round(arrobas, 2)
+    except Exception as _e:
+        _log_err.error("registrar_receita_parcial: %s", _e)
+        return False, 0, 0
+
+
 def venda_parcial_lote(lote_id, animal_ids, preco_kg=0,
                        peso_total=0, frigorifico="",
                        data_venda=None, observacao=""):
@@ -2789,16 +2824,15 @@ def venda_parcial_lote(lote_id, animal_ids, preco_kg=0,
             observacao=f"Venda parcial | {frigorifico or ''}"
         )
 
-    # Registrar venda (proporcional)
+    # Registrar receita parcial SEM encerrar o lote
     n = len(animal_ids)
     if peso_total > 0 and preco_kg > 0:
-        # Converter preco_kg para preco_arroba (1@ = 15kg * rendimento 50%)
         _preco_arroba = preco_kg * 15 / 0.5
-        registrar_venda_lote(
+        registrar_receita_parcial(
             lote_id=lote_id,
             data_venda=dt,
             preco_arroba=_preco_arroba,
-            peso_venda_total=peso_total,
+            peso_total=peso_total,
             frigorifico=frigorifico or "",
             obs=f"Venda parcial ({n} animais) | {observacao or ''}"
         )
