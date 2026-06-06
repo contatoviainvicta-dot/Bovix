@@ -357,7 +357,7 @@ def page_protocolos(u):
         with st.form("form_criar_proto"):
             nome_proto = st.text_input("Nome do protocolo *",
                                       placeholder="Ex: Engorda Nelore 18 meses")
-            desc_proto = st.text_area("Descricao", height=60)
+            desc_proto = st.text_area("Descricao", height=68)
             cat_proto  = st.selectbox("Categoria",
                 ["geral","engorda","cria","leite","reproducao","sanitario"])
 
@@ -1175,10 +1175,10 @@ def page_exames_laboratoriais(u):
                     # Form para atualizar resultado
                     with st.form(f"form_upd_ex_{eid}"):
                         novo_res   = st.text_area("Atualizar resultado",
-                            value=res or "", height=60,
+                            value=res or "", height=68,
                             key=f"nres_{eid}")
                         novo_interp = st.text_area("Atualizar interpretacao",
-                            value=interp or "", height=60,
+                            value=interp or "", height=68,
                             key=f"nint_{eid}")
                         novo_alt = st.checkbox("Resultado alterado",
                             value=bool(alt), key=f"nalt_{eid}")
@@ -1265,7 +1265,7 @@ def page_monitoramento(u):
                     # Vet pode registrar evolucao
                     with st.form(f"form_ev_{m['id']}"):
                         nova_ev = st.text_area("Registrar evolucao",
-                            height=60,
+                            height=68,
                             placeholder="Como o animal esta respondendo?",
                             key=f"ev_{m['id']}")
                         c1m, c2m = st.columns(2)
@@ -2068,7 +2068,7 @@ def page_campanhas_vacinacao(u):
                     min_value=50, max_value=100,
                     value=100, step=5
                 )
-            obs_camp = st.text_area("Observacoes", height=60)
+            obs_camp = st.text_area("Observacoes", height=68)
 
             if st.form_submit_button("Criar Campanha", type="primary"):
                 if not nome_camp or not vacina_camp or not safra_camp:
