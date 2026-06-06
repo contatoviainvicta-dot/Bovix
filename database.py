@@ -227,7 +227,10 @@ def _conexao():
                 pass
     else:
         import sqlite3
-        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pecuaria.db")
+        # Permitir override do caminho para testes isolados
+        db_path = os.environ.get("AUROQUE_DB_PATH") or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "pecuaria.db"
+        )
         conn = sqlite3.connect(db_path, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
