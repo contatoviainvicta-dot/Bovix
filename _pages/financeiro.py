@@ -289,78 +289,33 @@ def page_margem_real(u):
                     st.dataframe(df_v, use_container_width=True)
         with t2:
             st.subheader("Registrar Venda")
+            st.info(
+                "O registro de venda foi centralizado em **Rebanho → Vender Lote**, "
+                "onde você pode gerenciar todo o ciclo do lote: "
+                "ATIVO → Em Negociação → VENDIDO, com DRE automático e histórico completo."
+            )
+            st.markdown("""
+<div style="background:#E8F5EE;border-radius:10px;padding:16px 20px;margin-top:8px">
+  <div style="font-size:13px;font-weight:600;color:#1B4332;margin-bottom:6px">
+    O que você pode fazer em Vender Lote:
+  </div>
+  <ul style="font-size:12px;color:#374151;margin:0;padding-left:18px;line-height:1.8">
+    <li>Registrar data de venda, preço/@, peso total e frigorífico</li>
+    <li>Marcar o lote como "Em Negociação" antes de fechar o negócio</li>
+    <li>Gerar DRE automático com receita, custos e margem real</li>
+    <li>Consultar histórico completo de lotes vendidos</li>
+    <li>O lote sai automaticamente do Workspace após a venda</li>
+  </ul>
+</div>
+""", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("💰 Ir para Vender Lote",
+                         type="primary", use_container_width=True,
+                         key="btn_goto_vender_lote"):
+                st.session_state.menu = "Vender Lote"
+                st.rerun()
 
-            # Calcular peso automatico dos animais
-            _animais_lote = listar_animais_por_lote(lote_id)
-            _pes_todos = listar_pesagens_todos_animais(lote_id)
-            # Peso mais recente por animal (fallback para peso_entrada)
-            _peso_map = {}
-            for p in _pes_todos:
-                aid = p[1]
-                if aid not in _peso_map or p[3] > _peso_map[aid][3]:
-                    _peso_map[aid] = p
-            # Para animais sem pesagem, usar peso_entrada do cadastro
-            for _an in _animais_lote:
-                _aid = _an[0]
-                if _aid not in _peso_map:
-                    _pe = _an[6] if len(_an) > 6 else 0  # peso_entrada
-                    if _pe and float(_pe) > 0:
-                        _peso_map[_aid] = (None, _aid, float(_pe), "0000-00-00")
-            _peso_total_lote = sum(float(p[2]) for p in _peso_map.values())
-            _n_animais = len(_animais_lote)
 
-            st.info(f"Lote com **{_n_animais} animais** | Peso total acumulado: **{_peso_total_lote:.0f} kg**")
-
-            tipo_venda = st.radio("Tipo de venda", ["Lote inteiro", "Animal individual"], horizontal=True, key="tv_radio")
-
-            if tipo_venda == "Animal individual":
-                _opts_anim = {f"{a[1]} (ID {a[0]})": a[0] for a in _animais_lote}
-                _sel_anim = st.selectbox("Selecionar animal", list(_opts_anim.keys()), key="mv_anim")
-                _aid_sel  = _opts_anim[_sel_anim]
-                _peso_anim = float(_peso_map[_aid_sel][2]) if _aid_sel in _peso_map else 0.0
-                st.caption(f"Ultimo peso registrado: {_peso_anim:.1f} kg")
-                _peso_sugerido = _peso_anim
-            else:
-                _peso_sugerido = _peso_total_lote
-
-            with st.form("form_venda"):
-                v1, v2 = st.columns(2)
-                with v1:
-                    data_v = st.date_input("Data venda")
-                    pr_kg  = st.number_input("Preco de venda (R$/kg)", 0.0, 100.0, 22.0)
-                with v2:
-                    peso_v = st.number_input(
-                        "Peso total vendido (kg)",
-                        min_value=0.0,
-                        value=float(_peso_sugerido),
-                        help="Preenchido automaticamente com base nas pesagens. Ajuste se necessario."
-                    )
-                    frig_v = st.text_input("Frigorifico")
-                    obs_v  = st.text_area("Observacao")
-
-                if st.form_submit_button("Registrar Venda", type="primary"):
-                    if peso_v <= 0:
-                        st.error("Informe o peso total.")
-                    elif lote_ja_vendido(lote_id):
-                        st.error("Este lote ja foi vendido. Todos os animais estao inativos.")
-                    else:
-                        _animais_vd = [_aid_sel] if tipo_venda == "Animal individual" else None
-                        registrar_venda_lote(
-                            lote_id, str(data_v), pr_kg, peso_v,
-                            frig_v, obs_v, animais_vendidos=_animais_vd
-                        )
-                        registrar_auditoria(u["id"], "venda_lote", "vendas", lote_id,
-                                           f"R${pr_kg}/kg {peso_v}kg ({tipo_venda})")
-                        limpar_cache()
-                        n_baixa = len(_animais_vd) if _animais_vd else len(_animais_lote)
-                        st.session_state["msg_venda_ok"] = (
-                            f"Venda registrada! {n_baixa} animal(is) vendido(s). "
-                            f"{peso_v:.0f} kg x R$ {pr_kg:.2f}/kg = "
-                            f"{fmt_brl(peso_v*pr_kg)}"
-                        )
-                        st.rerun()
-
-    # ============================================================
     # COTACAO CEPEA
     # ============================================================
 
