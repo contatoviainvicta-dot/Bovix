@@ -1095,7 +1095,13 @@ def atualizar_lote(lote_id, nome, descricao, data_entrada, qtd_comprada, qtd_rec
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1", (lote_id,))
+        cur.execute(
+            f"SELECT COUNT(*) FROM animais "
+            f"WHERE lote_id={p} "
+            f"AND COALESCE(ativo,1)=1 "
+            f"AND UPPER(COALESCE(status,'ATIVO')) != 'VENDIDO'",
+            (lote_id,)
+        )
         ativos = cur.fetchone()[0]
         cur.execute(
             f"UPDATE lotes SET nome={p},descricao={p},data_entrada={p},qtd_comprada={p},qtd_recebida={p},transporte={p} WHERE id={p}",
@@ -1162,7 +1168,14 @@ def listar_animais_por_lote(lote_id, incluir_inativos=False):
         if incluir_inativos:
             cur.execute(f"SELECT id,identificacao,idade,lote_id FROM animais WHERE lote_id={p} ORDER BY id", (lote_id,))
         else:
-            cur.execute(f"SELECT id,identificacao,idade,lote_id FROM animais WHERE lote_id={p} AND COALESCE(ativo,1)=1 ORDER BY id", (lote_id,))
+            cur.execute(
+                f"SELECT id,identificacao,idade,lote_id FROM animais "
+                f"WHERE lote_id={p} "
+                f"AND COALESCE(ativo,1)=1 "
+                f"AND UPPER(COALESCE(status,'ATIVO')) != 'VENDIDO' "
+                f"ORDER BY id",
+                (lote_id,)
+            )
         rows = _fetch(cur)
         return [(r["id"],r["identificacao"],r["idade"],r["lote_id"]) for r in rows]
 
