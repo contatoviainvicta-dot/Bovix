@@ -701,15 +701,34 @@ def page_workspace_do_lote(u):
     if is_vet():
         sel_fazenda_vet(key="vet_faz_ws")
 
-    lotes = listar_lotes_usuario()
+    _todos_lotes_check = listar_lotes_usuario()
+    lotes = [l for l in _todos_lotes_check
+             if (l[12] if len(l) > 12 else "ATIVO") in ("ATIVO", "EM_VENDA")]
     if not lotes:
-        st.warning("Nenhum lote cadastrado.")
+        # Verificar se tem lotes mas todos vendidos
+        if _todos_lotes_check:
+            st.info(
+                "Todos os seus lotes foram vendidos ou arquivados. "
+                "Cadastre um novo lote em **Rebanho → Cadastrar Lote** "
+                "ou veja o histórico em **Rebanho → Histórico de Lotes**."
+            )
+        else:
+            st.warning("Nenhum lote cadastrado.")
         st.stop()
 
     # Selector do lote no topo
     _lotes_ws_raw = listar_lotes_usuario()
-    todos_lotes_ws = [(l[0],l[1],l[2],l[3],l[4],l[5],l[6],l[7] if len(l)>7 else "ATIVO") for l in _lotes_ws_raw]
-    dict_ws = {f"{l[1]}": l[0] for l in todos_lotes_ws}
+    # Filtrar apenas lotes ativos — VENDIDO/ARQUIVADO saem do workspace
+    todos_lotes_ws = [
+        (l[0],l[1],l[2],l[3],l[4],l[5],l[6],l[7] if len(l)>7 else "ATIVO")
+        for l in _lotes_ws_raw
+        if (l[12] if len(l) > 12 else "ATIVO") in ("ATIVO", "EM_VENDA")
+    ]
+    # Badge de status para lotes em negociação
+    dict_ws = {
+        f"{l[1]}{' 🤝' if (l[7] if len(l)>7 else 'ATIVO') == 'EM_VENDA' else ''}": l[0]
+        for l in todos_lotes_ws
+    }
 
     col_sel, col_status = st.columns([3, 1])
     with col_sel:
