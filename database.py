@@ -3185,34 +3185,57 @@ def obter_resumo_venda_lote(lote_id):
 
 
 def listar_animais_vendidos_lote(owner_id):
-    """Lista todos os animais vendidos individualmente (venda parcial)
-    agrupados por lote, para exibição no histórico."""
+    """Lista animais vendidos individualmente em lotes ainda ativos."""
     p = _ph()
     try:
         with _conexao() as conn:
             cur = conn.cursor()
+            # Query simplificada — sem subquery de ocorrencias
+            # para evitar incompatibilidade GROUP BY no PostgreSQL
             cur.execute(
-                f"SELECT a.id, a.identificacao, a.raca, a.sexo, "
-                f"a.peso_entrada, l.id as lote_id, l.nome as lote_nome, "
-                f"COALESCE(l.status,'ATIVO') as lote_status, "
-                f"o.data as data_venda, o.descricao as obs_venda "
+                f"SELECT a.id, a.identificacao, "
+                f"COALESCE(a.raca,'') as raca, "
+                f"COALESCE(a.sexo,'') as sexo, "
+                f"COALESCE(a.peso_entrada,0) as peso_entrada, "
+                f"l.id as lote_id, l.nome as lote_nome, "
+                f"UPPER(COALESCE(l.status,'ATIVO')) as lote_status "
                 f"FROM animais a "
                 f"JOIN lotes l ON l.id = a.lote_id "
-                f"LEFT JOIN ("
-                f"  SELECT animal_id, MAX(data) as data, descricao "
-                f"  FROM ocorrencias WHERE tipo='Venda' GROUP BY animal_id"
-                f") o ON o.animal_id = a.id "
                 f"WHERE l.owner_id={p} "
-                f"AND UPPER(COALESCE(a.status,'ATIVO'))='VENDIDO' "
-                f"AND UPPER(COALESCE(l.status,'ATIVO')) NOT IN ('VENDIDO','ARQUIVADO') "
-                f"ORDER BY o.data DESC, l.nome",
+                f"AND UPPER(COALESCE(a.status,'ATIVO')) = 'VENDIDO' "
+                f"AND UPPER(COALESCE(l.status,'ATIVO')) "
+                f"NOT IN ('VENDIDO','ARQUIVADO','ENCERRADO') "
+                f"ORDER BY l.nome, a.identificacao",
                 (owner_id,)
             )
             rows = _fetch(cur)
-            return [(r['id'], r['identificacao'], r['raca'], r['sexo'],
-                     r['peso_entrada'], r['lote_id'], r['lote_nome'],
-                     r['lote_status'], r['data_venda'], r['obs_venda'])
-                    for r in rows]
+            if not rows:
+                return []
+            
+            # Buscar data e obs da venda de cada animal via ocorrencias
+            # Query separada por animal para evitar problema de GROUP BY
+            resultado = []
+            for r in rows:
+                data_v, obs_v = None, ""
+                try:
+                    cur.execute(
+                        f"SELECT data, descricao FROM ocorrencias "
+                        f"WHERE animal_id={p} AND tipo='Venda' "
+                        f"ORDER BY data DESC LIMIT 1",
+                        (r['id'],)
+                    )
+                    oc = cur.fetchone()
+                    if oc:
+                        data_v = oc[0] if isinstance(oc, (list,tuple)) else oc.get('data')
+                        obs_v  = oc[1] if isinstance(oc, (list,tuple)) else oc.get('descricao','')
+                except Exception:
+                    pass
+                resultado.append((
+                    r['id'], r['identificacao'], r['raca'], r['sexo'],
+                    r['peso_entrada'], r['lote_id'], r['lote_nome'],
+                    r['lote_status'], data_v, obs_v
+                ))
+            return resultado
     except Exception as _e:
         _log_err.error("listar_animais_vendidos_lote: %s", _e)
         return []
