@@ -1043,10 +1043,12 @@ def listar_lotes(owner_id=None):
                 f"qtd_recebida,transporte,"
                 f"COALESCE(tipo_alimentacao,''),COALESCE(tipo_dieta,''),"
                 f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),"
-                f"COALESCE(owner_id,0) "
+                f"COALESCE(owner_id,0),"
+                f"COALESCE(status,'ATIVO') "
                 f"FROM lotes WHERE owner_id={p} "
                 f"AND COALESCE(ativo,1)=1 "
-                f"AND COALESCE(status,'ativo') NOT IN ('encerrado','vendido') "
+                f"AND UPPER(COALESCE(status,'ATIVO')) "
+                f"NOT IN ('VENDIDO','ARQUIVADO','ENCERRADO') "
                 f"ORDER BY data_entrada DESC,id DESC",
                 (owner_id,),
             )
@@ -1063,7 +1065,8 @@ def listar_lotes(owner_id=None):
         rows = cur.fetchall()
         return [
             (r[0],r[1],r[2],r[3],r[4],r[5],r[6],
-             r[7],r[8],float(r[9] or 0),str(r[10] or ''),r[11])
+             r[7],r[8],float(r[9] or 0),str(r[10] or ''),r[11],
+             str(r[12] or 'ATIVO'))
             for r in rows
         ]
 
