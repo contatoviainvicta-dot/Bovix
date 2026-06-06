@@ -578,6 +578,21 @@ _MIGRATIONS = [
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS last_login TEXT DEFAULT NULL",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS owner_id INTEGER DEFAULT NULL",
     ]),
+    (13, "tabela_vendas_animais", [
+        """CREATE TABLE IF NOT EXISTS vendas_animais (
+            id            SERIAL PRIMARY KEY,
+            animal_id     INTEGER NOT NULL,
+            lote_id       INTEGER NOT NULL,
+            owner_id      INTEGER,
+            data_venda    TEXT NOT NULL,
+            peso_abate    REAL DEFAULT 0,
+            preco_arroba  REAL DEFAULT 0,
+            receita       REAL DEFAULT 0,
+            frigorifico   TEXT DEFAULT '',
+            gta_numero    TEXT DEFAULT '',
+            obs           TEXT DEFAULT ''
+        )"""
+    ]),
     (12, "ciclo_venda_lote", [
         "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ATIVO'",
         "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS data_venda TEXT DEFAULT NULL",
@@ -2734,18 +2749,27 @@ def lote_ja_vendido(lote_id):
 
 # ── CICLO DE VIDA: VENDA E ENCERRAMENTO ──────────────────────
 def marcar_animal_vendido(animal_id, data_venda=None, preco_kg=0,
-                          peso_abate=0, observacao=""):
-    """Marca animal como VENDIDO. Registra dados de abate."""
+                          peso_abate=0, observacao="",
+                          preco_arroba=0, frigorifico="", gta=""):
+    """Marca animal como VENDIDO. Salva dados na tabela vendas_animais."""
     from datetime import date
     p  = _ph()
     dt = str(data_venda or date.today())
+    # Calcular preco_arroba se não informado (converter de preco_kg)
+    if not preco_arroba and preco_kg:
+        preco_arroba = preco_kg * 15 / 0.5
+    # Calcular receita
+    arrobas = peso_abate * 0.5 / 15 if peso_abate else 0
+    receita = arrobas * preco_arroba if preco_arroba else 0
+
     with _conexao() as conn:
         cur = conn.cursor()
+        # Atualizar status do animal
         cur.execute(
             f"UPDATE animais SET status='VENDIDO', ativo=0 WHERE id={p}",
             (animal_id,)
         )
-        # Normalizar status existentes para MAIÚSCULO se necessário
+        # Normalizar status para MAIÚSCULO
         try:
             cur.execute(
                 f"UPDATE animais SET status=UPPER(status) "
@@ -2755,6 +2779,41 @@ def marcar_animal_vendido(animal_id, data_venda=None, preco_kg=0,
             )
         except Exception:
             pass
+        # Salvar dados da venda na tabela dedicada
+        try:
+            if _usar_postgres():
+                cur.execute(
+                    f"INSERT INTO vendas_animais "
+                    f"(animal_id,lote_id,owner_id,data_venda,"
+                    f"peso_abate,preco_arroba,receita,frigorifico,gta_numero,obs) "
+                    f"SELECT {p},lote_id,"
+                    f"(SELECT owner_id FROM lotes WHERE id=a.lote_id),"
+                    f"{p},{p},{p},{p},{p},{p},{p} "
+                    f"FROM animais a WHERE a.id={p}",
+                    (animal_id, dt, float(peso_abate or 0),
+                     float(preco_arroba or 0), round(receita, 2),
+                     frigorifico or "", gta or "",
+                     observacao or "", animal_id)
+                )
+            else:
+                cur.execute(
+                    f"SELECT lote_id FROM animais WHERE id={p}", (animal_id,)
+                )
+                row = cur.fetchone()
+                lote_id = row[0] if row else None
+                if lote_id:
+                    cur.execute(
+                        f"INSERT INTO vendas_animais "
+                        f"(animal_id,lote_id,data_venda,"
+                        f"peso_abate,preco_arroba,receita,frigorifico,gta_numero,obs) "
+                        f"VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p})",
+                        (animal_id, lote_id, dt,
+                         float(peso_abate or 0), float(preco_arroba or 0),
+                         round(receita, 2), frigorifico or "",
+                         gta or "", observacao or "")
+                    )
+        except Exception as _ev:
+            _log_war.debug("vendas_animais insert: %s", _ev)
         conn.commit()
     # Registrar ocorrencia no prontuario
     try:
@@ -2845,11 +2904,19 @@ def venda_parcial_lote(lote_id, animal_ids, preco_kg=0,
     from datetime import date
     dt = str(data_venda or date.today())
 
-    # Marcar cada animal como vendido
+    # Calcular preco_arroba e peso médio por animal
+    _preco_arr = preco_kg * 15 / 0.5 if preco_kg else 0
+    _n = len(animal_ids)
+    _peso_por_animal = peso_total / _n if _n and peso_total else 0
+
+    # Marcar cada animal com dados completos de venda
     for aid in animal_ids:
         marcar_animal_vendido(
             aid, data_venda=dt,
             preco_kg=preco_kg,
+            peso_abate=_peso_por_animal,
+            preco_arroba=_preco_arr,
+            frigorifico=frigorifico or "",
             observacao=f"Venda parcial | {frigorifico or ''}"
         )
 
@@ -3185,57 +3252,44 @@ def obter_resumo_venda_lote(lote_id):
 
 
 def listar_animais_vendidos_lote(owner_id):
-    """Lista animais vendidos individualmente em lotes ainda ativos."""
+    """Lista animais vendidos individualmente com todos os dados da venda."""
     p = _ph()
     try:
         with _conexao() as conn:
             cur = conn.cursor()
-            # Query simplificada — sem subquery de ocorrencias
-            # para evitar incompatibilidade GROUP BY no PostgreSQL
             cur.execute(
                 f"SELECT a.id, a.identificacao, "
                 f"COALESCE(a.raca,'') as raca, "
                 f"COALESCE(a.sexo,'') as sexo, "
                 f"COALESCE(a.peso_entrada,0) as peso_entrada, "
                 f"l.id as lote_id, l.nome as lote_nome, "
-                f"UPPER(COALESCE(l.status,'ATIVO')) as lote_status "
+                f"UPPER(COALESCE(l.status,'ATIVO')) as lote_status, "
+                f"v.data_venda, "
+                f"COALESCE(v.peso_abate,0) as peso_abate, "
+                f"COALESCE(v.preco_arroba,0) as preco_arroba, "
+                f"COALESCE(v.receita,0) as receita, "
+                f"COALESCE(v.frigorifico,'') as frigorifico, "
+                f"COALESCE(v.gta_numero,'') as gta_numero, "
+                f"COALESCE(v.obs,'') as obs "
                 f"FROM animais a "
                 f"JOIN lotes l ON l.id = a.lote_id "
+                f"LEFT JOIN vendas_animais v ON v.animal_id = a.id "
                 f"WHERE l.owner_id={p} "
                 f"AND UPPER(COALESCE(a.status,'ATIVO')) = 'VENDIDO' "
                 f"AND UPPER(COALESCE(l.status,'ATIVO')) "
                 f"NOT IN ('VENDIDO','ARQUIVADO','ENCERRADO') "
-                f"ORDER BY l.nome, a.identificacao",
+                f"ORDER BY v.data_venda DESC, l.nome, a.identificacao",
                 (owner_id,)
             )
             rows = _fetch(cur)
-            if not rows:
-                return []
-            
-            # Buscar data e obs da venda de cada animal via ocorrencias
-            # Query separada por animal para evitar problema de GROUP BY
-            resultado = []
-            for r in rows:
-                data_v, obs_v = None, ""
-                try:
-                    cur.execute(
-                        f"SELECT data, descricao FROM ocorrencias "
-                        f"WHERE animal_id={p} AND tipo='Venda' "
-                        f"ORDER BY data DESC LIMIT 1",
-                        (r['id'],)
-                    )
-                    oc = cur.fetchone()
-                    if oc:
-                        data_v = oc[0] if isinstance(oc, (list,tuple)) else oc.get('data')
-                        obs_v  = oc[1] if isinstance(oc, (list,tuple)) else oc.get('descricao','')
-                except Exception:
-                    pass
-                resultado.append((
-                    r['id'], r['identificacao'], r['raca'], r['sexo'],
-                    r['peso_entrada'], r['lote_id'], r['lote_nome'],
-                    r['lote_status'], data_v, obs_v
-                ))
-            return resultado
+            return [
+                (r['id'], r['identificacao'], r['raca'], r['sexo'],
+                 r['peso_entrada'], r['lote_id'], r['lote_nome'],
+                 r['lote_status'], r['data_venda'], r['peso_abate'],
+                 r['preco_arroba'], r['receita'], r['frigorifico'],
+                 r['gta_numero'], r['obs'])
+                for r in rows
+            ] if rows else []
     except Exception as _e:
         _log_err.error("listar_animais_vendidos_lote: %s", _e)
         return []
