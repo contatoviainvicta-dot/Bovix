@@ -25,21 +25,21 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 @pytest.fixture
 def db(tmp_path, monkeypatch):
     """Recarrega o módulo database com um SQLite limpo a cada teste."""
-    # Banco isolado por teste
+    # Banco isolado por teste — arquivo único no diretório temporário
     db_file = tmp_path / "teste.db"
+
+    # IMPORTANTE: setar as variáveis ANTES de importar o módulo,
+    # pois o caminho do banco é resolvido na hora da conexão
     monkeypatch.setenv("DATABASE_URL", "")
     monkeypatch.setenv("AUROQUE_DB_PATH", str(db_file))
 
-    # Recarregar o módulo do zero
+    # Remover qualquer versão em cache do módulo
     for mod in list(sys.modules.keys()):
         if "database" in mod:
             del sys.modules[mod]
+
     import database as _db
     importlib.reload(_db)
-
-    # Apontar o SQLite para o arquivo temporário, se o módulo usar caminho fixo
-    if hasattr(_db, "_SQLITE_PATH"):
-        _db._SQLITE_PATH = str(db_file)
 
     _db.inicializar_banco()
     return _db
