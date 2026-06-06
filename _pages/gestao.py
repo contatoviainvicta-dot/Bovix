@@ -884,9 +884,13 @@ def page_workspace_do_lote(u):
     # ── ABA ANIMAIS ───────────────────────────────────────────────────────────
     with aba_anim:
         filtro_status = st.selectbox(
-            "Filtrar por status", ["Todos"] + STATUS_ANIMAL, key="ws_filtro_anim"
+            "Filtrar por status",
+            ["Ativos", "VENDIDO"] + [s for s in STATUS_ANIMAL
+                                      if s not in ("ATIVO","VENDIDO")],
+            key="ws_filtro_anim"
         )
-        if filtro_status == "Todos":
+        if filtro_status == "Ativos":
+            # Padrão: todos exceto VENDIDO
             lista_anim_ws = listar_animais_por_status(lote_ws_id)
         else:
             lista_anim_ws = listar_animais_por_status(lote_ws_id, filtro_status)
