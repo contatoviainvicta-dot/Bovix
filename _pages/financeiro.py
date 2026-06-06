@@ -2,7 +2,9 @@
 
 import streamlit as st
 try:
-    from ux_helpers import fmt_brl, fmt_data, fmt_data_hora
+    from ux_helpers import (fmt_brl, fmt_data, fmt_data_hora,
+                             safe_bar_chart, safe_line_chart,
+                             toast_ok, toast_erro, empty_state)
 except ImportError:
     def fmt_brl(v):
         try:
@@ -10,6 +12,11 @@ except ImportError:
             s=f"{i:,}".replace(",","."); r=f"R$ {s},{c:02d}"
             return f"-{r}" if v<0 else r
         except: return "R$ 0,00"
+    def safe_bar_chart(df, **k): pass
+    def safe_line_chart(df, **k): pass
+    def toast_ok(m): import streamlit as _st; _st.success(m)
+    def toast_erro(m): import streamlit as _st; _st.error(m)
+    def empty_state(m, **k): import streamlit as _st; _st.info(m)
     def fmt_data(d):
         m={"01":"jan","02":"fev","03":"mar","04":"abr","05":"mai","06":"jun",
            "07":"jul","08":"ago","09":"set","10":"out","11":"nov","12":"dez"}
