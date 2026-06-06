@@ -1,6 +1,37 @@
 # _pages/veterinario.py -- Telas exclusivas do perfil veterinario
 import streamlit as st
 try:
+    from ux_helpers import (aplicar_css_global, fmt_brl, fmt_data,
+                             safe_bar_chart, safe_line_chart,
+                             toast_ok, toast_erro, empty_state)
+except ImportError:
+    def aplicar_css_global(): pass
+    def fmt_brl(v):
+        try:
+            v=float(v or 0); i=int(abs(v)); c=round((abs(v)-i)*100)
+            s=f"{i:,}".replace(",","."); r=f"R$ {s},{c:02d}"
+            return f"-{r}" if v<0 else r
+        except: return "R$ 0,00"
+    def fmt_data(d):
+        try:
+            p=str(d)[:10].split("-")
+            m={"01":"jan","02":"fev","03":"mar","04":"abr","05":"mai",
+               "06":"jun","07":"jul","08":"ago","09":"set","10":"out",
+               "11":"nov","12":"dez"}
+            return f"{p[2]}/{m.get(p[1],p[1])}/{p[0]}"
+        except: return str(d)
+    def safe_bar_chart(df, **k):
+        import streamlit as _st, pandas as _pd
+        try: _st.bar_chart(_pd.DataFrame(df))
+        except: pass
+    def safe_line_chart(df, **k):
+        import streamlit as _st, pandas as _pd
+        try: _st.line_chart(_pd.DataFrame(df))
+        except: pass
+    def toast_ok(m): import streamlit as _st; _st.success(f"✅ {m}")
+    def toast_erro(m): import streamlit as _st; _st.error(f"❌ {m}")
+    def empty_state(m, **k): import streamlit as _st; _st.info(m)
+try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, erro_com_acao,
                             fmt_brl, fmt_data, fmt_data_hora,
@@ -317,7 +348,7 @@ def page_protocolos(u):
                             df_i[["Dia","Tipo","Nome","Obs"]].rename(
                                 columns={"Dia":"Dia (offset)"}
                             ),
-                            width='stretch', hide_index=True
+                            use_container_width=True, hide_index=True
                         )
                     else:
                         st.caption("Nenhum item neste protocolo.")
@@ -899,7 +930,7 @@ def page_painel_saude(u):
         with c_g:
             safe_bar_chart(df_tipos.set_index("Tipo"))
         with c_t:
-            st.dataframe(df_tipos, hide_index=True, width='stretch')
+            st.dataframe(df_tipos, hide_index=True, use_container_width=True)
     else:
         st.info("Nenhuma ocorrencia registrada nesta fazenda.")
 
@@ -915,7 +946,7 @@ def page_painel_saude(u):
         df_car["Liberacao"] = df_car["Liberacao"].apply(_fmt_dt)
         st.dataframe(
             df_car[["Brinco","Medicamento","Data Aplicacao","Dias","Liberacao"]],
-            width='stretch', hide_index=True
+            use_container_width=True, hide_index=True
         )
     else:
         st.info("Nenhum animal em periodo de carencia.")
@@ -1015,7 +1046,7 @@ def page_controle_carencia(u):
 
             st.dataframe(
                 df_c[["Brinco","Medicamento","Data Aplicacao","Liberacao","Dias rest."]],
-                width='stretch', hide_index=True
+                use_container_width=True, hide_index=True
             )
 
 
@@ -1424,7 +1455,7 @@ def page_gestao_financeira_vet(u):
                         )
                         st.dataframe(
                             df_i[["Descricao","Qtd","Valor Unit","Total"]],
-                            width='stretch',
+                            use_container_width=True,
                             hide_index=True
                         )
 
@@ -1582,7 +1613,7 @@ def page_gestao_financeira_vet(u):
                  for r in res_sel["por_fazenda"]],
                 columns=["Fazenda","Lançamentos","Total"]
             )
-            st.dataframe(df_faz, width='stretch',
+            st.dataframe(df_faz, use_container_width=True,
                         hide_index=True)
 
         # Gráfico últimos 12 meses
@@ -1616,7 +1647,7 @@ def page_gestao_financeira_vet(u):
                 columns=["Data","Fazenda","Descricao",
                          "Tipo","Valor","Status"]
             )
-            st.dataframe(df_ext, width='stretch',
+            st.dataframe(df_ext, use_container_width=True,
                         hide_index=True)
         else:
             st.info("Nenhum lançamento neste período.")
@@ -1671,7 +1702,7 @@ def page_mapa_epidemiologico(u):
 
         if rows_comp:
             df_comp = pd.DataFrame(rows_comp)
-            st.dataframe(df_comp, width='stretch', hide_index=True)
+            st.dataframe(df_comp, use_container_width=True, hide_index=True)
 
             st.divider()
             st.subheader("Distribuicao de Ocorrencias por Tipo")
@@ -1701,7 +1732,7 @@ def page_mapa_epidemiologico(u):
                             safe_bar_chart(df_f.set_index("Tipo"))
                         with c_t:
                             st.dataframe(df_f, hide_index=True,
-                                        width='stretch')
+                                        use_container_width=True)
 
     # ── ABA 2: Mapa geografico ────────────────────────────────────────────
     with t2:
@@ -1745,7 +1776,7 @@ def page_mapa_epidemiologico(u):
                              "ocorrencias":"Ocorrencias",
                              "taxa_mort":"Taxa Mort %"}
                 ),
-                width='stretch', hide_index=True
+                use_container_width=True, hide_index=True
             )
         else:
             st.warning("Cadastre coordenadas das fazendas para ver o mapa.")
@@ -2005,7 +2036,7 @@ def page_campanhas_vacinacao(u):
                         st.dataframe(
                             df_lc[["Nome","Meta","Vacinados",
                                    "Cobertura %","Status","Execucao"]],
-                            width='stretch', hide_index=True
+                            use_container_width=True, hide_index=True
                         )
 
                     if obs_c:
@@ -2213,7 +2244,7 @@ def page_historico_clinico_pdf(u):
 
     st.divider()
     if st.button("Gerar PDF do Historico Clinico",
-                type="primary", width='stretch'):
+                type="primary", use_container_width=True):
         try:
             from pdf_vet import gerar_pdf_historico_animal
             pdf_bytes = gerar_pdf_historico_animal(
@@ -2226,7 +2257,7 @@ def page_historico_clinico_pdf(u):
                 data=pdf_bytes,
                 file_name=f"historico_{an_p.replace(' ','_')}.pdf",
                 mime="application/pdf",
-                width='stretch'
+                use_container_width=True
             )
         except Exception as e:
             st.error(f"Erro ao gerar PDF: {e}")
