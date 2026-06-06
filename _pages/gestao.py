@@ -1928,10 +1928,22 @@ def page_vender_lote(u):
                             )
                             _n_v = res.get("n_vendidos", _n_sel)
                             _rest = res.get("restantes", 0)
-                            toast_ok(
-                                f"{_n_v} animal(is) vendido(s). "
-                                f"{'Lote encerrado.' if _rest == 0 else f'{_rest} restante(s) no lote.'}"
-                            )
+                            if _rest == 0:
+                                toast_ok(
+                                    f"{_n_v} animal(is) vendido(s). "
+                                    "Todos os animais foram vendidos! "
+                                    "Use 'Vender lote inteiro' para encerrar o ciclo do lote."
+                                )
+                                st.info(
+                                    "⚠️ Todos os animais foram vendidos individualmente. "
+                                    "Para encerrar o lote e gerar o DRE completo, "
+                                    "vá para a aba **📦 Vender lote inteiro**."
+                                )
+                            else:
+                                toast_ok(
+                                    f"{_n_v} animal(is) vendido(s). "
+                                    f"{_rest} restante(s) no lote."
+                                )
                             st.rerun()
                         except Exception as _ev:
                             toast_erro(f"Erro: {_ev}")
@@ -2059,14 +2071,15 @@ def page_historico_lotes(u):
 
             # Custos por categoria
             if resumo["custos_cats"]:
-                with st.expander("Ver custos por categoria", expanded=False):
-                    for cat, val in sorted(resumo["custos_cats"].items(),
-                                            key=lambda x: -x[1]):
-                        _pct = val/resumo["custo_operacional"]*100                                if resumo["custo_operacional"] else 0
-                        st.markdown(
-                            f"**{cat.capitalize()}**: {fmt_brl(val)} "
-                            f"({_pct:.1f}%)"
-                        )
+                st.markdown("**Custos por categoria:**")
+                for cat, val in sorted(resumo["custos_cats"].items(),
+                                       key=lambda x: -x[1]):
+                    _pct = (val / resumo["custo_operacional"] * 100
+                            if resumo["custo_operacional"] else 0)
+                    st.markdown(
+                        f"&nbsp;&nbsp;• **{cat.capitalize()}**: "
+                        f"{fmt_brl(val)} ({_pct:.1f}%)"
+                    )
 
             # Dados da venda
             st.divider()
