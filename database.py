@@ -578,6 +578,16 @@ _MIGRATIONS = [
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS last_login TEXT DEFAULT NULL",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS owner_id INTEGER DEFAULT NULL",
     ]),
+    (12, "ciclo_venda_lote", [
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ATIVO'",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS data_venda TEXT DEFAULT NULL",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS preco_arroba REAL DEFAULT 0",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS peso_venda_total REAL DEFAULT 0",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS frigorifico TEXT DEFAULT NULL",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS gta_numero TEXT DEFAULT NULL",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS obs_venda TEXT DEFAULT NULL",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS receita_venda REAL DEFAULT 0",
+    ]),
     (13, "tabela_vendas_animais", [
         "ALTER TABLE custos_lote ADD COLUMN IF NOT EXISTS owner_id INTEGER DEFAULT NULL",
         """CREATE TABLE IF NOT EXISTS vendas_animais (
@@ -593,16 +603,6 @@ _MIGRATIONS = [
             gta_numero    TEXT DEFAULT '',
             obs           TEXT DEFAULT ''
         )"""
-    ]),
-    (12, "ciclo_venda_lote", [
-        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ATIVO'",
-        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS data_venda TEXT DEFAULT NULL",
-        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS preco_arroba REAL DEFAULT 0",
-        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS peso_venda_total REAL DEFAULT 0",
-        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS frigorifico TEXT DEFAULT NULL",
-        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS gta_numero TEXT DEFAULT NULL",
-        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS obs_venda TEXT DEFAULT NULL",
-        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS receita_venda REAL DEFAULT 0",
     ]),
 ]
 
@@ -2792,6 +2792,20 @@ def marcar_animal_vendido(animal_id, data_venda=None, preco_kg=0,
                 f"frigorifico TEXT DEFAULT '', gta_numero TEXT DEFAULT '', "
                 f"obs TEXT DEFAULT '')"
             )
+            if _usar_postgres():
+                for _col, _tipo in [
+                    ("owner_id","INTEGER"),("peso_abate","REAL"),
+                    ("preco_arroba","REAL"),("receita","REAL"),
+                    ("frigorifico","TEXT"),("gta_numero","TEXT"),("obs","TEXT")
+                ]:
+                    try:
+                        cur.execute(
+                            f"ALTER TABLE vendas_animais "
+                            f"ADD COLUMN IF NOT EXISTS {_col} {_tipo}"
+                        )
+                    except Exception:
+                        pass
+            conn.commit()
         except Exception:
             pass
         # Salvar dados da venda na tabela dedicada
@@ -3279,6 +3293,19 @@ def listar_animais_vendidos_lote(owner_id):
                 f"frigorifico TEXT DEFAULT '', gta_numero TEXT DEFAULT '', "
                 f"obs TEXT DEFAULT '')"
             )
+            if _usar_postgres():
+                for _col, _tipo in [
+                    ("owner_id","INTEGER"),("peso_abate","REAL"),
+                    ("preco_arroba","REAL"),("receita","REAL"),
+                    ("frigorifico","TEXT"),("gta_numero","TEXT"),("obs","TEXT")
+                ]:
+                    try:
+                        cur.execute(
+                            f"ALTER TABLE vendas_animais "
+                            f"ADD COLUMN IF NOT EXISTS {_col} {_tipo}"
+                        )
+                    except Exception:
+                        pass
             conn.commit()
     except Exception:
         pass
