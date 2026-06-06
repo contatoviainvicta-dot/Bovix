@@ -1991,19 +1991,27 @@ def page_vender_lote(u):
                             st.rerun()
 
 def page_historico_lotes(u):
-    """Histórico de lotes vendidos com DRE automático por lote."""
+    """Histórico de lotes vendidos + animais vendidos individualmente."""
     from ux_helpers import fmt_brl, fmt_data
-    from database import listar_lotes_historico, obter_resumo_venda_lote
+    from database import (listar_lotes_historico, obter_resumo_venda_lote,
+                           listar_animais_vendidos_lote)
 
-    st.subheader("📚 Histórico de Lotes")
-    st.caption("Lotes vendidos e arquivados — dados preservados para sempre")
+    st.subheader("📚 Histórico de Vendas")
+    st.caption("Lotes encerrados e animais vendidos individualmente")
 
     _oid = owner_id() or u["id"]
-    historico = listar_lotes_historico(_oid) or []
 
-    if not historico:
-        st.info("Nenhum lote vendido ainda. Os lotes vendidos aparecerão aqui.")
-        return
+    # Abas: Lotes encerrados | Vendas parciais
+    _th, _tp = st.tabs(["🏁 Lotes encerrados", "🐄 Vendas de animais individuais"])
+
+    # ── ABA 1: LOTES ENCERRADOS ───────────────────────────────────────
+    with _th:
+        historico = listar_lotes_historico(_oid) or []
+
+        if not historico:
+            st.info("Nenhum lote encerrado ainda. Lotes vendidos aparecerão aqui.")
+        else:
+            pass  # continua abaixo com o código original
 
     # Filtros
     _c1, _c2 = st.columns(2)
@@ -2101,3 +2109,46 @@ def page_historico_lotes(u):
             _ci3.metric("GTA", resumo["gta"] or "Não informado")
             if resumo["obs"]:
                 st.caption(f"Obs: {resumo['obs']}")
+
+    # ── ABA 2: VENDAS DE ANIMAIS INDIVIDUAIS ─────────────────────────
+    with _tp:
+        vendas_parciais = listar_animais_vendidos_lote(_oid) or []
+
+        if not vendas_parciais:
+            st.info(
+                "Nenhum animal vendido individualmente ainda. "
+                "Ao vender animais específicos em **Rebanho → Vender Lote**, "
+                "o histórico aparecerá aqui."
+            )
+        else:
+            st.markdown(f"**{len(vendas_parciais)} animal(is) vendido(s) individualmente**")
+
+            # Agrupar por lote
+            from collections import defaultdict as _dd
+            por_lote = _dd(list)
+            for a in vendas_parciais:
+                por_lote[a[6]].append(a)  # a[6] = lote_nome
+
+            for lote_nome, animais in por_lote.items():
+                with st.expander(
+                    f"🐄 Lote: {lote_nome} — {len(animais)} animal(is) vendido(s)",
+                    expanded=True
+                ):
+                    for a in animais:
+                        _aid, _ident, _raca, _sexo = a[0], a[1], a[2], a[3]
+                        _peso_e  = a[4] or 0
+                        _data_v  = fmt_data(str(a[8])[:10]) if a[8] else "—"
+                        _obs     = a[9] or ""
+
+                        _ca1, _ca2, _ca3, _ca4 = st.columns([2,1,1,2])
+                        _ca1.markdown(f"**{_ident}**")
+                        _ca2.caption(f"{_raca or '—'} / {_sexo or '—'}")
+                        _ca3.caption(f"Entrada: {_peso_e:.0f} kg")
+                        _ca4.caption(f"Vendido em: {_data_v}")
+                        if _obs:
+                            # Extrair dados da observação
+                            _obs_limpa = _obs.replace("Animal vendido em", "").split("|")
+                            for _o in _obs_limpa[1:]:
+                                if _o.strip():
+                                    st.caption(f"  {_o.strip()}")
+                        st.divider()
