@@ -1681,153 +1681,286 @@ def page_prontuario_animal(u):
 
 
 def page_vender_lote(u):
-    """Tela para registrar a venda de um lote — ciclo ATIVO → VENDIDO."""
+    """Tela de venda — lote inteiro ou animais específicos."""
     from ux_helpers import toast_ok, toast_erro, fmt_brl, fmt_data
-    from database import (listar_lotes, registrar_venda_lote,
+    from database import (listar_lotes, listar_animais_por_lote,
+                          listar_pesagens, registrar_venda_lote,
                           marcar_em_venda, cancelar_venda_lote,
-                          obter_resumo_venda_lote)
+                          venda_parcial_lote)
     from datetime import date
 
     st.subheader("💰 Registrar Venda de Lote")
-    st.caption("Registre a venda para encerrar o ciclo e gerar o DRE automático")
+    st.caption("Venda o lote inteiro ou selecione animais específicos")
 
     _oid = owner_id() or u["id"]
     lotes = listar_lotes(owner_id=_oid) or []
-
-    # Separar por status
-    ativos    = [l for l in lotes if (l[12] if len(l)>12 else "ATIVO") == "ATIVO"]
-    em_venda  = [l for l in lotes if (l[12] if len(l)>12 else "") == "EM_VENDA"]
+    ativos   = [l for l in lotes if (l[12] if len(l)>12 else "ATIVO") == "ATIVO"]
+    em_venda = [l for l in lotes if (l[12] if len(l)>12 else "") == "EM_VENDA"]
 
     if not ativos and not em_venda:
         st.info("Nenhum lote ativo para registrar venda.")
         return
 
-    # Tabs: Registrar venda | Lotes em negociação
-    _tv, _tn = st.tabs(["📝 Nova venda", "🤝 Em negociação"])
+    # ── Seletor de lote ───────────────────────────────────────────────
+    _disponiveis = ativos + em_venda
+    _opts = {f"{l[1]}{' 🤝' if (l[12] if len(l)>12 else '') == 'EM_VENDA' else ''}": l[0]
+             for l in _disponiveis}
+    _sel = st.selectbox("Selecione o lote", list(_opts.keys()),
+                        key="venda_lote_sel")
+    _lid = _opts[_sel]
+    _lote_sel = next((l for l in _disponiveis if l[0] == _lid), None)
 
-    # ── ABA 1: NOVA VENDA ─────────────────────────────────────────────
+    # KPIs do lote
+    if _lote_sel:
+        _kc1, _kc2, _kc3 = st.columns(3)
+        _animais_lote = listar_animais_por_lote(_lid) or []
+        _ativos_lote  = [a for a in _animais_lote if (a[7] if len(a)>7 else True)]
+        _kc1.metric("Animais ativos", len(_ativos_lote))
+        _kc2.metric("Entrada", fmt_data(str(_lote_sel[3])[:10]))
+        _kc3.metric("Custo/animal", fmt_brl(_lote_sel[9] if len(_lote_sel)>9 else 0))
+
+    st.divider()
+
+    # ── Abas: Venda Total | Venda Parcial | Em Negociação ─────────────
+    _tv, _tp, _tn = st.tabs([
+        "📦 Vender lote inteiro",
+        "🐄 Vender animais específicos",
+        "🤝 Em negociação"
+    ])
+
+    # ════════════════════════════════════════════════════════════════
+    # ABA 1: VENDA TOTAL
+    # ════════════════════════════════════════════════════════════════
     with _tv:
-        _todos_disponiveis = ativos + em_venda
-        if not _todos_disponiveis:
-            st.info("Nenhum lote disponível.")
-        else:
-            _opts = {f"{l[1]} ({(l[12] if len(l)>12 else 'ATIVO')})": l[0]
-                     for l in _todos_disponiveis}
-            _sel = st.selectbox("Selecione o lote", list(_opts.keys()),
-                                key="venda_lote_sel")
-            _lid = _opts[_sel]
+        st.markdown("**Registrar venda de todos os animais do lote.**")
+        st.caption("O lote será encerrado e saíra do Workspace após a venda.")
 
-            # Dados do lote selecionado
-            _lote_sel = next((l for l in _todos_disponiveis if l[0] == _lid), None)
-            if _lote_sel:
-                _c1, _c2, _c3 = st.columns(3)
-                _c1.metric("Animais", _lote_sel[5] if len(_lote_sel)>5 else "—")
-                _c2.metric("Data entrada", fmt_data(str(_lote_sel[3])[:10]))
-                _preco_compra = _lote_sel[9] if len(_lote_sel)>9 else 0
-                _c3.metric("Custo/animal", fmt_brl(_preco_compra))
+        with st.form("form_venda_total"):
+            _c1, _c2 = st.columns(2)
+            with _c1:
+                _data_v    = st.date_input("Data da venda", value=date.today(),
+                                           key="vt_data")
+                _preco_arr = st.number_input("Preço da arroba (R$)",
+                                              min_value=0.0, value=320.0,
+                                              step=5.0, key="vt_preco")
+            with _c2:
+                _peso_tot  = st.number_input("Peso total vendido (kg)",
+                                              min_value=0.0, value=0.0,
+                                              step=100.0, key="vt_peso")
+                _frig      = st.text_input("Frigorífico / Comprador",
+                                            placeholder="Ex: JBS, Minerva...",
+                                            key="vt_frig")
+            _gta = st.text_input("Número do GTA (obrigatório por lei)",
+                                  placeholder="Ex: SP-12345/2025", key="vt_gta")
+            _obs = st.text_area("Observações", height=70, key="vt_obs")
+
+            # Preview em tempo real
+            if _peso_tot > 0 and _preco_arr > 0:
+                _arrobas = _peso_tot * 0.5 / 15
+                _receita = _arrobas * _preco_arr
+                st.markdown("**Prévia da receita:**")
+                _p1, _p2, _p3 = st.columns(3)
+                _p1.metric("Arrobas", f"{_arrobas:.1f} @")
+                _p2.metric("Receita", fmt_brl(_receita))
+                _p3.metric("R$/@", fmt_brl(_preco_arr))
+
+            _c_sub, _c_em = st.columns(2)
+            with _c_sub:
+                _sub = st.form_submit_button(
+                    "✅ Confirmar venda total",
+                    type="primary", use_container_width=True
+                )
+            with _c_em:
+                _em = st.form_submit_button(
+                    "🤝 Marcar como Em Negociação",
+                    use_container_width=True
+                )
+
+            if _sub:
+                if _peso_tot <= 0:
+                    st.error("Informe o peso total vendido.")
+                elif _preco_arr <= 0:
+                    st.error("Informe o preço da arroba.")
+                else:
+                    ok, receita, arrobas = registrar_venda_lote(
+                        _lid, str(_data_v), _preco_arr,
+                        _peso_tot, _frig, _gta, _obs
+                    )
+                    if ok:
+                        toast_ok(
+                            f"Venda registrada! {arrobas:.1f}@ · "
+                            f"Receita: {fmt_brl(receita)}"
+                        )
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        toast_erro("Erro ao registrar a venda.")
+
+            if _em:
+                if marcar_em_venda(_lid):
+                    toast_ok("Lote marcado como Em Negociação.")
+                    st.rerun()
+
+    # ════════════════════════════════════════════════════════════════
+    # ABA 2: VENDA PARCIAL — animais específicos
+    # ════════════════════════════════════════════════════════════════
+    with _tp:
+        st.markdown("**Selecione os animais que serão vendidos.**")
+        st.caption("O lote permanece ativo com os animais restantes.")
+
+        _animais = listar_animais_por_lote(_lid) or []
+        _ativos  = [a for a in _animais
+                    if str(a[7] if len(a)>7 else "ATIVO").upper() in ("ATIVO", "")]
+
+        if not _ativos:
+            st.info("Nenhum animal ativo neste lote.")
+        else:
+            # Montar tabela de seleção com peso mais recente
+            import pandas as _pd_vp
+            rows = []
+            for a in _ativos:
+                _aid   = a[0]
+                _ident = a[1]
+                _raca  = a[2] if len(a)>2 else ""
+                _sexo  = a[3] if len(a)>3 else ""
+                # Peso mais recente
+                _pes = listar_pesagens(_aid) or []
+                _peso_rec = (max(_pes, key=lambda p: str(p[3]))[2]
+                             if _pes else (a[5] if len(a)>5 else 0))
+                rows.append({
+                    "Selecionar": False,
+                    "ID": _aid,
+                    "Animal": _ident,
+                    "Raça": _raca,
+                    "Sexo": _sexo,
+                    "Peso (kg)": float(_peso_rec or 0),
+                })
+
+            _df = _pd_vp.DataFrame(rows)
+            _df_edit = st.data_editor(
+                _df,
+                column_config={
+                    "Selecionar": st.column_config.CheckboxColumn(
+                        "✓", help="Selecione para vender"
+                    ),
+                    "ID": None,  # ocultar
+                    "Peso (kg)": st.column_config.NumberColumn(
+                        format="%.1f kg"
+                    ),
+                },
+                hide_index=True,
+                use_container_width=True,
+                key="vp_editor"
+            )
+
+            _selecionados = _df_edit[_df_edit["Selecionar"]]
+            _n_sel = len(_selecionados)
+            _peso_sel = _selecionados["Peso (kg)"].sum()
+            _ids_sel  = list(_selecionados["ID"])
+
+            if _n_sel > 0:
+                st.markdown(f"**{_n_sel} animal(is) selecionado(s) · "
+                            f"Peso total: {_peso_sel:.0f} kg**")
 
             st.divider()
-            st.markdown("**Dados da venda:**")
-
-            with st.form("form_venda_lote"):
+            with st.form("form_venda_parcial"):
                 _c1, _c2 = st.columns(2)
                 with _c1:
-                    _data_v    = st.date_input("Data da venda", value=date.today(),
-                                               key="venda_data")
-                    _preco_arr = st.number_input("Preço da arroba (R$)", min_value=0.0,
-                                                  value=320.0, step=5.0,
-                                                  key="venda_preco_arr")
+                    _vp_data = st.date_input("Data da venda", value=date.today(),
+                                              key="vp_data")
+                    _vp_arr  = st.number_input("Preço da arroba (R$)",
+                                               min_value=0.0, value=320.0,
+                                               step=5.0, key="vp_arr")
                 with _c2:
-                    _peso_tot  = st.number_input("Peso total vendido (kg)", min_value=0.0,
-                                                  value=0.0, step=100.0,
-                                                  key="venda_peso")
-                    _frigorifico = st.text_input("Frigorífico / Comprador",
-                                                  placeholder="Ex: Friboi, JBS, Minerva...",
-                                                  key="venda_frig")
-
-                _gta = st.text_input("Número do GTA (opcional)",
-                                      placeholder="Ex: SP-12345/2025",
-                                      key="venda_gta")
-                _obs = st.text_area("Observações", height=80, key="venda_obs",
-                                    placeholder="Notas sobre a negociação, desconto, etc.")
-
-                # Preview do DRE em tempo real
-                if _peso_tot > 0 and _preco_arr > 0:
-                    _arrobas_prev = _peso_tot * 0.5 / 15
-                    _receita_prev = _arrobas_prev * _preco_arr
-                    st.markdown("**Preview da receita:**")
-                    _pc1, _pc2, _pc3 = st.columns(3)
-                    _pc1.metric("Arrobas", f"{_arrobas_prev:.1f} @")
-                    _pc2.metric("Receita estimada", fmt_brl(_receita_prev))
-                    _pc3.metric("R$/arroba", fmt_brl(_preco_arr))
-
-                _c_reg, _c_em = st.columns(2)
-                with _c_reg:
-                    _submit = st.form_submit_button(
-                        "✅ Registrar venda definitiva",
-                        type="primary", use_container_width=True
+                    _vp_peso = st.number_input(
+                        "Peso total dos animais selecionados (kg)",
+                        min_value=0.0,
+                        value=float(_peso_sel) if _n_sel > 0 else 0.0,
+                        step=10.0, key="vp_peso",
+                        help="Pré-preenchido com a soma dos pesos, confirme com a balança"
                     )
-                with _c_em:
-                    _em_venda_btn = st.form_submit_button(
-                        "🤝 Marcar como Em Negociação",
-                        use_container_width=True
-                    )
+                    _vp_frig = st.text_input("Frigorífico",
+                                              placeholder="Ex: JBS, Minerva...",
+                                              key="vp_frig")
+                _vp_gta = st.text_input("GTA", placeholder="SP-12345/2025",
+                                         key="vp_gta")
+                _vp_obs = st.text_area("Observações", height=60, key="vp_obs")
 
-                if _submit:
-                    if _peso_tot <= 0:
-                        st.error("Informe o peso total vendido.")
-                    elif _preco_arr <= 0:
+                # Preview
+                if _vp_peso > 0 and _vp_arr > 0:
+                    _arrobas_p = _vp_peso * 0.5 / 15
+                    _receita_p = _arrobas_p * _vp_arr
+                    _p1, _p2, _p3 = st.columns(3)
+                    _p1.metric(f"{_n_sel} animal(is)", f"{_arrobas_p:.1f} @")
+                    _p2.metric("Receita parcial", fmt_brl(_receita_p))
+                    _animais_rest = len(_ativos) - _n_sel
+                    _p3.metric("Restam no lote", _animais_rest)
+
+                _sub_p = st.form_submit_button(
+                    f"✅ Vender {_n_sel} animal(is) selecionado(s)",
+                    type="primary", use_container_width=True,
+                    disabled=(_n_sel == 0)
+                )
+
+                if _sub_p:
+                    if not _ids_sel:
+                        st.error("Selecione ao menos um animal.")
+                    elif _vp_peso <= 0:
+                        st.error("Informe o peso total.")
+                    elif _vp_arr <= 0:
                         st.error("Informe o preço da arroba.")
                     else:
-                        ok, receita, arrobas = registrar_venda_lote(
-                            _lid, str(_data_v), _preco_arr,
-                            _peso_tot, _frigorifico, _gta, _obs
-                        )
-                        if ok:
-                            toast_ok(
-                                f"Venda registrada! {arrobas:.1f}@ · "
-                                f"Receita: {fmt_brl(receita)}"
+                        try:
+                            # Converter arroba para kg para a função legada
+                            _preco_kg = _vp_arr * 0.5 / 15
+                            res = venda_parcial_lote(
+                                _lid, _ids_sel,
+                                preco_kg=_preco_kg,
+                                peso_total=_vp_peso,
+                                frigorifico=_vp_frig,
+                                data_venda=str(_vp_data),
+                                observacao=_vp_obs
                             )
-                            st.balloons()
+                            _n_v = res.get("n_vendidos", _n_sel)
+                            _rest = res.get("restantes", 0)
+                            toast_ok(
+                                f"{_n_v} animal(is) vendido(s). "
+                                f"{'Lote encerrado.' if _rest == 0 else f'{_rest} restante(s) no lote.'}"
+                            )
                             st.rerun()
-                        else:
-                            toast_erro("Erro ao registrar a venda.")
+                        except Exception as _ev:
+                            toast_erro(f"Erro: {_ev}")
 
-                if _em_venda_btn:
-                    if marcar_em_venda(_lid):
-                        toast_ok("Lote marcado como Em Negociação.")
-                        st.rerun()
-
-    # ── ABA 2: EM NEGOCIAÇÃO ──────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════
+    # ABA 3: EM NEGOCIAÇÃO
+    # ════════════════════════════════════════════════════════════════
     with _tn:
         if not em_venda:
             st.info("Nenhum lote em negociação no momento.")
         else:
             for lote in em_venda:
                 with st.expander(f"🤝 {lote[1]}", expanded=True):
-                    _cc1, _cc2, _cc3 = st.columns(3)
-                    _cc1.metric("Animais", lote[5] if len(lote)>5 else "—")
-                    _cc2.metric("Entrada", fmt_data(str(lote[3])[:10]))
-                    _cc3.metric("Status",
-                                "🟡 Em negociação",
-                                label_visibility="collapsed")
+                    _cc1, _cc2 = st.columns(2)
+                    _cc1.metric("Animais",
+                                lote[5] if len(lote)>5 else "—")
+                    _cc2.metric("Entrada",
+                                fmt_data(str(lote[3])[:10]))
                     _b1, _b2 = st.columns(2)
                     with _b1:
                         if st.button("↩️ Voltar para ATIVO",
-                                     key=f"cancel_venda_{lote[0]}",
+                                     key=f"cancel_{lote[0]}",
                                      use_container_width=True):
                             if cancelar_venda_lote(lote[0]):
                                 toast_ok("Lote voltou para ATIVO.")
                                 st.rerun()
                     with _b2:
-                        if st.button("✅ Finalizar venda agora",
-                                     key=f"finalizar_{lote[0]}",
+                        if st.button("✅ Finalizar venda",
+                                     key=f"final_{lote[0]}",
                                      type="primary",
                                      use_container_width=True):
                             st.session_state["_venda_lote_id"] = lote[0]
                             st.session_state.menu = "Vender Lote"
                             st.rerun()
-
 
 def page_historico_lotes(u):
     """Histórico de lotes vendidos com DRE automático por lote."""
