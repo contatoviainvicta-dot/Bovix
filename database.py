@@ -580,10 +580,10 @@ _MIGRATIONS = [
     ]),
     (13, "tabela_vendas_animais", [
         """CREATE TABLE IF NOT EXISTS vendas_animais (
-            id            SERIAL PRIMARY KEY,
+            id            {pk},
             animal_id     INTEGER NOT NULL,
             lote_id       INTEGER NOT NULL,
-            owner_id      INTEGER,
+            owner_id      INTEGER DEFAULT NULL,
             data_venda    TEXT NOT NULL,
             peso_abate    REAL DEFAULT 0,
             preco_arroba  REAL DEFAULT 0,
@@ -2779,6 +2779,20 @@ def marcar_animal_vendido(animal_id, data_venda=None, preco_kg=0,
             )
         except Exception:
             pass
+        # Garantir que tabela vendas_animais existe
+        try:
+            _pk_va = "SERIAL PRIMARY KEY" if _usar_postgres()                      else "INTEGER PRIMARY KEY AUTOINCREMENT"
+            cur.execute(
+                f"CREATE TABLE IF NOT EXISTS vendas_animais ("
+                f"id {_pk_va}, animal_id INTEGER NOT NULL, "
+                f"lote_id INTEGER NOT NULL, owner_id INTEGER DEFAULT NULL, "
+                f"data_venda TEXT NOT NULL, peso_abate REAL DEFAULT 0, "
+                f"preco_arroba REAL DEFAULT 0, receita REAL DEFAULT 0, "
+                f"frigorifico TEXT DEFAULT '', gta_numero TEXT DEFAULT '', "
+                f"obs TEXT DEFAULT '')"
+            )
+        except Exception:
+            pass
         # Salvar dados da venda na tabela dedicada
         try:
             if _usar_postgres():
@@ -3254,6 +3268,23 @@ def obter_resumo_venda_lote(lote_id):
 def listar_animais_vendidos_lote(owner_id):
     """Lista animais vendidos individualmente com todos os dados da venda."""
     p = _ph()
+    # Garantir que a tabela existe antes de consultar
+    try:
+        pk = "SERIAL PRIMARY KEY" if _usar_postgres() else "INTEGER PRIMARY KEY AUTOINCREMENT"
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"CREATE TABLE IF NOT EXISTS vendas_animais ("
+                f"id {pk}, animal_id INTEGER NOT NULL, "
+                f"lote_id INTEGER NOT NULL, owner_id INTEGER DEFAULT NULL, "
+                f"data_venda TEXT NOT NULL, peso_abate REAL DEFAULT 0, "
+                f"preco_arroba REAL DEFAULT 0, receita REAL DEFAULT 0, "
+                f"frigorifico TEXT DEFAULT '', gta_numero TEXT DEFAULT '', "
+                f"obs TEXT DEFAULT '')"
+            )
+            conn.commit()
+    except Exception:
+        pass
     try:
         with _conexao() as conn:
             cur = conn.cursor()
