@@ -2803,29 +2803,6 @@ def venda_parcial_lote(lote_id, animal_ids, preco_kg=0,
     return {"n_vendidos": n, "restantes": restantes}
 
 
-def listar_lotes_historico(owner_id):
-    """Lista lotes encerrados/vendidos para historico."""
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            f"SELECT id,nome,descricao,data_entrada,qtd_comprada,"
-            f"qtd_recebida,transporte,"
-            f"COALESCE(tipo_alimentacao,''),COALESCE(tipo_dieta,''),"
-            f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),"
-            f"COALESCE(owner_id,0) "
-            f"FROM lotes "
-            f"WHERE owner_id={p} "
-            f"AND (status='encerrado' OR status='vendido' OR ativo=0) "
-            f"ORDER BY data_venda DESC",
-            (owner_id,)
-        )
-        rows = cur.fetchall()
-        return [
-            (r[0],r[1],r[2],r[3],r[4],r[5],r[6],
-             r[7],r[8],float(r[9] or 0),str(r[10] or ''),r[11])
-            for r in rows
-        ]
 
 
 def listar_animais_por_lote_status(lote_id, status=None):
@@ -2858,84 +2835,7 @@ def listar_animais_por_lote_status(lote_id, status=None):
         return cur.fetchall()
 
 
-def registrar_venda_lote(lote_id, data_venda, preco_venda_kg, peso_total_kg,
-                         frigorific="", observacao="", animais_vendidos=None):
-    """Registra venda e da baixa nos animais. Schema: ativo(int) status(text)"""
-    p = _ph()
 
-    # Passo 1: Registrar a venda
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,"
-                f"peso_total_kg,frigorific,observacao) "
-                f"VALUES({p},{p},{p},{p},{p},{p}) RETURNING id",
-                (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao)
-            )
-            venda_id = cur.fetchone()[0]
-        else:
-            cur.execute(
-                f"INSERT INTO vendas_lote (lote_id,data_venda,preco_venda_kg,"
-                f"peso_total_kg,frigorific,observacao) "
-                f"VALUES({p},{p},{p},{p},{p},{p})",
-                (lote_id, data_venda, preco_venda_kg, peso_total_kg, frigorific, observacao)
-            )
-            venda_id = cur.lastrowid
-        conn.commit()
-
-    # Passo 2: Buscar animais para dar baixa
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if animais_vendidos is None:
-            cur.execute(f"SELECT id FROM animais WHERE lote_id={p} AND ativo=1", (lote_id,))
-            ids_baixa = [r[0] for r in cur.fetchall()]
-        else:
-            ids_baixa = list(animais_vendidos)
-
-    # Passo 3: Dar baixa em cada animal individualmente
-    for aid in ids_baixa:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"UPDATE animais SET ativo=0, status='VENDIDO' WHERE id={p}",
-                (aid,)
-            )
-            conn.commit()
-
-    # Passo 4: Contar ativos restantes
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM animais WHERE lote_id={p} AND ativo=1", (lote_id,))
-        qtd_ativos = cur.fetchone()[0]
-
-    # Passo 5a: Atualizar qtd_recebida do lote
-    with _conexao() as conn:
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                f"UPDATE lotes SET qtd_recebida={p} WHERE id={p}",
-                (qtd_ativos, lote_id)
-            )
-            conn.commit()
-        except Exception:
-            try: conn.rollback()
-            except: pass
-
-    # Passo 5b: Marcar lote como VENDIDO (operacao separada)
-    with _conexao() as conn:
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                f"UPDATE lotes SET status='VENDIDO' WHERE id={p}",
-                (lote_id,)
-            )
-            conn.commit()
-        except Exception:
-            try: conn.rollback()
-            except: pass
-
-    return venda_id
 
 def calcular_margem_lote(lote_id):
     p = _ph()
@@ -5390,79 +5290,8 @@ def calendario_abate(owner_id):
 
 
 # ── VENDAS DE LOTE ───────────────────────────────────────────
-def registrar_venda_lote(lote_id, preco_venda_kg, peso_total_kg,
-                         n_animais_vendidos, frigorifico="",
-                         data_venda=None, observacao=""):
-    """Registra venda do lote. Calcula valor liquido automaticamente."""
-    _garantir_tabelas_vet()
-    from datetime import date
-    p  = _ph()
-    dt = str(data_venda or date.today())
-    valor_liquido = round(preco_venda_kg * peso_total_kg, 2)
-
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(
-                f"INSERT INTO vendas_lote "
-                f"(lote_id,data_venda,preco_venda_kg,peso_total_kg,"
-                f"frigorific,observacao) "
-                f"VALUES({p},{p},{p},{p},{p},{p}) RETURNING id",
-                (lote_id, dt, float(preco_venda_kg),
-                 float(peso_total_kg), frigorifico or "", observacao or "")
-            )
-            vid = cur.fetchone()[0]
-        else:
-            cur.execute(
-                f"INSERT INTO vendas_lote "
-                f"(lote_id,data_venda,preco_venda_kg,peso_total_kg,"
-                f"frigorific,observacao) "
-                f"VALUES({p},{p},{p},{p},{p},{p})",
-                (lote_id, dt, float(preco_venda_kg),
-                 float(peso_total_kg), frigorifico or "", observacao or "")
-            )
-            vid = cur.lastrowid
-        conn.commit()
-
-    # Atualizar status do lote para "vendido"
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"UPDATE lotes SET status='vendido', data_venda={p} "
-                f"WHERE id={p}",
-                (dt, lote_id)
-            )
-            conn.commit()
-    except Exception as _ew:
-        _log_war.debug("excecao ignorada: %s", _ew)
-
-    return {
-        "id":             vid,
-        "valor_liquido":  valor_liquido,
-        "preco_venda_kg": preco_venda_kg,
-        "peso_total_kg":  peso_total_kg,
-        "n_animais":      n_animais_vendidos,
-        "data_venda":     dt,
-    }
 
 
-def listar_vendas_lote(lote_id):
-    """Lista vendas registradas para um lote."""
-    p = _ph()
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"SELECT id,lote_id,data_venda,preco_venda_kg,"
-                f"peso_total_kg,frigorific,observacao "
-                f"FROM vendas_lote WHERE lote_id={p} ORDER BY data_venda DESC",
-                (lote_id,)
-            )
-            return cur.fetchall()
-    except Exception:
-        _log_war.debug('excecao tratada: %s', exc_info=True)
-        return []
 
 
 def listar_todas_vendas(owner_id):
@@ -6038,30 +5867,6 @@ def atualizar_plano(user_id, plano_key, expira=None):
     return True
 
 
-def verificar_limite_fazendas(user_id):
-    """Retorna (atual, limite, pode_adicionar). Para fazendeiros."""
-    plano  = obter_plano(user_id)
-    limite = plano.get("limite_fazendas", 1)
-    # Fazendeiros: 1 conta = 1 fazenda (mas sub-usuarios contam)
-    return 1, limite, True
-
-
-# ── EMAIL NOTIFICATIONS ───────────────────────────────────────
-def _smtp_config():
-    """Retorna config SMTP dos secrets do Streamlit."""
-    try:
-        import streamlit as st
-        cfg = st.secrets.get("smtp", {})
-        return {
-            "host":     cfg.get("host", "smtp.gmail.com"),
-            "port":     int(cfg.get("port", 587)),
-            "user":     cfg.get("user", ""),
-            "password": cfg.get("password", ""),
-            "from":     cfg.get("from_email", cfg.get("user", "")),
-        }
-    except Exception:
-        _log_war.debug('excecao tratada: %s', exc_info=True)
-        return {}
 
 
 def enviar_email(destinatario, assunto, corpo_html, corpo_txt=""):
@@ -6447,45 +6252,6 @@ def is_primeiro_login(user_id):
 
 
 # ── IMPORTACAO CSV ────────────────────────────────────────────
-def importar_animais_csv(lote_id, linhas_csv):
-    """Importa animais de lista de dicts.
-    Colunas esperadas: identificacao, raca, sexo, idade, peso_entrada.
-    Retorna (n_ok, n_erro, erros)."""
-    n_ok = n_erro = 0
-    erros = []
-
-    for i, linha in enumerate(linhas_csv, 1):
-        try:
-            ident = str(linha.get("identificacao", "")).strip()
-            if not ident:
-                erros.append(f"Linha {i}: identificacao obrigatoria")
-                n_erro += 1
-                continue
-
-            raca        = str(linha.get("raca", "")).strip() or "Nao informada"
-            sexo        = str(linha.get("sexo", "M")).strip().upper()
-            if sexo not in ("M","F"):
-                sexo = "M"
-            idade       = int(float(linha.get("idade", 0) or 0))
-            peso_entrada = float(linha.get("peso_entrada", 0) or 0)
-            peso_alvo   = float(linha.get("peso_alvo", 0) or 0)
-            obs         = str(linha.get("observacoes", "")).strip()
-
-            adicionar_animal(
-                lote_id=lote_id,
-                identificacao=ident,
-                raca=raca, sexo=sexo,
-                idade=idade,
-                peso_entrada=peso_entrada,
-                peso_alvo=peso_alvo,
-                observacoes=obs
-            )
-            n_ok += 1
-        except Exception as e:
-            erros.append(f"Linha {i}: {e}")
-            n_erro += 1
-
-    return n_ok, n_erro, erros
 
 
 def importar_pesagens_csv(linhas_csv, owner_id):
