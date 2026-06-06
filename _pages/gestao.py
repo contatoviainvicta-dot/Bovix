@@ -1657,3 +1657,266 @@ def page_prontuario_animal(u):
     # ============================================================
     # MARGEM REAL
     # ============================================================
+
+
+
+
+def page_vender_lote(u):
+    """Tela para registrar a venda de um lote — ciclo ATIVO → VENDIDO."""
+    from ux_helpers import toast_ok, toast_erro, fmt_brl, fmt_data
+    from database import (listar_lotes, registrar_venda_lote,
+                          marcar_em_venda, cancelar_venda_lote,
+                          obter_resumo_venda_lote)
+    from datetime import date
+
+    st.subheader("💰 Registrar Venda de Lote")
+    st.caption("Registre a venda para encerrar o ciclo e gerar o DRE automático")
+
+    _oid = owner_id() or u["id"]
+    lotes = listar_lotes(owner_id=_oid) or []
+
+    # Separar por status
+    ativos    = [l for l in lotes if (l[12] if len(l)>12 else "ATIVO") == "ATIVO"]
+    em_venda  = [l for l in lotes if (l[12] if len(l)>12 else "") == "EM_VENDA"]
+
+    if not ativos and not em_venda:
+        st.info("Nenhum lote ativo para registrar venda.")
+        return
+
+    # Tabs: Registrar venda | Lotes em negociação
+    _tv, _tn = st.tabs(["📝 Nova venda", "🤝 Em negociação"])
+
+    # ── ABA 1: NOVA VENDA ─────────────────────────────────────────────
+    with _tv:
+        _todos_disponiveis = ativos + em_venda
+        if not _todos_disponiveis:
+            st.info("Nenhum lote disponível.")
+        else:
+            _opts = {f"{l[1]} ({(l[12] if len(l)>12 else 'ATIVO')})": l[0]
+                     for l in _todos_disponiveis}
+            _sel = st.selectbox("Selecione o lote", list(_opts.keys()),
+                                key="venda_lote_sel")
+            _lid = _opts[_sel]
+
+            # Dados do lote selecionado
+            _lote_sel = next((l for l in _todos_disponiveis if l[0] == _lid), None)
+            if _lote_sel:
+                _c1, _c2, _c3 = st.columns(3)
+                _c1.metric("Animais", _lote_sel[5] if len(_lote_sel)>5 else "—")
+                _c2.metric("Data entrada", fmt_data(str(_lote_sel[3])[:10]))
+                _preco_compra = _lote_sel[9] if len(_lote_sel)>9 else 0
+                _c3.metric("Custo/animal", fmt_brl(_preco_compra))
+
+            st.divider()
+            st.markdown("**Dados da venda:**")
+
+            with st.form("form_venda_lote"):
+                _c1, _c2 = st.columns(2)
+                with _c1:
+                    _data_v    = st.date_input("Data da venda", value=date.today(),
+                                               key="venda_data")
+                    _preco_arr = st.number_input("Preço da arroba (R$)", min_value=0.0,
+                                                  value=320.0, step=5.0,
+                                                  key="venda_preco_arr")
+                with _c2:
+                    _peso_tot  = st.number_input("Peso total vendido (kg)", min_value=0.0,
+                                                  value=0.0, step=100.0,
+                                                  key="venda_peso")
+                    _frigorifico = st.text_input("Frigorífico / Comprador",
+                                                  placeholder="Ex: Friboi, JBS, Minerva...",
+                                                  key="venda_frig")
+
+                _gta = st.text_input("Número do GTA (opcional)",
+                                      placeholder="Ex: SP-12345/2025",
+                                      key="venda_gta")
+                _obs = st.text_area("Observações", height=80, key="venda_obs",
+                                    placeholder="Notas sobre a negociação, desconto, etc.")
+
+                # Preview do DRE em tempo real
+                if _peso_tot > 0 and _preco_arr > 0:
+                    _arrobas_prev = _peso_tot * 0.5 / 15
+                    _receita_prev = _arrobas_prev * _preco_arr
+                    st.markdown("**Preview da receita:**")
+                    _pc1, _pc2, _pc3 = st.columns(3)
+                    _pc1.metric("Arrobas", f"{_arrobas_prev:.1f} @")
+                    _pc2.metric("Receita estimada", fmt_brl(_receita_prev))
+                    _pc3.metric("R$/arroba", fmt_brl(_preco_arr))
+
+                _c_reg, _c_em = st.columns(2)
+                with _c_reg:
+                    _submit = st.form_submit_button(
+                        "✅ Registrar venda definitiva",
+                        type="primary", use_container_width=True
+                    )
+                with _c_em:
+                    _em_venda_btn = st.form_submit_button(
+                        "🤝 Marcar como Em Negociação",
+                        use_container_width=True
+                    )
+
+                if _submit:
+                    if _peso_tot <= 0:
+                        st.error("Informe o peso total vendido.")
+                    elif _preco_arr <= 0:
+                        st.error("Informe o preço da arroba.")
+                    else:
+                        ok, receita, arrobas = registrar_venda_lote(
+                            _lid, str(_data_v), _preco_arr,
+                            _peso_tot, _frigorifico, _gta, _obs
+                        )
+                        if ok:
+                            toast_ok(
+                                f"Venda registrada! {arrobas:.1f}@ · "
+                                f"Receita: {fmt_brl(receita)}"
+                            )
+                            st.balloons()
+                            st.rerun()
+                        else:
+                            toast_erro("Erro ao registrar a venda.")
+
+                if _em_venda_btn:
+                    if marcar_em_venda(_lid):
+                        toast_ok("Lote marcado como Em Negociação.")
+                        st.rerun()
+
+    # ── ABA 2: EM NEGOCIAÇÃO ──────────────────────────────────────────
+    with _tn:
+        if not em_venda:
+            st.info("Nenhum lote em negociação no momento.")
+        else:
+            for lote in em_venda:
+                with st.expander(f"🤝 {lote[1]}", expanded=True):
+                    _cc1, _cc2, _cc3 = st.columns(3)
+                    _cc1.metric("Animais", lote[5] if len(lote)>5 else "—")
+                    _cc2.metric("Entrada", fmt_data(str(lote[3])[:10]))
+                    _cc3.metric("Status",
+                                "🟡 Em negociação",
+                                label_visibility="collapsed")
+                    _b1, _b2 = st.columns(2)
+                    with _b1:
+                        if st.button("↩️ Voltar para ATIVO",
+                                     key=f"cancel_venda_{lote[0]}",
+                                     use_container_width=True):
+                            if cancelar_venda_lote(lote[0]):
+                                toast_ok("Lote voltou para ATIVO.")
+                                st.rerun()
+                    with _b2:
+                        if st.button("✅ Finalizar venda agora",
+                                     key=f"finalizar_{lote[0]}",
+                                     type="primary",
+                                     use_container_width=True):
+                            st.session_state["_venda_lote_id"] = lote[0]
+                            st.session_state.menu = "Vender Lote"
+                            st.rerun()
+
+
+def page_historico_lotes(u):
+    """Histórico de lotes vendidos com DRE automático por lote."""
+    from ux_helpers import fmt_brl, fmt_data
+    from database import listar_lotes_historico, obter_resumo_venda_lote
+
+    st.subheader("📚 Histórico de Lotes")
+    st.caption("Lotes vendidos e arquivados — dados preservados para sempre")
+
+    _oid = owner_id() or u["id"]
+    historico = listar_lotes_historico(_oid) or []
+
+    if not historico:
+        st.info("Nenhum lote vendido ainda. Os lotes vendidos aparecerão aqui.")
+        return
+
+    # Filtros
+    _c1, _c2 = st.columns(2)
+    with _c1:
+        _filtro_status = st.selectbox(
+            "Status", ["Todos", "VENDIDO", "ARQUIVADO"], key="hist_status"
+        )
+    with _c2:
+        _busca = st.text_input("Buscar por nome", placeholder="Nome do lote...",
+                               key="hist_busca")
+
+    if _filtro_status != "Todos":
+        historico = [l for l in historico if l[12] == _filtro_status]
+    if _busca:
+        historico = [l for l in historico if _busca.lower() in l[1].lower()]
+
+    st.markdown(f"**{len(historico)} lote(s) encontrado(s)**")
+    st.divider()
+
+    for lote in historico:
+        _lid    = lote[0]
+        _nome   = lote[1]
+        _status = lote[12] if len(lote)>12 else "VENDIDO"
+        _data_v = lote[10] if len(lote)>10 else ""
+        _receita = lote[17] if len(lote)>17 else 0
+
+        _icone = "✅" if _status == "VENDIDO" else "📦"
+        _data_fmt = fmt_data(str(_data_v)[:10]) if _data_v else "—"
+
+        with st.expander(
+            f"{_icone} {_nome} · Vendido em {_data_fmt} · {fmt_brl(_receita)}",
+            expanded=False
+        ):
+            resumo = obter_resumo_venda_lote(_lid)
+            if not resumo:
+                st.info("Detalhes não disponíveis.")
+                continue
+
+            # KPIs principais
+            _k1, _k2, _k3, _k4 = st.columns(4)
+            _k1.metric("Receita total", fmt_brl(resumo["receita"]))
+            _k2.metric("Custo total",   fmt_brl(resumo["custo_total"]))
+            _margem_delta = f"{resumo['margem_pct']:+.1f}%"
+            _k3.metric("Margem", fmt_brl(resumo["margem"]),
+                       delta=_margem_delta,
+                       delta_color="normal")
+            _k4.metric("Custo/@", fmt_brl(resumo["custo_arroba"]))
+
+            # DRE detalhado
+            st.markdown("**DRE — Demonstrativo do Resultado:**")
+            _dre_items = [
+                ("(+) Receita de vendas",
+                 resumo["receita"], True, True),
+                ("(-) Custo de aquisição",
+                 resumo["custo_compra"], False, False),
+                ("(-) Custos operacionais",
+                 resumo["custo_operacional"], False, False),
+                ("(=) Margem bruta",
+                 resumo["margem"], True, resumo["margem"] >= 0),
+            ]
+            _dre_html = """<table style='width:100%;border-collapse:collapse;
+                font-size:13px'>"""
+            for label, val, negrito, positivo in _dre_items:
+                _fw  = "600" if negrito else "400"
+                _cor = ("#1B4332" if positivo else "#E24B4A") if negrito else "#374151"
+                _sinal = "" if val >= 0 else "-"
+                _dre_html += f"""<tr style='border-bottom:.5px solid #f0f0f0'>
+                    <td style='padding:8px 4px;font-weight:{_fw};color:#374151'>
+                        {label}</td>
+                    <td style='padding:8px 4px;text-align:right;
+                        font-weight:{_fw};color:{_cor}'>
+                        {_sinal}{fmt_brl(abs(val))}</td>
+                </tr>"""
+            _dre_html += "</table>"
+            st.html(_dre_html)
+
+            # Custos por categoria
+            if resumo["custos_cats"]:
+                with st.expander("Ver custos por categoria", expanded=False):
+                    for cat, val in sorted(resumo["custos_cats"].items(),
+                                            key=lambda x: -x[1]):
+                        _pct = val/resumo["custo_operacional"]*100                                if resumo["custo_operacional"] else 0
+                        st.markdown(
+                            f"**{cat.capitalize()}**: {fmt_brl(val)} "
+                            f"({_pct:.1f}%)"
+                        )
+
+            # Dados da venda
+            st.divider()
+            _ci1, _ci2, _ci3 = st.columns(3)
+            _ci1.metric("Arrobas vendidas", f"{resumo['arrobas']:.1f} @")
+            _ci2.metric("Frigorífico",
+                        resumo["frigorifico"] or "Não informado")
+            _ci3.metric("GTA", resumo["gta"] or "Não informado")
+            if resumo["obs"]:
+                st.caption(f"Obs: {resumo['obs']}")
