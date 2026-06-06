@@ -2121,34 +2121,61 @@ def page_historico_lotes(u):
                 "o histórico aparecerá aqui."
             )
         else:
-            st.markdown(f"**{len(vendas_parciais)} animal(is) vendido(s) individualmente**")
+            # Totalizadores
+            _total_rec = sum(float(a[11] or 0) for a in vendas_parciais)
+            _c1, _c2 = st.columns(2)
+            _c1.metric("Total de animais", len(vendas_parciais))
+            _c2.metric("Receita total", fmt_brl(_total_rec))
+            st.divider()
 
-            # Agrupar por lote
+            # Agrupar por lote (índice 6 = lote_nome)
             from collections import defaultdict as _dd
             por_lote = _dd(list)
             for a in vendas_parciais:
-                por_lote[a[6]].append(a)  # a[6] = lote_nome
+                por_lote[a[6]].append(a)
 
             for lote_nome, animais in por_lote.items():
+                _rec_lote = sum(float(x[11] or 0) for x in animais)
                 with st.expander(
-                    f"🐄 Lote: {lote_nome} — {len(animais)} animal(is) vendido(s)",
+                    f"🐄 {lote_nome} — {len(animais)} animal(is) · "
+                    f"{fmt_brl(_rec_lote)}",
                     expanded=True
                 ):
                     for a in animais:
-                        _aid, _ident, _raca, _sexo = a[0], a[1], a[2], a[3]
-                        _peso_e  = a[4] or 0
-                        _data_v  = fmt_data(str(a[8])[:10]) if a[8] else "—"
-                        _obs     = a[9] or ""
+                        # Índices: 0=id,1=ident,2=raca,3=sexo,4=peso_entrada,
+                        # 5=lote_id,6=lote_nome,7=lote_status,8=data_venda,
+                        # 9=peso_abate,10=preco_arroba,11=receita,
+                        # 12=frigorifico,13=gta,14=obs
+                        _ident     = a[1]
+                        _raca      = a[2] or "—"
+                        _sexo      = a[3] or "—"
+                        _peso_e    = float(a[4] or 0)
+                        _data_v    = fmt_data(str(a[8])[:10]) if a[8] else "—"
+                        _peso_ab   = float(a[9] or 0)
+                        _preco_arr = float(a[10] or 0)
+                        _receita   = float(a[11] or 0)
+                        _frig      = a[12] or "—"
+                        _gta       = a[13] or "—"
+                        _obs       = a[14] or ""
+                        _arrobas   = _peso_ab * 0.5 / 15 if _peso_ab else 0
 
-                        _ca1, _ca2, _ca3, _ca4 = st.columns([2,1,1,2])
-                        _ca1.markdown(f"**{_ident}**")
-                        _ca2.caption(f"{_raca or '—'} / {_sexo or '—'}")
-                        _ca3.caption(f"Entrada: {_peso_e:.0f} kg")
-                        _ca4.caption(f"Vendido em: {_data_v}")
+                        st.markdown(f"**🐄 {_ident}** — {_raca} / {_sexo}")
+                        _k1, _k2, _k3, _k4 = st.columns(4)
+                        _k1.metric("Data venda", _data_v)
+                        _k2.metric("Peso abate",
+                                   f"{_peso_ab:.0f} kg" if _peso_ab else "—")
+                        _k3.metric("Arrobas",
+                                   f"{_arrobas:.1f} @" if _arrobas else "—")
+                        _k4.metric("Receita",
+                                   fmt_brl(_receita) if _receita else "—")
+
+                        _k5, _k6, _k7, _k8 = st.columns(4)
+                        _k5.metric("Preço/@",
+                                   fmt_brl(_preco_arr) if _preco_arr else "—")
+                        _k6.metric("Frigorífico", _frig)
+                        _k7.metric("GTA", _gta)
+                        _k8.metric("Peso entrada", f"{_peso_e:.0f} kg")
+
                         if _obs:
-                            # Extrair dados da observação
-                            _obs_limpa = _obs.replace("Animal vendido em", "").split("|")
-                            for _o in _obs_limpa[1:]:
-                                if _o.strip():
-                                    st.caption(f"  {_o.strip()}")
+                            st.caption(f"Obs: {_obs}")
                         st.divider()
