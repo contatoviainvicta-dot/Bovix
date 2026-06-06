@@ -1837,6 +1837,7 @@ def page_vender_lote(u):
                 })
 
             _df = _pd_vp.DataFrame(rows)
+            # data_editor FORA do form (não é compatível dentro de st.form)
             _df_edit = st.data_editor(
                 _df,
                 column_config={
@@ -1854,16 +1855,20 @@ def page_vender_lote(u):
             )
 
             _selecionados = _df_edit[_df_edit["Selecionar"]]
-            _n_sel = len(_selecionados)
+            _n_sel   = len(_selecionados)
             _peso_sel = _selecionados["Peso (kg)"].sum()
             _ids_sel  = list(_selecionados["ID"])
 
             if _n_sel > 0:
-                st.markdown(f"**{_n_sel} animal(is) selecionado(s) · "
-                            f"Peso total: {_peso_sel:.0f} kg**")
+                st.success(f"**{_n_sel} animal(is) selecionado(s) · "
+                           f"Peso total estimado: {_peso_sel:.0f} kg**")
+            else:
+                st.caption("Marque os animais acima para continuar.")
 
             st.divider()
+            # Campos de venda FORA do form — usar session_state + botão simples
             with st.form("form_venda_parcial"):
+                st.markdown(f"**Dados da venda — {_n_sel} animal(is) selecionado(s):**")
                 _c1, _c2 = st.columns(2)
                 with _c1:
                     _vp_data = st.date_input("Data da venda", value=date.today(),
@@ -1884,7 +1889,7 @@ def page_vender_lote(u):
                                               key="vp_frig")
                 _vp_gta = st.text_input("GTA", placeholder="SP-12345/2025",
                                          key="vp_gta")
-                _vp_obs = st.text_area("Observações", height=60, key="vp_obs")
+                _vp_obs = st.text_area("Observações", height=68, key="vp_obs")
 
                 # Preview
                 if _vp_peso > 0 and _vp_arr > 0:
