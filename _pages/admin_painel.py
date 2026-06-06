@@ -4,6 +4,37 @@ MRR, Usuários Ativos, Churn, Erros
 """
 import streamlit as st
 try:
+    from ux_helpers import (aplicar_css_global, fmt_brl, fmt_data,
+                             safe_bar_chart, safe_line_chart,
+                             toast_ok, toast_erro, empty_state)
+except ImportError:
+    def aplicar_css_global(): pass
+    def fmt_brl(v):
+        try:
+            v=float(v or 0); i=int(abs(v)); c=round((abs(v)-i)*100)
+            s=f"{i:,}".replace(",","."); r=f"R$ {s},{c:02d}"
+            return f"-{r}" if v<0 else r
+        except: return "R$ 0,00"
+    def fmt_data(d):
+        try:
+            p=str(d)[:10].split("-")
+            m={"01":"jan","02":"fev","03":"mar","04":"abr","05":"mai",
+               "06":"jun","07":"jul","08":"ago","09":"set","10":"out",
+               "11":"nov","12":"dez"}
+            return f"{p[2]}/{m.get(p[1],p[1])}/{p[0]}"
+        except: return str(d)
+    def safe_bar_chart(df, **k):
+        import streamlit as _st, pandas as _pd
+        try: _st.bar_chart(_pd.DataFrame(df))
+        except: pass
+    def safe_line_chart(df, **k):
+        import streamlit as _st, pandas as _pd
+        try: _st.line_chart(_pd.DataFrame(df))
+        except: pass
+    def toast_ok(m): import streamlit as _st; _st.success(f"✅ {m}")
+    def toast_erro(m): import streamlit as _st; _st.error(f"❌ {m}")
+    def empty_state(m, **k): import streamlit as _st; _st.info(m)
+try:
     from ux_helpers import (aplicar_css_global, toast_ok, toast_erro,
                             toast_aviso, empty_state, erro_com_acao,
                             fmt_brl, fmt_data, fmt_data_hora)
