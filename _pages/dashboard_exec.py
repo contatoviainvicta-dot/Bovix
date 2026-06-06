@@ -715,7 +715,7 @@ def page_dashboard_executivo(u):
                     </tr>"""
 
             html_p += "</table>"
-            _comp.html(html_p, height=240 + len(dre_p["custos_cats"]) * 32)
+            st.html(html_p)
 
             # Curva de resultado mensal (apenas para ano inteiro)
             if not mes_dre:
