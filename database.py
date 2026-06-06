@@ -579,6 +579,7 @@ _MIGRATIONS = [
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS owner_id INTEGER DEFAULT NULL",
     ]),
     (13, "tabela_vendas_animais", [
+        "ALTER TABLE custos_lote ADD COLUMN IF NOT EXISTS owner_id INTEGER DEFAULT NULL",
         """CREATE TABLE IF NOT EXISTS vendas_animais (
             id            {pk},
             animal_id     INTEGER NOT NULL,
@@ -2794,40 +2795,36 @@ def marcar_animal_vendido(animal_id, data_venda=None, preco_kg=0,
         except Exception:
             pass
         # Salvar dados da venda na tabela dedicada
+        # Buscar lote_id e owner_id primeiro (compatível PG e SQLite)
         try:
-            if _usar_postgres():
+            cur.execute(
+                f"SELECT a.lote_id, COALESCE(l.owner_id,0) "
+                f"FROM animais a LEFT JOIN lotes l ON l.id=a.lote_id "
+                f"WHERE a.id={p}",
+                (animal_id,)
+            )
+            _row = cur.fetchone()
+            _lote_id  = _row[0] if _row else None
+            _owner_id = _row[1] if _row and len(_row) > 1 else None
+
+            if _lote_id:
                 cur.execute(
                     f"INSERT INTO vendas_animais "
                     f"(animal_id,lote_id,owner_id,data_venda,"
-                    f"peso_abate,preco_arroba,receita,frigorifico,gta_numero,obs) "
-                    f"SELECT {p},lote_id,"
-                    f"(SELECT owner_id FROM lotes WHERE id=a.lote_id),"
-                    f"{p},{p},{p},{p},{p},{p},{p} "
-                    f"FROM animais a WHERE a.id={p}",
-                    (animal_id, dt, float(peso_abate or 0),
-                     float(preco_arroba or 0), round(receita, 2),
-                     frigorifico or "", gta or "",
-                     observacao or "", animal_id)
+                    f"peso_abate,preco_arroba,receita,"
+                    f"frigorifico,gta_numero,obs) "
+                    f"VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p},{p})",
+                    (animal_id, _lote_id, _owner_id, dt,
+                     float(peso_abate or 0), float(preco_arroba or 0),
+                     round(receita, 2), frigorifico or "",
+                     gta or "", observacao or "")
                 )
-            else:
-                cur.execute(
-                    f"SELECT lote_id FROM animais WHERE id={p}", (animal_id,)
+                _log_db.info(
+                    "Venda animal %s salva: R$ %.2f (lote %s)",
+                    animal_id, receita, _lote_id
                 )
-                row = cur.fetchone()
-                lote_id = row[0] if row else None
-                if lote_id:
-                    cur.execute(
-                        f"INSERT INTO vendas_animais "
-                        f"(animal_id,lote_id,data_venda,"
-                        f"peso_abate,preco_arroba,receita,frigorifico,gta_numero,obs) "
-                        f"VALUES ({p},{p},{p},{p},{p},{p},{p},{p},{p})",
-                        (animal_id, lote_id, dt,
-                         float(peso_abate or 0), float(preco_arroba or 0),
-                         round(receita, 2), frigorifico or "",
-                         gta or "", observacao or "")
-                    )
         except Exception as _ev:
-            _log_war.debug("vendas_animais insert: %s", _ev)
+            _log_err.error("vendas_animais insert FALHOU: %s", _ev)
         conn.commit()
     # Registrar ocorrencia no prontuario
     try:
@@ -2888,17 +2885,17 @@ def registrar_receita_parcial(lote_id, data_venda, preco_arroba,
         with _conexao() as conn:
             cur = conn.cursor()
             # Lançar como custo negativo (receita) na tabela custos_lote
-            cur.execute(
-                f"INSERT INTO custos_lote "
-                f"(lote_id, categoria, descricao, valor, data_lancamento, owner_id) "
-                f"SELECT {p},'venda_parcial',{p},{p},{p},owner_id "
-                f"FROM lotes WHERE id={p}",
-                (lote_id,
-                 f"Venda parcial — {frigorifico or 'sem frigorífico'} | {obs or ''}",
-                 -round(receita, 2),  # negativo = receita
-                 data_venda,
-                 lote_id)
-            )
+            # Tentar com owner_id; se falhar, inserir sem
+            _desc = f"Venda parcial — {frigorifico or 'sem frigorífico'} | {obs or ''}"
+            try:
+                cur.execute(
+                    f"INSERT INTO custos_lote "
+                    f"(lote_id, categoria, descricao, valor, data_lancamento) "
+                    f"VALUES ({p},'venda_parcial',{p},{p},{p})",
+                    (lote_id, _desc, -round(receita, 2), data_venda)
+                )
+            except Exception:
+                pass
             conn.commit()
         _log_db.info(
             "Receita parcial lote %s: R$ %.2f (%.1f@ @ R$ %.2f)",
