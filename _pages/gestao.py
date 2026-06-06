@@ -736,7 +736,7 @@ def page_workspace_do_lote(u):
         lote_ws_nome = st.selectbox("Selecione o lote", list(dict_ws.keys()), key="ws_lote")
     lote_ws_id = dict_ws[lote_ws_nome]
 
-    @st.cache_data(ttl=300, show_spinner="Carregando dados do lote...")
+    @st.cache_data(ttl=30, show_spinner="Carregando dados do lote...")
     def _ws_dados(lid):
         _raw = listar_lotes_usuario()
         todos = [(l[0],l[1],l[2],l[3],l[4],l[5],l[6],l[7] if len(l)>7 else "ATIVO") for l in _raw]
@@ -1791,6 +1791,8 @@ def page_vender_lote(u):
                             f"Venda registrada! {arrobas:.1f}@ · "
                             f"Receita: {fmt_brl(receita)}"
                         )
+                        # Limpar cache para refletir venda imediatamente
+                        _ws_dados.clear()
                         st.balloons()
                         st.rerun()
                     else:
@@ -1944,6 +1946,11 @@ def page_vender_lote(u):
                                     f"{_n_v} animal(is) vendido(s). "
                                     f"{_rest} restante(s) no lote."
                                 )
+                            # Limpar cache para refletir venda imediatamente
+                            _ws_dados.clear()
+                            for _ck in list(st.session_state.keys()):
+                                if 'animais_lote' in _ck or 'scores_lote' in _ck:
+                                    del st.session_state[_ck]
                             st.rerun()
                         except Exception as _ev:
                             toast_erro(f"Erro: {_ev}")
