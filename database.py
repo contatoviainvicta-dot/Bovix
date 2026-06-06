@@ -578,6 +578,16 @@ _MIGRATIONS = [
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS last_login TEXT DEFAULT NULL",
         "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS owner_id INTEGER DEFAULT NULL",
     ]),
+    (12, "ciclo_venda_lote", [
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ATIVO'",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS data_venda TEXT DEFAULT NULL",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS preco_arroba REAL DEFAULT 0",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS peso_venda_total REAL DEFAULT 0",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS frigorifico TEXT DEFAULT NULL",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS gta_numero TEXT DEFAULT NULL",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS obs_venda TEXT DEFAULT NULL",
+        "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS receita_venda REAL DEFAULT 0",
+    ]),
 ]
 
 
@@ -3014,6 +3024,176 @@ def calcular_gmd_temporal(lote_id, janela_dias=14):
         if gmds: resultado.append((str(data_atual.date()), round(sum(gmds)/len(gmds),4)))
         data_atual += pd.Timedelta(days=janela_dias)
     return resultado
+
+
+
+
+# ── CICLO DE VIDA DO LOTE ─────────────────────────────────────────────────────
+
+def registrar_venda_lote(lote_id, data_venda, preco_arroba,
+                          peso_venda_total, frigorifico="",
+                          gta_numero="", obs=""):
+    """Registra a venda de um lote e calcula a receita automaticamente.
+    Status muda para VENDIDO e lote sai do workspace ativo.
+    """
+    p = _ph()
+    arrobas = peso_venda_total * 0.5 / 15
+    receita = arrobas * preco_arroba
+
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE lotes SET "
+                f"status={p}, ativo=0, "
+                f"data_venda={p}, preco_arroba={p}, "
+                f"peso_venda_total={p}, frigorifico={p}, "
+                f"gta_numero={p}, obs_venda={p}, "
+                f"receita_venda={p} "
+                f"WHERE id={p}",
+                ("VENDIDO", data_venda, preco_arroba,
+                 peso_venda_total, frigorifico or "",
+                 gta_numero or "", obs or "",
+                 round(receita, 2), lote_id)
+            )
+            conn.commit()
+        _log_db.info(
+            "Lote %s vendido: R$ %.2f (%.1f arrobas @ R$ %.2f)",
+            lote_id, receita, arrobas, preco_arroba
+        )
+        return True, receita, arrobas
+    except Exception as _e:
+        _log_err.error("registrar_venda_lote: %s", _e)
+        return False, 0, 0
+
+
+def marcar_em_venda(lote_id):
+    """Muda status para EM_VENDA — negociação em andamento."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE lotes SET status={p} WHERE id={p}",
+                ("EM_VENDA", lote_id)
+            )
+            conn.commit()
+        return True
+    except Exception as _e:
+        _log_err.error("marcar_em_venda: %s", _e)
+        return False
+
+
+def cancelar_venda_lote(lote_id):
+    """Reverte EM_VENDA → ATIVO."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"UPDATE lotes SET status={p}, ativo=1 WHERE id={p}",
+                ("ATIVO", lote_id)
+            )
+            conn.commit()
+        return True
+    except Exception as _e:
+        _log_err.error("cancelar_venda_lote: %s", _e)
+        return False
+
+
+def listar_lotes_historico(owner_id):
+    """Lista lotes VENDIDOS e ARQUIVADOS para o histórico."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT id,nome,descricao,data_entrada,qtd_comprada,"
+                f"qtd_recebida,transporte,"
+                f"COALESCE(tipo_alimentacao,''),COALESCE(tipo_dieta,''),"
+                f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),"
+                f"COALESCE(owner_id,0),COALESCE(status,'ATIVO'),"
+                f"COALESCE(preco_arroba,0),COALESCE(peso_venda_total,0),"
+                f"COALESCE(frigorifico,''),COALESCE(gta_numero,''),"
+                f"COALESCE(receita_venda,0),COALESCE(obs_venda,'') "
+                f"FROM lotes "
+                f"WHERE owner_id={p} AND status IN ('VENDIDO','ARQUIVADO') "
+                f"ORDER BY data_venda DESC",
+                (owner_id,)
+            )
+            return cur.fetchall()
+    except Exception as _e:
+        _log_err.error("listar_lotes_historico: %s", _e)
+        return []
+
+
+def obter_resumo_venda_lote(lote_id):
+    """Retorna dados completos da venda + custos para DRE automático."""
+    p = _ph()
+    try:
+        with _conexao() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT id,nome,data_entrada,data_venda,"
+                f"COALESCE(preco_por_animal,0) as custo_compra_por_animal,"
+                f"COALESCE(qtd_recebida,0) as qtd,"
+                f"COALESCE(preco_arroba,0),COALESCE(peso_venda_total,0),"
+                f"COALESCE(frigorifico,''),COALESCE(gta_numero,''),"
+                f"COALESCE(receita_venda,0),COALESCE(obs_venda,'')"
+                f" FROM lotes WHERE id={p}",
+                (lote_id,)
+            )
+            lote = cur.fetchone()
+            if not lote:
+                return None
+
+            # Buscar custos lançados
+            cur.execute(
+                f"SELECT COALESCE(SUM(valor),0) FROM custos_lote WHERE lote_id={p}",
+                (lote_id,)
+            )
+            total_custos = (cur.fetchone() or [0])[0]
+
+            # Buscar custos por categoria
+            cur.execute(
+                f"SELECT categoria, SUM(valor) FROM custos_lote "
+                f"WHERE lote_id={p} GROUP BY categoria",
+                (lote_id,)
+            )
+            custos_cats = dict(cur.fetchall())
+
+        qtd          = lote[5] or 1
+        custo_compra = lote[4] * qtd
+        receita      = lote[10]
+        custo_total  = custo_compra + total_custos
+        margem       = receita - custo_total
+        arrobas      = lote[7] * 0.5 / 15 if lote[7] else 0
+        custo_arroba = custo_total / arrobas if arrobas else 0
+
+        return {
+            "lote_id":      lote_id,
+            "nome":         lote[1],
+            "data_entrada": lote[2],
+            "data_venda":   lote[3],
+            "qtd":          qtd,
+            "preco_arroba": lote[6],
+            "peso_total":   lote[7],
+            "arrobas":      round(arrobas, 2),
+            "frigorifico":  lote[8],
+            "gta":          lote[9],
+            "receita":      round(receita, 2),
+            "custo_compra": round(custo_compra, 2),
+            "custo_operacional": round(total_custos, 2),
+            "custo_total":  round(custo_total, 2),
+            "margem":       round(margem, 2),
+            "margem_pct":   round(margem / custo_total * 100, 1) if custo_total else 0,
+            "custo_arroba": round(custo_arroba, 2),
+            "custos_cats":  custos_cats,
+            "obs":          lote[11],
+        }
+    except Exception as _e:
+        _log_err.error("obter_resumo_venda_lote: %s", _e)
+        return None
 
 
 # ── IMPORTACAO CSV ─────────────────────────────────────────────────────────────
