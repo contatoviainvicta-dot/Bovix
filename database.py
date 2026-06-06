@@ -2779,14 +2779,15 @@ def venda_parcial_lote(lote_id, animal_ids, preco_kg=0,
     # Registrar venda (proporcional)
     n = len(animal_ids)
     if peso_total > 0 and preco_kg > 0:
+        # Converter preco_kg para preco_arroba (1@ = 15kg * rendimento 50%)
+        _preco_arroba = preco_kg * 15 / 0.5
         registrar_venda_lote(
             lote_id=lote_id,
-            preco_venda_kg=preco_kg,
-            peso_total_kg=peso_total,
-            n_animais_vendidos=n,
-            frigorifico=frigorifico or "",
             data_venda=dt,
-            observacao=f"Venda parcial ({n} animais) | {observacao or ''}"
+            preco_arroba=_preco_arroba,
+            peso_venda_total=peso_total,
+            frigorifico=frigorifico or "",
+            obs=f"Venda parcial ({n} animais) | {observacao or ''}"
         )
 
     # Verificar se restaram animais ativos — se nao, encerrar lote
