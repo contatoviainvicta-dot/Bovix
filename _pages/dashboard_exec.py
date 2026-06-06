@@ -466,195 +466,44 @@ def page_dashboard_executivo(u):
     # ── ABA 6: REGISTRAR VENDA ───────────────────────────────────────────
     with t6:
         st.subheader("Registrar Venda")
+        st.info(
+            "O registro de venda foi centralizado em **Rebanho → Vender Lote** — "
+            "ciclo completo com status, GTA, DRE automático e histórico."
+        )
+        col_btn, _ = st.columns([1, 2])
+        with col_btn:
+            if st.button("💰 Ir para Vender Lote",
+                         type="primary", use_container_width=True,
+                         key="dash_goto_vender"):
+                st.session_state.menu = "Vender Lote"
+                st.rerun()
 
-        lotes_v  = listar_lotes(owner_id=oid)
-        dict_lv  = {l[1]: l[0] for l in lotes_v}
-
-        if not dict_lv:
-            empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
-        else:
-            tipo_venda = st.radio(
-                "Tipo de venda",
-                ["Venda total do lote", "Venda parcial (selecionar animais)"],
-                horizontal=True, key="tipo_venda_radio"
-            )
-
-            # Campos comuns
-            lote_venda = st.selectbox("Lote *", list(dict_lv.keys()),
-                                     key="lote_venda_sel")
-            lote_id_v  = dict_lv[lote_venda]
-
-            cv1, cv2 = st.columns(2)
-            with cv1:
-                frigorifico = st.text_input("Frigorífico",
-                    placeholder="Ex: JBS, Minerva, Marfrig")
-                data_venda_ = st.date_input("Data da venda *",
-                                           value=date.today())
-            with cv2:
-                preco_kg  = st.number_input("Preço por @ (R$) *",
-                    min_value=0.0, value=0.0, step=0.5, format="%.2f",
-                    help="Preço por arroba (15 kg)")
-                peso_tot  = st.number_input("Peso total (kg) *",
-                    min_value=0.0, value=0.0, step=10.0, format="%.1f")
-
-            obs_v = st.text_input("Observações", key="obs_venda")
-
-            # Preview valor líquido
-            if preco_kg > 0 and peso_tot > 0:
-                vliq = preco_kg * peso_tot
-                st.info(f"Valor líquido estimado: **{fmt_brl(vliq)}**")
-
-            # ── VENDA TOTAL ────────────────────────────────────────────
-            if tipo_venda == "Venda total do lote":
-                animais_lote = listar_animais_por_lote_status(
-                    lote_id_v, status='ATIVO'
-                )
-                n_ativos = len(animais_lote)
-                st.warning(
-                    f"**Venda total:** {n_ativos} animal(is) serão marcados "
-                    f"como VENDIDO e o lote será **encerrado** (sairá do menu "
-                    f"principal mas ficará no histórico)."
-                )
-
-                if st.button("Confirmar venda total", type="primary",
-                            key="btn_venda_total"):
-                    if preco_kg <= 0 or peso_tot <= 0:
-                        st.error("Informe preço/kg e peso total.")
-                    else:
-                        # Registrar venda financeira
-                        registrar_venda_lote(
-                            lote_id=lote_id_v,
-                            preco_venda_kg=preco_kg,
-                            peso_total_kg=peso_tot,
-                            n_animais_vendidos=n_ativos,
-                            frigorifico=frigorifico or "",
-                            data_venda=str(data_venda_),
-                            observacao=obs_v or ""
-                        )
-                        # Encerrar lote e marcar animais
-                        encerrar_lote(lote_id_v, str(data_venda_))
-                        vliq = preco_kg * peso_tot
-                        st.session_state["_venda_ok"] = (
-                            f"Venda total: {fmt_brl(vliq)} | "
-                            f"{n_ativos} animais vendidos | "
-                            f"Lote {lote_venda} encerrado"
-                        )
-                        st.rerun()
-
-            # ── VENDA PARCIAL ──────────────────────────────────────────
-            else:
-                animais_ativos = listar_animais_por_lote_status(
-                    lote_id_v, status='ATIVO'
-                )
-                if not animais_ativos:
-                    st.warning("Nenhum animal ativo neste lote.")
-                else:
-                    st.caption(
-                        f"{len(animais_ativos)} animal(is) ativo(s) — "
-                        f"selecione os que serão vendidos:"
+        # Resumo rápido de lotes vendidos
+        try:
+            from database import listar_lotes_historico
+            hist = listar_lotes_historico(oid) or []
+            if hist:
+                st.divider()
+                st.markdown(f"**{len(hist)} lote(s) já vendido(s):**")
+                for lote in hist[:5]:
+                    _nome   = lote[1]
+                    _receita = lote[17] if len(lote) > 17 else 0
+                    _data_v  = str(lote[10])[:10] if len(lote) > 10 else ""
+                    st.markdown(
+                        f"✅ **{_nome}** — "
+                        f"R$ {_receita:,.2f} "
+                        f"{'em ' + fmt_data(_data_v) if _data_v else ''}"
                     )
-                    # Checkboxes por animal
-                    selecionados = []
-                    for an in animais_ativos:
-                        brinco = an[1]
-                        info   = f"{an[2] or ''} | {an[3] or ''}"
-                        if st.checkbox(
-                            f"{brinco} — {info}",
-                            key=f"chk_vend_{an[0]}"
-                        ):
-                            selecionados.append(an[0])
-
-                    if selecionados:
-                        st.info(
-                            f"{len(selecionados)} animal(is) selecionado(s). "
-                            f"O lote continuará ativo com os restantes."
-                        )
-
-                    if st.button("Confirmar venda parcial", type="primary",
-                                key="btn_venda_parcial"):
-                        if not selecionados:
-                            st.error("Selecione pelo menos 1 animal.")
-                        elif preco_kg <= 0 or peso_tot <= 0:
-                            st.error("Informe preço/kg e peso total.")
-                        else:
-                            res = venda_parcial_lote(
-                                lote_id=lote_id_v,
-                                animal_ids=selecionados,
-                                preco_kg=preco_kg,
-                                peso_total=peso_tot,
-                                frigorifico=frigorifico or "",
-                                data_venda=str(data_venda_),
-                                observacao=obs_v or ""
-                            )
-                            vliq = preco_kg * peso_tot
-                            msg  = (
-                                f"{res['n_vendidos']} animal(is) marcado(s) "
-                                f"como VENDIDO | Valor: **{fmt_brl(vliq)}**"
-                            )
-                            if res["restantes"] == 0:
-                                msg += " | Lote encerrado (sem animais ativos)"
-                            else:
-                                msg += (
-                                    f" | {res['restantes']} animal(is) "
-                                    f"ainda ativo(s) no lote"
-                                )
-                            st.session_state["_venda_ok"] = msg
-                            st.rerun()
-
-            # Toast de confirmação de venda
-            _msg_venda = st.session_state.pop("_venda_ok", None)
-            if _msg_venda:
-                toast_ok(_msg_venda)
-
-            # Animais vendidos no lote (status VENDIDO)
-            vendidos_lote = listar_animais_por_lote_status(
-                lote_id_v, status='VENDIDO'
-            )
-            if vendidos_lote:
-                with st.expander(
-                    f"Animais já vendidos neste lote ({len(vendidos_lote)})"
-                ):
-                    for av in vendidos_lote:
-                        st.caption(
-                            f"🏷 {av[1]} — {av[2] or ''} {av[3] or ''} "
-                            f"| Status: VENDIDO"
-                        )
-
-        # Histórico de lotes encerrados
-        st.divider()
-        st.subheader("Histórico de Lotes Encerrados")
-        lotes_enc = listar_lotes_historico(oid)
-        if lotes_enc:
-            df_enc = pd.DataFrame([{
-                "Lote":      l[1],
-                "Entrada":   fmt_data(l[3]),
-                "Encerrado": fmt_data(l[10]) if l[10] else "-",
-                "Animais":   l[4],
-            } for l in lotes_enc])
-            st.dataframe(df_enc, hide_index=True, use_container_width=True)
-        else:
-            empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
-
-        # Histórico financeiro de todas as vendas
-        st.divider()
-        st.subheader("Histórico de Vendas")
-        vendas = listar_todas_vendas(oid)
-        if vendas:
-            df_vend = pd.DataFrame([{
-                "Data":        fmt_data(v[3]),
-                "Lote":        v[2],
-                "Frigorífico": v[6] or "-",
-                "Preço/@":     fmt_brl(float(v[4])),
-                "Peso":        f"{float(v[5]):.0f} kg",
-                "Valor liq.":  fmt_brl(v[8]),
-            } for v in vendas])
-            st.dataframe(df_vend, hide_index=True, use_container_width=True)
-            total_vend = sum(float(v[8]) for v in vendas)
-            st.metric("Total recebido de vendas", fmt_brl(total_vend))
-        else:
-            st.info("Nenhuma venda registrada ainda.")
+                if st.button("📚 Ver histórico completo",
+                             key="dash_hist_lotes",
+                             use_container_width=True):
+                    st.session_state.menu = "Historico Lotes"
+                    st.rerun()
+        except Exception:
+            pass
 
     # ── ABA 7: DRE POR PERÍODO ───────────────────────────────────────────
+
     with t7:
         st.subheader("DRE por Período")
 
