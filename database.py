@@ -2801,8 +2801,15 @@ def venda_parcial_lote(lote_id, animal_ids, preco_kg=0,
         )
         restantes = cur.fetchone()[0]
 
+    # Não encerrar automaticamente — usuário deve usar "Vender lote inteiro"
+    # para encerrar o ciclo completo com status VENDIDO
     if restantes == 0:
-        encerrar_lote(lote_id, data_encerramento=dt, motivo="venda_total")
+        # Avisar mas não encerrar — lote fica com 0 animais ativos
+        _log_db.info(
+            "Venda parcial: lote %s com 0 animais ativos. "
+            "Use 'Vender lote inteiro' para encerrar o ciclo.",
+            lote_id
+        )
 
     return {"n_vendidos": n, "restantes": restantes}
 
