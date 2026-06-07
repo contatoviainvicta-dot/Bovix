@@ -24,13 +24,11 @@ except ImportError:
             return f"{p[2]}/{m.get(p[1],p[1])}/{p[0]}"
         except: return str(d)
     def safe_bar_chart(df, **k):
-        import streamlit as _st, pandas as _pd
-        try: _st.bar_chart(_pd.DataFrame(df))
-        except: pass
+        import streamlit as _st
+        _st.caption("Gráfico indisponível (ux_helpers não carregado).")
     def safe_line_chart(df, **k):
-        import streamlit as _st, pandas as _pd
-        try: _st.line_chart(_pd.DataFrame(df))
-        except: pass
+        import streamlit as _st
+        _st.caption("Gráfico indisponível (ux_helpers não carregado).")
     def toast_ok(m): import streamlit as _st; _st.success(f"✅ {m}")
     def toast_erro(m): import streamlit as _st; _st.error(f"❌ {m}")
     def empty_state(m, **k): import streamlit as _st; _st.info(m)
@@ -155,7 +153,7 @@ def page_painel_admin(u):
                     list(por_plano_vals.items()),
                     columns=["Plano","Usuários"]
                 )
-                st.bar_chart(df_pizza.set_index("Plano"))
+                safe_bar_chart(df_pizza.set_index("Plano"))
 
         # Ajustes manuais
         st.divider()
@@ -249,7 +247,7 @@ def page_painel_admin(u):
                 sorted(por_dia.items()),
                 columns=["Data","Acessos"]
             )
-            st.bar_chart(df_ac.set_index("Data"))
+            safe_bar_chart(df_ac.set_index("Data"))
             st.caption(
                 f"Total: {len(acessos)} acessos | "
                 f"{len(set(a[0] for a in acessos))} usuários únicos"
@@ -285,7 +283,7 @@ def page_painel_admin(u):
             "Perfil":     "Admins",
             "Quantidade": metr_u["admins"],
         }])
-        st.bar_chart(df_dist.set_index("Perfil"))
+        safe_bar_chart(df_dist.set_index("Perfil"))
 
         # Distribuição por plano
         if metr_u["por_plano"]:
@@ -295,7 +293,7 @@ def page_painel_admin(u):
                 {"Plano": k.upper(), "Usuários": v}
                 for k,v in metr_u["por_plano"].items()
             ])
-            st.bar_chart(df_pp.set_index("Plano"))
+            safe_bar_chart(df_pp.set_index("Plano"))
 
     # ── ABA 4: ERROS ─────────────────────────────────────────────────────
     with t4:
