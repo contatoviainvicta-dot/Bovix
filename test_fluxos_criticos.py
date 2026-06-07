@@ -173,6 +173,17 @@ class TestAnimal:
         assert antes == 2
         assert depois == 1
 
+    def test_atualizar_animal_campos_completos(self, db):
+        """Regressão: atualizar_animal deve aceitar os 8 campos da tela."""
+        lid = self._lote(db)
+        aid = db.adicionar_animal("A01", 24, lid, peso_entrada=300)
+        # Chamar como a tela de edição faz (8 argumentos posicionais)
+        db.atualizar_animal(aid, "A01-NOVO", 30, "Angus", "F", 320.0, 480.0, "obs")
+        a = db.obter_animal(aid)
+        assert a is not None
+        # Identificação deve ter mudado
+        assert a[1] == "A01-NOVO"
+
 
 # ═══════════════════════════════════════════════════════════════════
 # FLUXO 4: PESAGEM
