@@ -472,7 +472,8 @@ def page_editar_lote(u):
                 with el2:
                     desc_e     = st.text_area("Descricao",        value=lote[2] or "", height=70)
                     st.caption(f"Qtd recebida atual: {ativos_reais} animais ativos (atualizado automaticamente)")
-                    preco_e    = st.number_input("Preco por animal (R$)", 0.0, step=50.0)
+                    preco_e    = st.number_input("Preco por animal (R$)", 0.0, step=50.0,
+                                          value=float(lote[9] or 0.0))
                 salvar_e = st.form_submit_button("Salvar alteracoes", type="primary", use_container_width=True)
             if salvar_e:
                 if not nome_e:
