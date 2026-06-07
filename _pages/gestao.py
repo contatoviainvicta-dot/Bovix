@@ -1796,7 +1796,7 @@ def page_vender_lote(u):
                             f"Receita: {fmt_brl(receita)}"
                         )
                         # Limpar cache para refletir venda imediatamente
-                        _ws_dados.clear()
+                        st.cache_data.clear()
                         st.balloons()
                         st.rerun()
                     else:
@@ -1951,7 +1951,7 @@ def page_vender_lote(u):
                                     f"{_rest} restante(s) no lote."
                                 )
                             # Limpar cache para refletir venda imediatamente
-                            _ws_dados.clear()
+                            st.cache_data.clear()
                             for _ck in list(st.session_state.keys()):
                                 if 'animais_lote' in _ck or 'scores_lote' in _ck:
                                     del st.session_state[_ck]
