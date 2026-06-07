@@ -98,19 +98,21 @@ def atualizar_lote(lote_id, nome, descricao, data_entrada, qtd_comprada, qtd_rec
             (lote_id,)
         )
         ativos = cur.fetchone()[0]
+        # qtd_recebida usa o parâmetro passado pela tela (não ativos)
+        # ativos é só para fins de validação/log
         if preco_por_animal is not None:
             cur.execute(
                 f"UPDATE lotes SET nome={p},descricao={p},data_entrada={p},"
                 f"qtd_comprada={p},qtd_recebida={p},transporte={p},"
                 f"preco_por_animal={p} WHERE id={p}",
-                (nome, descricao, data_entrada, qtd_comprada, ativos,
+                (nome, descricao, data_entrada, qtd_comprada, qtd_recebida,
                  transporte, preco_por_animal, lote_id),
             )
         else:
             cur.execute(
                 f"UPDATE lotes SET nome={p},descricao={p},data_entrada={p},"
                 f"qtd_comprada={p},qtd_recebida={p},transporte={p} WHERE id={p}",
-                (nome, descricao, data_entrada, qtd_comprada, ativos,
+                (nome, descricao, data_entrada, qtd_comprada, qtd_recebida,
                  transporte, lote_id),
             )
 
@@ -219,12 +221,14 @@ def calcular_margem_lote(lote_id):
         if not lote: return {}
         cur.execute(f"SELECT COALESCE(preco_por_animal,0) FROM lotes WHERE id={p}", (lote_id,))
         preco_animal = cur.fetchone()[0]
-        custo_compra = preco_animal * lote[5]
+        # Usar qtd_comprada (lote[4]) — total comprado, não varia com vendas
+        custo_compra = preco_animal * (lote[4] or 0)
         cur.execute(f"SELECT preco_venda_kg,peso_total_kg,data_venda,frigorific FROM vendas_lote WHERE lote_id={p} ORDER BY id DESC LIMIT 1", (lote_id,))
         venda = cur.fetchone()
         receita_real = (venda[0]*venda[1]) if venda else 0.0
         from database import listar_animais_por_lote  # lazy import
         animais = listar_animais_por_lote(lote_id)
+        from database import listar_ocorrencias  # lazy import
         custo_san = sum(o[6] for a in animais for o in listar_ocorrencias(a[0]) if o[6])
         margem = receita_real - custo_compra - custo_san
         margem_pct = (margem/custo_compra*100) if custo_compra > 0 else 0
