@@ -87,11 +87,18 @@ def obter_animal(animal_id):
         return (r["id"],r["identificacao"],r["idade"],r["lote_id"],r["sexo"],r["raca"],r["peso_entrada"],r["peso_alvo"],r["observacoes"],r["foto_path"]) if r else None
 
 
-def atualizar_animal(animal_id, identificacao, idade):
+def atualizar_animal(animal_id, identificacao, idade, raca="", sexo="indefinido",
+                     peso_entrada=0.0, peso_alvo=0.0, observacoes=""):
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
-        cur.execute(f"UPDATE animais SET identificacao={p},idade={p} WHERE id={p}", (identificacao, idade, animal_id))
+        cur.execute(
+            f"UPDATE animais SET identificacao={p}, idade={p}, raca={p}, "
+            f"sexo={p}, peso_entrada={p}, peso_alvo={p}, observacoes={p} "
+            f"WHERE id={p}",
+            (identificacao, idade, raca, sexo,
+             peso_entrada, peso_alvo, observacoes, animal_id)
+        )
 
 
 def excluir_animal(animal_id):
