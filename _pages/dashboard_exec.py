@@ -24,13 +24,11 @@ except ImportError:
             return f"{p[2]}/{m.get(p[1],p[1])}/{p[0]}"
         except: return str(d)
     def safe_bar_chart(df, **k):
-        import streamlit as _st, pandas as _pd
-        try: _st.bar_chart(_pd.DataFrame(df))
-        except: pass
+        import streamlit as _st
+        _st.caption("Gráfico indisponível.")
     def safe_line_chart(df, **k):
-        import streamlit as _st, pandas as _pd
-        try: _st.line_chart(_pd.DataFrame(df))
-        except: pass
+        import streamlit as _st
+        _st.caption("Gráfico indisponível.")
     def toast_ok(m): import streamlit as _st; _st.success(f"✅ {m}")
     def toast_erro(m): import streamlit as _st; _st.error(f"❌ {m}")
     def empty_state(m, **k): import streamlit as _st; _st.info(m)
