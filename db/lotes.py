@@ -98,12 +98,21 @@ def atualizar_lote(lote_id, nome, descricao, data_entrada, qtd_comprada, qtd_rec
             (lote_id,)
         )
         ativos = cur.fetchone()[0]
-        cur.execute(
-            f"UPDATE lotes SET nome={p},descricao={p},data_entrada={p},qtd_comprada={p},qtd_recebida={p},transporte={p} WHERE id={p}",
-            (nome, descricao, data_entrada, qtd_comprada, ativos, transporte, lote_id),
-        )
         if preco_por_animal is not None:
-            cur.execute(f"UPDATE lotes SET preco_por_animal={p} WHERE id={p}", (preco_por_animal, lote_id))
+            cur.execute(
+                f"UPDATE lotes SET nome={p},descricao={p},data_entrada={p},"
+                f"qtd_comprada={p},qtd_recebida={p},transporte={p},"
+                f"preco_por_animal={p} WHERE id={p}",
+                (nome, descricao, data_entrada, qtd_comprada, ativos,
+                 transporte, preco_por_animal, lote_id),
+            )
+        else:
+            cur.execute(
+                f"UPDATE lotes SET nome={p},descricao={p},data_entrada={p},"
+                f"qtd_comprada={p},qtd_recebida={p},transporte={p} WHERE id={p}",
+                (nome, descricao, data_entrada, qtd_comprada, ativos,
+                 transporte, lote_id),
+            )
 
 
 def excluir_lote(lote_id):
