@@ -47,6 +47,43 @@ UPGRADE_MSG_VETERINARIO = {
     'vet_pro':  'Voce ja tem o plano maximo.',
 }
 
+# Planos detalhados (usados em obter_plano, emails)
+_PLANOS = {
+    "free": {
+        "nome":            "Free",
+        "preco":           0,
+        "limite_animais":  50,
+        "limite_fazendas": 1,
+        "modulo_vet":      False,
+        "descricao":       "Ate 50 animais, 1 fazenda, funcoes basicas",
+    },
+    "pro": {
+        "nome":            "Pro",
+        "preco":           99,
+        "limite_animais":  500,
+        "limite_fazendas": 3,
+        "modulo_vet":      False,
+        "descricao":       "Ate 500 animais, 3 fazendas, relatorios avancados",
+    },
+    "vet": {
+        "nome":            "Vet",
+        "preco":           199,
+        "limite_animais":  2000,
+        "limite_fazendas": 10,
+        "modulo_vet":      True,
+        "descricao":       "Ilimitado para vets, ate 10 fazendas atendidas",
+    },
+    "enterprise": {
+        "nome":            "Enterprise",
+        "preco":           0,
+        "limite_animais":  999999,
+        "limite_fazendas": 999,
+        "modulo_vet":      True,
+        "descricao":       "Personalizado, suporte dedicado",
+    },
+}
+
+
 
 # ── Loggers centralizados ───────────────────────────────────────────────────
 try:
