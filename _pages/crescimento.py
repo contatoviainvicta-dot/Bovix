@@ -623,9 +623,10 @@ def page_planos(u):
     )
 
     st.progress(min(int(atual) / max(int(lim), 1), 1.0))
-    if atual >= lim * 0.9:
+    if lim > 0 and atual >= lim * 0.9:
+        _pct = int(100 * atual / lim) if lim > 0 else 0
         st.warning(
-            f"Voce esta usando {atual}/{lim} animais ({int(100*atual/lim)}%). "
+            f"Voce esta usando {atual}/{lim} animais ({_pct}%). "
             "Considere fazer upgrade."
         )
 
