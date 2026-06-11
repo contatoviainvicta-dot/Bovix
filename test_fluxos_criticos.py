@@ -95,6 +95,32 @@ class TestLoginCadastro:
         # bcrypt gera $2b$ ou fallback SHA256$
         assert h.startswith("$2b$") or h.startswith("SHA256$")
 
+    def test_ativar_trial(self, db):
+        """Regressão: ativar_trial usa _td (timedelta) — não pode quebrar."""
+        ok, msg, uid = db.auto_registrar_usuario("Vet", "vet@x.com", "senha123",
+                                                  perfil="veterinario")
+        db.ativar_trial(uid)
+        sp = db.obter_status_plano(uid)
+        assert sp is not None
+        assert sp.get("ativo") is True
+
+    def test_verificar_limite_fazendas(self, db):
+        """Regressão: verificar_limite_fazendas chama obter_limites_usuario."""
+        ok, msg, uid = db.auto_registrar_usuario("Vet2", "vet2@x.com", "senha123",
+                                                  perfil="veterinario")
+        lim = db.verificar_limite_fazendas(uid)
+        assert lim is not None
+        assert "ok" in lim
+        assert "limite" in lim
+
+    def test_definir_plano_usuario(self, db):
+        """Regressão: definir_plano_usuario usa constantes PLANOS_*."""
+        ok, msg, uid = db.auto_registrar_usuario("Vet3", "vet3@x.com", "senha123",
+                                                  perfil="veterinario")
+        db.definir_plano_usuario(uid, "veterinario", "pro", uid)
+        lim = db.obter_limites_usuario(uid)
+        assert lim is not None
+
 
 # ═══════════════════════════════════════════════════════════════════
 # FLUXO 2: LOTE
