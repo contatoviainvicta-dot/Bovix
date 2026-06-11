@@ -6,7 +6,8 @@ import re
 import hashlib
 import secrets
 from datetime import date, datetime, timedelta
-_date = date  # alias usado em algumas funcoes
+_date = date       # alias usado em algumas funcoes
+_td = timedelta    # alias usado em algumas funcoes
 
 try:
     import bcrypt
