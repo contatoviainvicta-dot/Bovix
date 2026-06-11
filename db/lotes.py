@@ -170,6 +170,7 @@ def atualizar_status_lote(lote_id, status):
 
 
 def verificar_limite_fazendas(vet_id):
+    from database import obter_limites_usuario  # lazy import (evita circular)
     limites = obter_limites_usuario(vet_id)
     if not limites: return dict(ok=False, atual=0, limite=0, msg='Usuario nao encontrado')
     if limites['perfil'] == 'admin': return dict(ok=True, atual=0, limite=9999, msg='Admin sem limite')
