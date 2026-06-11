@@ -397,7 +397,7 @@ def listar_usuarios_trial_expirando(dias=7):
         return [(r["id"],r["nome"],r["email"],r["plano_expira"]) for r in rows]
 
 
-def definir_plano_usuario(usuario_id, perfil, plano_nome, admin_id):
+def definir_plano_usuario(usuario_id, perfil, plano_nome, admin_id, dias_validade=365):
     p = _ph()
     if perfil == 'veterinario':
         cfg = PLANOS_VETERINARIO.get(plano_nome, PLANOS_VETERINARIO['trial'])
@@ -407,13 +407,16 @@ def definir_plano_usuario(usuario_id, perfil, plano_nome, admin_id):
         cfg = PLANOS_FAZENDEIRO.get(plano_nome, PLANOS_FAZENDEIRO['trial'])
         limite_f = 0
         limite_a = cfg['limite_animais']
+    # Estender a validade do plano (evita ficar com data expirada antiga)
+    nova_expira = str(_date.today() + _td(days=dias_validade))
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(
             f"UPDATE usuarios SET plano={p}, plano_nome={p},"
             f" limite_animais={p}, limite_fazendas={p},"
+            f" plano_expira={p}, ativo=1,"
             f" status_conta='ativo' WHERE id={p}",
-            ('pago', plano_nome, limite_a, limite_f, usuario_id),
+            ('pago', plano_nome, limite_a, limite_f, nova_expira, usuario_id),
         )
         conn.commit()
     registrar_auditoria(admin_id, 'definir_plano', 'usuarios', usuario_id, plano_nome)
