@@ -121,6 +121,14 @@ class TestLoginCadastro:
         lim = db.obter_limites_usuario(uid)
         assert lim is not None
 
+    def test_obter_plano_usa_PLANOS(self, db):
+        """Regressão: obter_plano usa _PLANOS (estava faltando import)."""
+        ok, msg, uid = db.auto_registrar_usuario("Plan", "plan@x.com", "senha123",
+                                                  perfil="veterinario")
+        plano = db.obter_plano(uid)
+        assert plano is not None
+        assert "nome" in plano
+
     def test_renovar_plano_expirado_reativa(self, db):
         """Regressão: definir_plano deve estender plano_expira e reativar.
         Bug: plano ficava 'pago' mas com data expirada antiga."""
