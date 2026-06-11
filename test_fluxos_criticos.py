@@ -121,6 +121,30 @@ class TestLoginCadastro:
         lim = db.obter_limites_usuario(uid)
         assert lim is not None
 
+    def test_renovar_plano_expirado_reativa(self, db):
+        """Regressão: definir_plano deve estender plano_expira e reativar.
+        Bug: plano ficava 'pago' mas com data expirada antiga."""
+        ok, msg, uid = db.auto_registrar_usuario("VetExp", "vetexp@x.com",
+                                                  "senha123", perfil="veterinario")
+        # Forçar expiração
+        import database as _dbmod
+        with _dbmod._conexao() as conn:
+            cur = conn.cursor()
+            p = _dbmod._ph()
+            cur.execute(
+                f"UPDATE usuarios SET plano_expira='2025-01-01',"
+                f" status_conta='expirado', ativo=0 WHERE id={p}", (uid,)
+            )
+            conn.commit()
+        # Admin renova
+        db.definir_plano_usuario(uid, "veterinario", "pro", 1)
+        # Deve estar ativo com dias positivos
+        sp = db.obter_status_plano(uid)
+        assert sp["plano"] == "pago"
+        assert sp["dias_restantes"] > 0
+        lim = db.obter_limites_usuario(uid)
+        assert lim["status_conta"] == "ativo"
+
 
 # ═══════════════════════════════════════════════════════════════════
 # FLUXO 2: LOTE
