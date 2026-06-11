@@ -18,6 +18,7 @@ from db.core import (
     _conexao, _ph, _fetch, _fetchone, _usar_postgres, _cached,
     PLANOS_FAZENDEIRO, PLANOS_VETERINARIO,
     UPGRADE_MSG_FAZENDEIRO, UPGRADE_MSG_VETERINARIO,
+    _PLANOS,
 )
 from db.schema import _log_db, _log_err, _log_war
 
