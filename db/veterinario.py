@@ -4,7 +4,8 @@
 
 from datetime import date, datetime, timedelta
 
-from db.core import _conexao, _ph, _fetch, _fetchone, _usar_postgres, _cached
+from db.core import (_conexao, _ph, _fetch, _fetchone, _usar_postgres,
+                     _cached, invalidar_cache, _cast_date, _date_add)
 from db.schema import (
     _log_db, _log_err, _log_war, _garantir_tabelas_vet,
     _garantir_colunas_vacinas_agenda, _garantir_coluna_crmv,
@@ -90,6 +91,7 @@ def solicitar_acesso_vet(vet_id, owner_id):
         if existente:
             return dict(ok=False, msg=f'Solicitacao ja existe com status: {existente["status"]}')
         # Verificar limite de fazendas do vet
+        from database import verificar_limite_fazendas  # lazy
         lim = verificar_limite_fazendas(vet_id)
         if not lim['ok']:
             return dict(ok=False, msg=lim['msg'])
@@ -157,6 +159,7 @@ def listar_acessos_vet(vet_id=None, owner_id=None, status=None):
 def listar_lotes_vet(vet_id):
     from database import listar_lotes  # lazy import
     # Lotes de todas as fazendas aprovadas para o veterinario
+    from database import listar_fazendas_do_vet  # lazy
     fazendas = listar_fazendas_do_vet(vet_id)
     if not fazendas:
         return []
@@ -581,6 +584,7 @@ def calcular_risco_sanitario(lote_id):
     total = len(animais)
 
     # ── Fator 1: Mortalidade ──────────────────────────────────────────────────
+    from database import taxa_mortalidade_lote  # lazy
     mort = taxa_mortalidade_lote(lote_id)
     taxa_mort = mort['taxa']
     if taxa_mort >= 5:
@@ -629,6 +633,7 @@ def calcular_risco_sanitario(lote_id):
         fatores.append(f"{len(medias_tot)} ocorrencias medias nos ultimos 60 dias")
 
     # ── Fator 3: GMD negativo ou muito baixo ─────────────────────────────────
+    from database import calcular_gmds_lote  # lazy
     gmds = list(calcular_gmds_lote(lote_id).values())
     if gmds:
         gmd_medio = sum(gmds) / len(gmds)
@@ -658,6 +663,7 @@ def calcular_risco_sanitario(lote_id):
 
     # ── Fator 5: Animais sem pesagem ─────────────────────────────────────────
     pes_map = {}
+    from database import listar_pesagens_todos_animais  # lazy
     for p in listar_pesagens_todos_animais(lote_id):
         pes_map.setdefault(p[1], []).append(p)
     sem_peso = sum(1 for a in animais if a[0] not in pes_map)
