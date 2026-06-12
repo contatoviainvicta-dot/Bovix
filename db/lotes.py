@@ -2,8 +2,9 @@
 # Depende de db.core e db.schema.
 # listar_animais_por_lote: lazy import para evitar circular.
 
-from db.core import _conexao, _ph, _fetch, _fetchone, _usar_postgres, _cached
-from db.schema import _log_db, _log_err, _log_war
+from db.core import (_conexao, _ph, _fetch, _fetchone, _usar_postgres,
+                     _cached, invalidar_cache)
+from db.schema import _log_db, _log_err, _log_war, _garantir_tabelas_vet
 
 
 def adicionar_lote(nome, descricao, data_entrada, qtd_comprada, qtd_recebida, transporte, owner_id=None):
@@ -199,6 +200,7 @@ def encerrar_lote(lote_id, data_encerramento=None, motivo="venda_total"):
     for a in animais:
         if a and len(a) > 0:
             try:
+                from database import marcar_animal_vendido  # lazy
                 marcar_animal_vendido(a[0], data_venda=dt)
             except Exception as _ew:
                 _log_war.debug("excecao ignorada: %s", _ew)
