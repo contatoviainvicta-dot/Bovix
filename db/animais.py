@@ -190,10 +190,12 @@ def importar_animais_csv(linhas, lote_id):
             aid = adicionar_animal(ident, idade, lote_id)
             pa = float(str(linha.get("peso_alvo",0)).replace(",",".") or 0)
             ob = str(linha.get("observacoes",""))
+            from database import atualizar_animal_detalhes  # lazy
             atualizar_animal_detalhes(aid, peso_alvo=pa if pa>0 else None, observacoes=ob if ob else None)
             existentes.add(ident); ok += 1
         except Exception as e:
             erros+=1; msgs.append(f"Linha {i}: {e}")
     if ok > 0:
+        from database import atualizar_qtd_lote  # lazy
         atualizar_qtd_lote(lote_id)
     return dict(importados=ok, erros=erros, mensagens=msgs)
