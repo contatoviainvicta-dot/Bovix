@@ -16,11 +16,15 @@ except ImportError:
 
 from db.core import (
     _conexao, _ph, _fetch, _fetchone, _usar_postgres, _cached,
+    invalidar_cache,
     PLANOS_FAZENDEIRO, PLANOS_VETERINARIO,
     UPGRADE_MSG_FAZENDEIRO, UPGRADE_MSG_VETERINARIO,
     _PLANOS,
 )
-from db.schema import _log_db, _log_err, _log_war
+from db.schema import (
+    _log_db, _log_err, _log_war,
+    _garantir_coluna_crmv, _garantir_tabelas_vet,
+)
 
 # Dias de trial gratuito
 TRIAL_DIAS = 30
@@ -750,6 +754,36 @@ def atualizar_plano(user_id, plano_key, expira=None):
         )
         conn.commit()
     return True
+
+
+def _smtp_config():
+    """Le configuracao SMTP de variaveis de ambiente ou st.secrets.
+    Retorna dict vazio se nao configurado (email nao sera enviado)."""
+    cfg = {}
+    # Tentar st.secrets primeiro (Streamlit Cloud)
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "smtp" in st.secrets:
+            s = st.secrets["smtp"]
+            cfg = {
+                "host": s.get("host", "smtp.gmail.com"),
+                "port": int(s.get("port", 587)),
+                "user": s.get("user", ""),
+                "password": s.get("password", ""),
+                "from": s.get("from", s.get("user", "")),
+            }
+            return cfg
+    except Exception:
+        pass
+    # Fallback para variaveis de ambiente
+    cfg = {
+        "host": os.environ.get("SMTP_HOST", "smtp.gmail.com"),
+        "port": int(os.environ.get("SMTP_PORT", "587")),
+        "user": os.environ.get("SMTP_USER", ""),
+        "password": os.environ.get("SMTP_PASSWORD", ""),
+        "from": os.environ.get("SMTP_FROM", os.environ.get("SMTP_USER", "")),
+    }
+    return cfg
 
 
 def enviar_email(destinatario, assunto, corpo_html, corpo_txt=""):
