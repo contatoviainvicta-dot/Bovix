@@ -2,6 +2,7 @@
 # Ocorrencias, vacinas, medicamentos, piquetes, campanhas, carencias, acesso vet.
 # Depende de db.core e db.schema. Deps de outros dominios via lazy import.
 
+import streamlit as st
 from datetime import date, datetime, timedelta
 
 from db.core import (_conexao, _ph, _fetch, _fetchone, _usar_postgres,
@@ -563,6 +564,7 @@ def listar_ocorrencias_todos_animais(lote_id):
                  r['gravidade'],r['custo'],r['dias_recuperacao'],r['status'],r['identificacao']) for r in rows]
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def calcular_risco_sanitario(lote_id):
     from database import listar_animais_por_lote  # lazy import
     """
