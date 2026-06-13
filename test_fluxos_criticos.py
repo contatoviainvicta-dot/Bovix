@@ -390,6 +390,27 @@ class TestVenda:
 # FLUXO 6: DRE / CÁLCULOS FINANCEIROS
 # ═══════════════════════════════════════════════════════════════════
 
+class TestRiscoSanitario:
+    def test_risco_lote_vazio_tem_todas_chaves(self, db):
+        """Regressão: calcular_risco_sanitario deve retornar as mesmas chaves
+        para lote vazio e lote com dados (bug: faltavam mortalidade,
+        ocorrencias_graves, gmds no caso vazio → KeyError na tela)."""
+        chaves = {"score", "nivel", "fatores", "recomendacoes",
+                  "mortalidade", "ocorrencias_graves", "gmds"}
+        # Lote vazio
+        lid_vazio = db.adicionar_lote("Vazio", "", "2026-01-01", 5, 5, "", owner_id=1)
+        r_vazio = db.calcular_risco_sanitario(lid_vazio)
+        assert chaves.issubset(set(r_vazio.keys()))
+        assert r_vazio["mortalidade"] == 0.0
+        # Lote com dados
+        lid = db.adicionar_lote("Cheio", "", "2026-01-01", 2, 2, "", owner_id=1)
+        db.adicionar_animal("A0", 24, lid, peso_entrada=300)
+        r_cheio = db.calcular_risco_sanitario(lid)
+        assert chaves.issubset(set(r_cheio.keys()))
+        # Ambos devem ter exatamente as mesmas chaves
+        assert set(r_vazio.keys()) == set(r_cheio.keys())
+
+
 class TestDRE:
     def test_margem_bruta_peso_medio_correto(self, db):
         """Otimização N+1: margem_bruta_lote deve calcular o peso médio
