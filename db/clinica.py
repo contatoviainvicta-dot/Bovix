@@ -528,36 +528,93 @@ def adicionar_receita(vet_id, fazenda_owner_id, medicamento, dose, via, duracao,
 
 
 def adicionar_protocolo(vet_id, nome, descricao="", categoria="geral"):
-    """Cria novo protocolo sanitario."""
+    """Cria novo protocolo sanitario.
+    Resiliente: insere descricao apenas se a coluna existir no schema."""
     _garantir_tabelas_vet()
     from datetime import date
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
+        # Detectar colunas disponiveis
+        cols = set()
+        try:
+            if _usar_postgres():
+                cur.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='protocolos_sanitarios'"
+                )
+                cols = {r[0] for r in cur.fetchall()}
+            else:
+                cur.execute("PRAGMA table_info(protocolos_sanitarios)")
+                cols = {r[1] for r in cur.fetchall()}
+        except Exception as _ew:
+            _log_war.debug("nao foi possivel ler colunas: %s", _ew)
+
+        # Montar colunas/valores dinamicamente
+        campos = ["vet_id", "nome", "categoria"]
+        valores = [vet_id, nome, categoria]
+        if "descricao" in cols:
+            campos.append("descricao")
+            valores.append(descricao or "")
+        if "data_criacao" in cols:
+            campos.append("data_criacao")
+            valores.append(str(date.today()))
+        elif "criado_em" in cols:
+            campos.append("criado_em")
+            valores.append(str(date.today()))
+
+        cols_sql = ",".join(campos)
+        ph_sql = ",".join([p] * len(valores))
         if _usar_postgres():
             cur.execute(
-                f"INSERT INTO protocolos_sanitarios (vet_id,nome,categoria,data_criacao) "
-                f"VALUES({p},{p},{p},{p}) RETURNING id",
-                (vet_id, nome, categoria, str(date.today()))
+                f"INSERT INTO protocolos_sanitarios ({cols_sql}) "
+                f"VALUES({ph_sql}) RETURNING id",
+                tuple(valores)
             )
             return cur.fetchone()[0]
         else:
             cur.execute(
-                f"INSERT INTO protocolos_sanitarios (vet_id,nome,categoria,data_criacao) "
-                f"VALUES({p},{p},{p},{p})",
-                (vet_id, nome, categoria, str(date.today()))
+                f"INSERT INTO protocolos_sanitarios ({cols_sql}) VALUES({ph_sql})",
+                tuple(valores)
             )
             return cur.lastrowid
 
 
 def listar_protocolos(vet_id):
-    """Lista protocolos do veterinario."""
+    """Lista protocolos do veterinario.
+    Resiliente a variacoes de schema: detecta colunas existentes e
+    sempre retorna 6 campos (id, vet_id, nome, descricao, categoria, data)."""
     _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
+        # Descobrir quais colunas a tabela realmente tem
+        cols = set()
+        try:
+            if _usar_postgres():
+                cur.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='protocolos_sanitarios'"
+                )
+                cols = {r[0] for r in cur.fetchall()}
+            else:
+                cur.execute("PRAGMA table_info(protocolos_sanitarios)")
+                cols = {r[1] for r in cur.fetchall()}
+        except Exception as _ew:
+            _log_war.debug("nao foi possivel ler colunas: %s", _ew)
+
+        # Montar SELECT so com colunas que existem (fallback para literais)
+        col_desc = "descricao" if "descricao" in cols else "''"
+        if "data_criacao" in cols:
+            col_data = "data_criacao"
+        elif "criado_em" in cols:
+            col_data = "criado_em"
+        else:
+            col_data = "''"
+        col_cat = "categoria" if "categoria" in cols else "'geral'"
+
         cur.execute(
-            f"SELECT id,vet_id,nome,'' as descricao,categoria,data_criacao "
+            f"SELECT id, vet_id, nome, {col_desc}, {col_cat}, {col_data} "
             f"FROM protocolos_sanitarios WHERE vet_id={p} ORDER BY nome",
             (vet_id,)
         )
@@ -565,29 +622,37 @@ def listar_protocolos(vet_id):
 
 
 def adicionar_item_protocolo(protocolo_id, ordem, tipo, nome, dia_offset, observacao=""):
-    """Adiciona item (vacina/medicacao) ao protocolo."""
+    """Adiciona item (vacina/medicacao) ao protocolo.
+    Mapeia para o schema real: nome->descricao, dia_offset->dia_aplicacao,
+    observacao->observacoes. O parametro 'ordem' e mantido na assinatura por
+    compatibilidade com as telas, mas a tabela usa dia_aplicacao para ordenar."""
     _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(
-            f"INSERT INTO protocolo_itens (protocolo_id,ordem,tipo,nome,dia_offset,observacao) "
-            f"VALUES({p},{p},{p},{p},{p},{p})",
-            (protocolo_id, int(ordem), tipo, nome, int(dia_offset), observacao or "")
+            f"INSERT INTO protocolo_itens "
+            f"(protocolo_id,tipo,descricao,dia_aplicacao,observacoes) "
+            f"VALUES({p},{p},{p},{p},{p})",
+            (protocolo_id, tipo, nome, int(dia_offset), observacao or "")
         )
         conn.commit()
         return True
 
 
 def listar_itens_protocolo(protocolo_id):
-    """Lista itens de um protocolo na ordem correta."""
+    """Lista itens de um protocolo na ordem correta.
+    Retorna 7 campos (id, protocolo_id, ordem, tipo, nome, dia, obs) mapeando
+    do schema real (descricao->nome, dia_aplicacao->dia, observacoes->obs).
+    Como nao ha coluna 'ordem', usa dia_aplicacao para ordenar."""
     _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
         cur.execute(
-            f"SELECT id,protocolo_id,ordem,tipo,nome,dia_offset,observacao "
-            f"FROM protocolo_itens WHERE protocolo_id={p} ORDER BY dia_offset",
+            f"SELECT id, protocolo_id, dia_aplicacao, tipo, descricao, "
+            f"dia_aplicacao, observacoes "
+            f"FROM protocolo_itens WHERE protocolo_id={p} ORDER BY dia_aplicacao",
             (protocolo_id,)
         )
         return cur.fetchall()
