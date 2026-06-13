@@ -206,12 +206,39 @@ def margem_bruta_lote(lote_id):
     peso_medio_alvo  = 0.0
 
     if animais:
-        pesos_atuais = []
+        # OTIMIZACAO: buscar a ultima pesagem de TODOS os animais do lote
+        # em uma unica query (evita N+1: antes era 1 query por animal).
+        ult_peso = {}  # animal_id -> peso da ultima pesagem
+        try:
+            ids = [a[0] for a in animais if a]
+            if ids:
+                placeholders = ",".join([_ph()] * len(ids))
+                with _conexao() as conn:
+                    cur = conn.cursor()
+                    # Pega a pesagem mais recente de cada animal do lote
+                    cur.execute(
+                        f"SELECT animal_id, peso FROM pesagens "
+                        f"WHERE animal_id IN ({placeholders}) "
+                        f"AND (animal_id, data) IN ("
+                        f"  SELECT animal_id, MAX(data) FROM pesagens "
+                        f"  WHERE animal_id IN ({placeholders}) "
+                        f"  GROUP BY animal_id"
+                        f") ",
+                        tuple(ids) + tuple(ids)
+                    )
+                    for r in cur.fetchall():
+                        ult_peso[r[0]] = float(r[1])
+        except Exception as _ew:
+            _log_war.debug("excecao ignorada (fallback N+1): %s", _ew)
+            # Fallback: metodo antigo (1 query por animal)
+            for a in animais:
+                pes = listar_pesagens(a[0])
+                if pes:
+                    ult_peso[a[0]] = float(pes[-1][2])
+
+        pesos_atuais = list(ult_peso.values())
         pesos_alvo   = []
         for a in animais:
-            pes = listar_pesagens(a[0])
-            if pes:
-                pesos_atuais.append(float(pes[-1][2]))
             peso_alvo_a = float(a[7] or 0) if len(a) > 7 else 0
             if peso_alvo_a:
                 pesos_alvo.append(peso_alvo_a)
