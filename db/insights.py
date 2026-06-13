@@ -1,3 +1,4 @@
+import streamlit as st
 # db/insights.py -- Inteligencia, previsoes e KPIs executivos
 # Insights de lote, previsao de abate, deteccao de anomalias, dashboards,
 # resumos de IA, KPIs e epidemiologia.
@@ -12,6 +13,7 @@ from db.core import (
 from db.schema import _log_db, _log_err, _log_war, _garantir_tabelas_vet
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def gerar_insights_lote(lote_id):
     from database import listar_animais_por_lote, listar_pesagens, taxa_mortalidade_lote, resumo_lote  # lazy import
     import pandas as pd
@@ -257,7 +259,8 @@ def detectar_anomalias_peso(lote_id):
                     tipo='Perda de peso',
                     descricao=f'Perdeu {perda:.1f} kg na ultima pesagem',
                     gravidade='Media' if perda < 10 else 'Alta'
-                ))
+                ))@st.cache_data(ttl=300, show_spinner=False)
+
 
     return alertas
 
@@ -337,6 +340,7 @@ def resumo_dashboard(owner_id=None):
                 vacinas_pendentes=n_vac, meds_criticos=n_meds)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def kpis_executivos(owner_id=None, lote_ids=None):
     from database import calcular_gmds_lote, calcular_risco_sanitario, listar_lotes  # lazy import
     """
@@ -438,6 +442,7 @@ def kpis_executivos(owner_id=None, lote_ids=None):
     )
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def painel_saude_rebanho(owner_id):
     """Retorna estatisticas sanitarias do rebanho."""
     _garantir_tabelas_vet()
