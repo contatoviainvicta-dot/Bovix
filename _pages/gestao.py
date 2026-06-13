@@ -128,9 +128,8 @@ u):
         f_sel = st.selectbox("Filtrar por lote", list(d.keys()), key="cal_f")
 
         if d[f_sel] is None:
-            vs = []
-            for lote in lotes:
-                vs.extend(listar_vacinas_agenda(lote[0]))
+            # 1 query para todos os lotes (listar_vacinas_agenda sem args)
+            vs = listar_vacinas_agenda()
         else:
             vs = listar_vacinas_agenda(d[f_sel])
 
