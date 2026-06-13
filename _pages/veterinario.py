@@ -1354,10 +1354,30 @@ def page_gestao_financeira_vet(u):
     hdr("Gestao Financeira", "Honorarios e Faturamento",
         "Controle de cobranças, recebimentos e extrato por fazenda")
 
-    # ── Resumo do mes atual ───────────────────────────────────────────────
+    # ── Resumo do periodo selecionado ─────────────────────────────────────
     from datetime import date
     hoje = date.today()
-    res  = resumo_financeiro_vet(u["id"], mes=hoje.month, ano=hoje.year)
+
+    # Seletor de mes/ano (padrao: mes atual)
+    _meses_nomes = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                    "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+    sel1, sel2, _ = st.columns([1, 1, 2])
+    with sel1:
+        _mes_sel = st.selectbox(
+            "Mês", range(1, 13),
+            index=hoje.month - 1,
+            format_func=lambda m: _meses_nomes[m - 1],
+            key="fin_vet_mes"
+        )
+    with sel2:
+        _anos = list(range(hoje.year - 2, hoje.year + 1))
+        _ano_sel = st.selectbox(
+            "Ano", _anos,
+            index=len(_anos) - 1,
+            key="fin_vet_ano"
+        )
+
+    res  = resumo_financeiro_vet(u["id"], mes=_mes_sel, ano=_ano_sel)
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("A receber",
