@@ -1,518 +1,425 @@
-# db/financeiro.py -- DRE, scores, cotacoes, margem bruta, dashboards
-# Depende de db.core e db.schema. Deps de outros dominios via lazy import.
+# pages/financeiro.py -- Telas: Painel de Decisao, Dashboard Executivo, Margem Real, Cotacao Cepea, Rastreabilidade GTA
 
-from datetime import date, datetime, timedelta
-
-from db.core import (
-    _conexao, _ph, _fetch, _fetchone, _usar_postgres, _cached,
-    _date_add, _cast_date,
+import streamlit as st
+try:
+    from ux_helpers import (fmt_brl, fmt_data, fmt_data_hora,
+                             safe_bar_chart, safe_line_chart,
+                             toast_ok, toast_erro, empty_state)
+except ImportError:
+    def fmt_brl(v):
+        try:
+            v=float(v); i=int(abs(v)); c=round((abs(v)-i)*100)
+            s=f"{i:,}".replace(",","."); r=f"R$ {s},{c:02d}"
+            return f"-{r}" if v<0 else r
+        except: return "R$ 0,00"
+    def safe_bar_chart(df, **k): pass
+    def safe_line_chart(df, **k): pass
+    def toast_ok(m): import streamlit as _st; _st.success(m)
+    def toast_erro(m): import streamlit as _st; _st.error(m)
+    def empty_state(m, **k): import streamlit as _st; _st.info(m)
+    def fmt_data(d):
+        m={"01":"jan","02":"fev","03":"mar","04":"abr","05":"mai","06":"jun",
+           "07":"jul","08":"ago","09":"set","10":"out","11":"nov","12":"dez"}
+        try: d=str(d)[:10]; p=d.split("-"); return f"{p[2]} {m.get(p[1],p[1])} {p[0]}"
+        except: return str(d)
+    def fmt_data_hora(d): return fmt_data(d)
+    def safe_line_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_line_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
+    def safe_bar_chart(df, titulo=None, empty_msg="Sem dados."):
+        import pandas as pd
+        if df is None or (hasattr(df,"empty") and df.empty): st.info(empty_msg); return
+        try:
+            df = pd.DataFrame(df).replace([float("inf"),float("-inf")],None).dropna(how="all")
+            if not df.empty: safe_bar_chart(df)
+            else: st.info(empty_msg)
+        except Exception as e: st.info(f"Grafico indisponivel: {e}")
+import pandas as pd
+from database import *
+from ui import (
+    card_kpi, card_kpi_row, alerta, badge,
+    badge_status_animal, badge_status_lote, badge_gravidade,
+    card_animal, insight_card,
 )
-from db.schema import _log_db, _log_err, _log_war
+from rules import (
+    is_admin, is_vet, is_fazendeiro, owner_id,
+    listar_lotes_usuario, listar_medicamentos_usuario,
+    sel_lote, sel_animal, limpar_cache,
+    requer_admin, requer_nao_vet, owner_id_lote_novo,
+    _listar_lotes_cache, _listar_animais_cache,
+    sel_fazenda_vet, listar_lotes_vet_filtrado,
+)
 
+def hdr(titulo, sub="", desc=""):
+    st.title(titulo)
+    if sub: st.caption(f"{sub} - {desc}" if desc else sub)
+    st.divider()
 
-def calcular_score_saude(animal_id):
-    from database import listar_ocorrencias, listar_pesagens, listar_reproducao  # lazy import
-    import pandas as pd
-    pesagens = listar_pesagens(animal_id)
-    gmd = 0.0
-    if len(pesagens) >= 2:
-        df = pd.DataFrame(pesagens, columns=["id","aid","peso","data"])
-        df["data"] = pd.to_datetime(df["data"])
-        df = df.sort_values("data")
-        dias = (df["data"].iloc[-1] - df["data"].iloc[0]).days
-        if dias > 0:
-            gmd = (df["peso"].iloc[-1] - df["peso"].iloc[0]) / dias
-    pts_gmd = 50 if gmd>=1.2 else 45 if gmd>=1.0 else 38 if gmd>=0.8 else 30 if gmd>=0.6 else 20 if gmd>=0.4 else 10 if gmd>=0.0 else 0
-    ocs = listar_ocorrencias(animal_id)
-    pen = min(35, sum(1 for o in ocs if o[5]=="Alta")*15 + sum(1 for o in ocs if o[5]=="Media")*7 + sum(1 for o in ocs if o[5]=="Baixa")*3)
-    pts_oc = max(0, 35 - pen)
-    repros = listar_reproducao(animal_id)
-    pts_rep = 5 if repros and repros[0][5]=="negativo" else 10 if repros and repros[0][5]=="pendente" else 15
-    score = pts_gmd + pts_oc + pts_rep
-    classif = "Excelente" if score>=80 else "Bom" if score>=60 else "Regular" if score>=40 else "Critico"
-    return dict(score=score, classificacao=classif,
-                detalhes=dict(pts_gmd=pts_gmd, pts_ocorrencias=pts_oc, pts_reproducao=pts_rep, gmd=round(gmd,3), n_ocorrencias=len(ocs)))
-
-
-def calcular_previsao_abate(animal_id):
-    from database import listar_pesagens, obter_animal  # lazy import
-    import pandas as pd
-    from datetime import date as dt
-    animal = obter_animal(animal_id)
-    if not animal: return {}
-    peso_alvo = animal[7]
-    pesagens  = listar_pesagens(animal_id)
-    if len(pesagens) < 2 or peso_alvo <= 0:
-        return dict(erro="Necessario >= 2 pesagens e peso alvo definido")
-    df = pd.DataFrame(pesagens, columns=["id","aid","peso","data"])
-    df["data"] = pd.to_datetime(df["data"])
-    df = df.sort_values("data")
-    peso_atual = df["peso"].iloc[-1]
-    dias_hist  = (df["data"].iloc[-1] - df["data"].iloc[0]).days
-    if dias_hist == 0: return dict(erro="Datas de pesagem identicas")
-    gmd = (peso_atual - df["peso"].iloc[0]) / dias_hist
-    if gmd <= 0: return dict(erro="GMD negativo")
-    if peso_atual >= peso_alvo:
-        return dict(gmd=round(gmd,3), peso_atual=peso_atual, peso_alvo=peso_alvo, dias_restantes=0, data_prevista=str(dt.today()), confianca="pronto")
-    dias_rest = int((peso_alvo - peso_atual) / gmd)
-    data_prev = dt.today() + _td(days=dias_rest)
-    confianca = "alta" if len(pesagens)>=5 else "media" if len(pesagens)>=3 else "baixa"
-    return dict(gmd=round(gmd,3), peso_atual=round(peso_atual,1), peso_alvo=round(peso_alvo,1),
-                dias_restantes=dias_rest, data_prevista=str(data_prev), confianca=confianca)
-
-
-def salvar_cotacao(data, preco, fonte="manual"):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if _usar_postgres():
-            cur.execute(f"INSERT INTO cotacoes (data,preco,fonte) VALUES({p},{p},{p}) ON CONFLICT (data) DO UPDATE SET preco=EXCLUDED.preco,fonte=EXCLUDED.fonte RETURNING id", (data, preco, fonte))
-            return cur.fetchone()[0]
-        else:
-            cur.execute(f"INSERT INTO cotacoes (data,preco,fonte) VALUES({p},{p},{p}) ON CONFLICT(data) DO UPDATE SET preco=excluded.preco,fonte=excluded.fonte", (data, preco, fonte))
-            return cur.lastrowid
-
-
-def listar_cotacoes(dias=30):
-    p = _ph()
-    with _conexao() as conn:
-        cur = conn.cursor()
-        if dias <= 0:
-            cur.execute("SELECT id,data,preco,fonte FROM cotacoes ORDER BY data ASC")
-        else:
-            cur.execute(
-                f"SELECT id,data,preco,fonte FROM cotacoes WHERE {_cast_date('data')}>={_date_add(dias, chr(45))} ORDER BY data ASC"
-            )
-        rows = _fetch(cur)
-        return [(r["id"],r["data"],r["preco"],r["fonte"]) for r in rows]
-
-
-def obter_ultima_cotacao():
-    with _conexao() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT id,data,preco,fonte FROM cotacoes ORDER BY data DESC LIMIT 1")
-        r = _fetchone(cur)
-        return (r["id"],r["data"],r["preco"],r["fonte"]) if r else None
-
-
-def calcular_scores_lote(lote_id):
-    from database import listar_animais_por_lote, listar_pesagens_todos_animais, listar_ocorrencias_todos_animais  # lazy import
-    # Calcula score de todos os animais do lote de forma agregada
-    import pandas as pd
-    animais = listar_animais_por_lote(lote_id)
-    if not animais:
-        return {}
-
-    pesagens = listar_pesagens_todos_animais(lote_id)
-    ocorrencias = listar_ocorrencias_todos_animais(lote_id)
-
-    # Agrupar por animal_id
-    pes_por_animal = {}
-    for row in pesagens:
-        aid = row[1]
-        pes_por_animal.setdefault(aid, []).append(row)
-
-    oc_por_animal = {}
-    for row in ocorrencias:
-        aid = row[1]
-        oc_por_animal.setdefault(aid, []).append(row)
-
-    scores = {}
-    for a in animais:
-        aid = a[0]
-        ps = pes_por_animal.get(aid, [])
-        ocs = oc_por_animal.get(aid, [])
-
-        # GMD
-        gmd = 0.0
-        if len(ps) >= 2:
-            df = pd.DataFrame(ps, columns=['id','aid','peso','data'] + (['ident'] if ps and len(ps[0]) > 4 else []))
-            df['data'] = pd.to_datetime(df['data'])
-            df = df.sort_values('data')
-            dias = (df['data'].iloc[-1] - df['data'].iloc[0]).days
-            if dias > 0:
-                gmd = (df['peso'].iloc[-1] - df['peso'].iloc[0]) / dias
-
-        pts_gmd = (50 if gmd>=1.2 else 45 if gmd>=1.0 else 38 if gmd>=0.8
-                   else 30 if gmd>=0.6 else 20 if gmd>=0.4 else 10 if gmd>=0 else 0)
-        pen = min(35, sum(15 if o[5]=='Alta' else 7 if o[5]=='Media' else 3 for o in ocs))
-        pts_oc = max(0, 35 - pen)
-        score = pts_gmd + pts_oc + 15
-        classif = ("Excelente" if score>=80 else "Bom" if score>=60
-                   else "Regular" if score>=40 else "Critico")
-        scores[aid] = dict(score=score, classificacao=classif, gmd=round(gmd,3),
-                           n_ocorrencias=len(ocs))
-    return scores
-
-
-def margem_bruta_lote(lote_id):
-    from database import listar_animais_por_lote, listar_pesagens, obter_lote  # lazy import
-    """Calcula margem bruta completa do lote.
-    Retorna dict com todos os componentes financeiros."""
-    from datetime import date
-    p = _ph()
-
-    # Dados básicos do lote
-    lote = obter_lote(lote_id)
-    if not lote:
-        return {}
-
-    nome_lote  = lote[1]
-    qtd        = int(lote[5] or lote[4] or 0)  # qtd_recebida ou comprada
-    preco_ua   = float(lote[9] or 0)            # preco_por_animal
-    data_entr  = str(lote[3])[:10]
-    data_vend  = str(lote[10])[:10] if len(lote) > 10 and lote[10] else None
-
-    # Custo de compra
-    custo_compra = preco_ua * qtd
-
-    # Custos variáveis lançados
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"SELECT COALESCE(SUM(valor),0),categoria "
-                f"FROM custos_lote WHERE lote_id={p} "
-                f"GROUP BY categoria",
-                (lote_id,)
-            )
-            custos_var = {r[1]: float(r[0]) for r in cur.fetchall()}
-    except Exception:
-        custos_var = {}
-
-    total_custos_var = sum(custos_var.values())
-
-    # Receita de venda (se lote já foi vendido)
-    receita_venda = 0.0
-    preco_venda_kg = 0.0
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"SELECT preco_venda_kg,peso_total_kg FROM vendas_lote "
-                f"WHERE lote_id={p} ORDER BY id DESC LIMIT 1",
-                (lote_id,)
-            )
-            row = cur.fetchone()
-            if row:
-                preco_venda_kg = float(row[0])
-                receita_venda  = preco_venda_kg * float(row[1])
-    except Exception as _ew:
-        _log_war.debug("excecao ignorada: %s", _ew)
-    receita_projetada = 0.0
-    animais = listar_animais_por_lote(lote_id)
-    n_ativos = len([a for a in animais if a])
-    peso_medio_atual = 0.0
-    peso_medio_alvo  = 0.0
-
-    if animais:
-        pesos_atuais = []
-        pesos_alvo   = []
-        for a in animais:
-            pes = listar_pesagens(a[0])
-            if pes:
-                pesos_atuais.append(float(pes[-1][2]))
-            peso_alvo_a = float(a[7] or 0) if len(a) > 7 else 0
-            if peso_alvo_a:
-                pesos_alvo.append(peso_alvo_a)
-
-        if pesos_atuais:
-            peso_medio_atual = sum(pesos_atuais) / len(pesos_atuais)
-        if pesos_alvo:
-            peso_medio_alvo = sum(pesos_alvo) / len(pesos_alvo)
-
-        # Usar cotação CEPEA ou padrão R$15/kg
-        try:
-            cotacao = obter_ultima_cotacao() or 15.0
-        except Exception:
-            cotacao = 15.0
-
-        peso_ref = peso_medio_alvo if peso_medio_alvo > 0 else peso_medio_atual
-        if peso_ref > 0 and cotacao > 0:
-            # @ = arroba = 15kg
-            receita_projetada = (peso_ref / 15) * cotacao * n_ativos
-
-    # Cálculos finais
-    custo_total = custo_compra + total_custos_var
-    receita     = receita_venda if receita_venda > 0 else receita_projetada
-    margem_r    = receita - custo_total
-    margem_pct  = round(100 * margem_r / max(receita, 1), 1) if receita > 0 else 0
-
-    # Dias no confinamento
-    try:
-        from datetime import datetime
-        d_ini = datetime.strptime(data_entr, "%Y-%m-%d").date()
-        d_ref = datetime.strptime(data_vend, "%Y-%m-%d").date()                 if data_vend else date.today()
-        dias_conf = (d_ref - d_ini).days
-    except Exception:
-        dias_conf = 0
-
-    return {
-        "lote_id":          lote_id,
-        "nome":             nome_lote,
-        "n_animais":        n_ativos,
-        "qtd_comprada":     qtd,
-        "custo_compra":     custo_compra,
-        "custo_compra_ua":  preco_ua,
-        "custos_var":       custos_var,
-        "total_custos_var": total_custos_var,
-        "custo_total":      custo_total,
-        "custo_ua":         custo_total / max(n_ativos, 1),
-        "receita_venda":    receita_venda,
-        "receita_projetada":receita_projetada,
-        "receita":          receita,
-        "vendido":          receita_venda > 0,
-        "margem_r":         margem_r,
-        "margem_pct":       margem_pct,
-        "peso_medio_atual": round(peso_medio_atual, 1),
-        "peso_medio_alvo":  round(peso_medio_alvo, 1),
-        "dias_confinamento":dias_conf,
-        "data_entrada":     data_entr,
-        "data_venda":       data_vend,
-    }
-
-
-def dashboard_financeiro_fazendeiro(owner_id):
-    from database import listar_lotes  # lazy import
-    """Consolida todos os indicadores financeiros do fazendeiro.
-    Retorna dict com KPIs, lotes e alertas."""
-    from datetime import date
-    p = _ph()
-
-    # Buscar lotes: tenta owner_id direto, depois busca por fazenda_id
-    lotes = listar_lotes(owner_id=owner_id)
-
-    if not lotes:
-        # Fallback: buscar lotes onde fazenda_id aponta para uma fazenda do owner
-        try:
-            with _conexao() as conn:
-                cur = conn.cursor()
-                cur.execute(
-                    f"SELECT id,nome,descricao,data_entrada,qtd_comprada,"
-                    f"qtd_recebida,transporte,tipo_alimentacao,tipo_dieta,"
-                    f"COALESCE(preco_por_animal,0),COALESCE(data_venda,''),owner_id "
-                    f"FROM lotes WHERE owner_id={p} OR id IN ("
-                    f"  SELECT id FROM lotes WHERE owner_id IS NULL"
-                    f") ORDER BY data_entrada DESC",
-                    (owner_id,)
-                )
-                rows = cur.fetchall()
-                lotes = [
-                    (r[0],r[1],r[2],r[3],r[4],r[5],r[6],
-                     r[7],r[8],float(r[9]),str(r[10]),r[11])
-                    for r in rows if r[11] == owner_id or r[11] is None
-                ]
-        except Exception as _ew:
-            _log_war.debug("excecao ignorada: %s", _ew)
-
-    if not lotes:
-        return {"lotes": [], "kpis": {}, "alertas": [], "dre": {}}
-
-    # Calcular margem de cada lote
-    margens = []
+def page_painel_de_decisao(u):
+    hdr("Painel de Decisao", "Decisao Financeira", "Resultado financeiro por lote")
+    if is_vet():
+        st.error("Acesso restrito. Dados financeiros nao disponiveis para veterinarios.")
+        st.stop()
+    pk = st.number_input("Preco kg (R$)", 0.0, 50.0, 10.0)
+    cd = st.number_input("Custo diario/animal (R$)", 0.0, 100.0, 10.0)
+    lotes = listar_lotes_usuario()
+    if not lotes: st.warning("Nenhum lote."); st.stop()
+    dados = []
     for l in lotes:
-        try:
-            m = margem_bruta_lote(l[0])
-            if m:
-                margens.append(m)
-        except Exception as _ew:
-            _log_war.debug("excecao ignorada: %s", _ew)
+        anim = listar_animais_por_lote(l[0])
+        ganho = custo_s = dias_t = 0
+        for a in anim:
+            ps = listar_pesagens(a[0])
+            if len(ps) > 1:
+                df = pd.DataFrame(ps, columns=["id","aid","peso","data"])
+                df["data"] = pd.to_datetime(df["data"])
+                df = df.sort_values("data")
+                g = df["peso"].iloc[-1]-df["peso"].iloc[0]
+                d = (df["data"].iloc[-1]-df["data"].iloc[0]).days
+                if g > 0 and d > 0: ganho += g; dias_t += d
+            for oc in listar_ocorrencias(a[0]):
+                if oc[6]: custo_s += oc[6]
+        custo_op = cd * len(anim) * dias_t
+        receita  = ganho * pk
+        lucro    = receita - custo_op - custo_s
+        dados.append((l[1], lucro, receita, custo_op, custo_s))
+    df_d = pd.DataFrame(dados, columns=["Lote","Lucro","Receita","Custo Op","Custo San"]).sort_values("Lucro", ascending=False)
+    st.metric("Lucro total", f"R$ {df_d['Lucro'].sum():,.2f}")
+    st.dataframe(df_d, use_container_width=True)
+    safe_bar_chart(df_d.set_index("Lote")["Lucro"])
+    st.subheader("Alertas")
+    for _, row in df_d.iterrows():
+        if row["Lucro"] < 0:                            st.error(f"{row['Lote']}: prejuizo")
+        elif row["Custo San"] > row["Receita"] * 0.2:  st.warning(f"{row['Lote']}: custo sanitario elevado")
+        else:                                           st.success(f"{row['Lote']}: operacao saudavel")
 
-    if not margens:
-        return {"lotes": [], "kpis": {}, "alertas": [], "dre": {}}
-
-    # KPIs consolidados
-    total_investido  = sum(m["custo_total"] for m in margens)
-    total_receita    = sum(m["receita"] for m in margens)
-    total_margem     = sum(m["margem_r"] for m in margens)
-    margem_media_pct = round(total_margem / max(total_receita, 1) * 100, 1)
-
-    lotes_positivos  = [m for m in margens if m["margem_r"] >= 0]
-    lotes_negativos  = [m for m in margens if m["margem_r"] < 0]
-    total_animais    = sum(m["n_animais"] for m in margens)
-    receita_proj     = sum(m["receita_projetada"] for m in margens
-                          if not m["vendido"])
-    vendidos         = [m for m in margens if m["vendido"]]
-    receita_real     = sum(m["receita_venda"] for m in vendidos)
-
-    kpis = {
-        "total_lotes":       len(margens),
-        "total_animais":     total_animais,
-        "total_investido":   total_investido,
-        "total_receita":     total_receita,
-        "total_margem":      total_margem,
-        "margem_pct":        margem_media_pct,
-        "lotes_positivos":   len(lotes_positivos),
-        "lotes_negativos":   len(lotes_negativos),
-        "receita_realizada": receita_real,
-        "receita_projetada": receita_proj,
-        "lotes_vendidos":    len(vendidos),
-    }
-
-    # Alertas financeiros
-    alertas = []
-    for m in margens:
-        if m["margem_pct"] < 0:
-            alertas.append({
-                "tipo": "perda",
-                "lote": m["nome"],
-                "msg":  f"Margem negativa: R$ {m['margem_r']:,.0f} "
-                        f"({m['margem_pct']}%)",
-                "prioridade": "alta",
-            })
-        elif m["margem_pct"] < 10:
-            alertas.append({
-                "tipo": "margem_baixa",
-                "lote": m["nome"],
-                "msg":  f"Margem baixa: {m['margem_pct']}% "
-                        f"(R$ {m['margem_r']:,.0f})",
-                "prioridade": "media",
-            })
-        if m["dias_confinamento"] > 180 and not m["vendido"]:
-            alertas.append({
-                "tipo": "prazo",
-                "lote": m["nome"],
-                "msg":  f"{m['dias_confinamento']} dias em confinamento "
-                        f"sem venda — custos crescendo",
-                "prioridade": "media",
-            })
-
-    # Ranking de lotes por margem
-    ranking = sorted(margens, key=lambda x: x["margem_r"], reverse=True)
-
-    # DRE simplificado
-    dre = {
-        "receita_bruta":    total_receita,
-        "custo_compra":     sum(m["custo_compra"] for m in margens),
-        "custos_var":       sum(m["total_custos_var"] for m in margens),
-        "custo_total":      total_investido,
-        "margem_bruta":     total_margem,
-        "margem_bruta_pct": margem_media_pct,
-    }
-
-    return {
-        "lotes":    margens,
-        "kpis":     kpis,
-        "alertas":  alertas,
-        "ranking":  ranking,
-        "dre":      dre,
-    }
+    # ============================================================
+    # DASHBOARD EXECUTIVO
+    # ============================================================
 
 
-def dre_por_periodo(owner_id, ano=None, mes=None):
-    """DRE filtrado por período (ano e/ou mês).
-    Retorna dict com receitas, custos e margem do período."""
-    from datetime import date
-    import calendar
+def page_dashboard_executivo(u):
+    lotes = listar_lotes_usuario()
 
-    hoje  = date.today()
-    _ano  = ano  or hoje.year
-    _mes  = mes  # None = ano inteiro
+    hdr("Dashboard Executivo", "Visao Executiva", "KPIs consolidados da fazenda com analise de IA")
 
-    # Montar filtro de data
-    if _mes:
-        dt_ini = f"{_ano}-{_mes:02d}-01"
-        ultimo_dia = calendar.monthrange(_ano, _mes)[1]
-        dt_fim = f"{_ano}-{_mes:02d}-{ultimo_dia:02d}"
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_dash_exec")
+
+    with st.spinner("Carregando dados da fazenda..."):
+        if is_vet():
+            _lotes_exec = listar_lotes_vet(u["id"])
+            _ids_exec   = [l[0] for l in _lotes_exec] if _lotes_exec else []
+            kpis = kpis_executivos(owner_id=None, lote_ids=_ids_exec) if _ids_exec else {}
+        else:
+            kpis = kpis_executivos(owner_id=owner_id())
+
+    if not kpis:
+        st.warning("Nenhum lote cadastrado. Cadastre lotes e animais para ver o dashboard.")
+        st.stop()
+
+    # ── Linha 1: KPIs principais ──────────────────────────────────────────────
+    st.subheader("Visao Geral da Fazenda")
+    card_kpi_row([
+        dict(titulo="Total de Lotes",     valor=kpis['total_lotes']),
+        dict(titulo="Animais Ativos",      valor=kpis['total_animais']),
+        dict(titulo="GMD Medio Geral",     valor=f"{kpis['gmd_geral']:.3f} kg/d",
+             cor='#1565C0' if kpis['gmd_geral'] >= 0.8 else '#E65100'),
+        dict(titulo="Taxa Mortalidade",    valor=f"{kpis['taxa_mortalidade']}%",
+             cor='#B71C1C' if kpis['taxa_mortalidade'] > 2 else '#1F5C2E'),
+        dict(titulo="Custo Sanitario",     valor=f"R$ {kpis['custo_sanitario']:,.0f}",
+             subtitulo=f"R$ {kpis['custo_por_animal']:.0f}/animal"),
+    ])
+    st.write("")
+
+    # ── Linha 2: Alertas ──────────────────────────────────────────────────────
+    col_al1, col_al2, col_al3, col_al4 = st.columns(4)
+    with col_al1:
+        st.metric("Vacinas Pendentes",  kpis['vacinas_pendentes'],
+                 delta="atencao" if kpis['vacinas_pendentes'] > 0 else None,
+                 delta_color="inverse")
+    with col_al2:
+        st.metric("Em Tratamento",      kpis['em_tratamento'],
+                 delta="atencao" if kpis['em_tratamento'] > 0 else None,
+                 delta_color="inverse")
+    with col_al3:
+        st.metric("Risco Medio",        f"{kpis['risco_medio']}/100",
+                 delta="alto" if kpis['risco_medio'] >= 40 else None,
+                 delta_color="inverse")
+    with col_al4:
+        st.metric("Lotes Alto Risco",   kpis['n_lotes_alto_risco'],
+                 delta="critico" if kpis['n_lotes_alto_risco'] > 0 else None,
+                 delta_color="inverse")
+
+    st.divider()
+
+    # ── Linha 3: Lote mais critico ────────────────────────────────────────────
+    col_crit, col_evol = st.columns([1, 2])
+
+    with col_crit:
+        st.subheader("Lote Mais Critico")
+        lc = kpis['lote_critico']
+        if lc:
+            cores_n = {'Critico':'#B71C1C','Alto':'#E65100','Medio':'#F9A825',
+                      'Baixo':'#2E7D4F','Saudavel':'#1B5E20'}
+            cor_lc = cores_n.get(lc['risco_nivel'], '#546E7A')
+            st.markdown(
+                f"<div style='background:{cor_lc}22;border-left:4px solid {cor_lc};"
+                f"border-radius:8px;padding:16px'>"
+                f"<div style='font-size:18px;font-weight:700;color:{cor_lc}'>"
+                f"{lc['lote_nome']}</div>"
+                f"<div style='font-size:32px;font-weight:700;margin:8px 0'>"
+                f"{lc['risco_score']}<span style='font-size:14px'>/100</span></div>"
+                f"<div style='font-size:13px;color:#444'>{lc['risco_nivel']}</div>"
+                f"<div style='font-size:12px;color:#666;margin-top:8px'>"
+                f"{lc['principal_risco']}</div>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+            st.caption(f"{lc['animais_ativos']} animais ativos")
+        else:
+            empty_state("Nenhum lote encontrado", "Crie um lote para organizar seus animais.", icone="🌾")
+
+        st.write("")
+        st.subheader("Situacao Sanitaria")
+        if kpis['taxa_mortalidade'] >= 3:
+            st.error(f"Mortalidade critica: {kpis['taxa_mortalidade']}%")
+        elif kpis['taxa_mortalidade'] >= 1:
+            st.warning(f"Mortalidade elevada: {kpis['taxa_mortalidade']}%")
+        else:
+            st.success("Mortalidade dentro do normal")
+
+        if kpis['gmd_geral'] >= 0.8:
+            st.success(f"GMD excelente: {kpis['gmd_geral']:.3f} kg/d")
+        elif kpis['gmd_geral'] >= 0.5:
+            st.warning(f"GMD moderado: {kpis['gmd_geral']:.3f} kg/d")
+        else:
+            st.error(f"GMD abaixo do esperado: {kpis['gmd_geral']:.3f} kg/d")
+
+    with col_evol:
+        st.subheader("Ranking de Risco dos Lotes")
+        resumo_r = resumo_ia_fazenda(owner_id=owner_id())
+        if resumo_r:
+            df_rank = pd.DataFrame(resumo_r)[
+                ['lote_nome','risco_nivel','risco_score','animais_ativos','principal_risco']
+            ]
+            df_rank.columns = ['Lote','Nivel','Score','Animais','Principal Risco']
+            st.dataframe(df_rank, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ── Linha 4: Previsao de abate e anomalias ────────────────────────────────
+    col_prev, col_anom = st.columns(2)
+
+    with col_prev:
+        st.subheader("Previsao de Abate por Lote")
+        col_p1, col_p2 = st.columns(2)
+        with col_p1: peso_exec = st.number_input("Peso alvo (kg)", 300.0, 600.0, 450.0, key="exec_pa")
+        with col_p2: preco_exec = st.number_input("Preco/kg (R$)", 1.0, 50.0, 10.0, key="exec_pp")
+
+        total_prontos = total_proximos = total_receita = 0
+        for lid in [l[0] for l in listar_lotes_usuario()]:
+            try:
+                prev = prever_abate(lid, peso_exec, preco_exec, 12.0)
+                total_prontos  += sum(1 for p in prev if p['status'] == 'Pronto para abate')
+                total_proximos += sum(1 for p in prev if p['status'] == 'Proximo do abate')
+                total_receita  += sum(p['receita_prevista'] or 0 for p in prev if p['receita_prevista'])
+            except Exception as _e:
+                pass  # silenced
+
+        st.metric("Prontos para abate", total_prontos,
+                 delta="acao" if total_prontos > 0 else None)
+        st.metric("Proximos (30 dias)", total_proximos)
+        st.metric("Receita estimada total", f"R$ {total_receita:,.0f}")
+
+    with col_anom:
+        st.subheader("Anomalias de Peso Detectadas")
+        total_anom = total_graves = 0
+        for lid in [l[0] for l in listar_lotes_usuario()]:
+            try:
+                anoms = detectar_anomalias_peso(lid)
+                total_anom   += len(anoms)
+                total_graves += sum(1 for a in anoms if a['gravidade'] == 'Alta')
+            except Exception as _e:
+                pass  # silenced
+
+        if total_anom == 0:
+            st.info("Nenhuma anomalia detectada na fazenda")
+        else:
+            st.metric("Total de anomalias", total_anom)
+            if total_graves > 0:
+                st.error(f"{total_graves} anomalia(s) de gravidade ALTA")
+            st.caption("Acesse Analise > Anomalias de Peso para detalhes por lote")
+
+    # ============================================================
+    # PESQUISAR OCORRENCIAS
+    # ============================================================
+
+
+def page_margem_real(u):
+    hdr("Margem Real", "Margem Real do Lote", "Resultado: compra x venda x custos")
+    if st.session_state.get("msg_venda_ok"):
+        st.success(st.session_state.pop("msg_venda_ok"))
+    if is_vet():
+        st.error("Acesso restrito. Dados financeiros nao disponiveis para veterinarios.")
+        st.stop()
+    lote_id, _ = sel_lote("margem_lote")
+    if lote_id:
+        t1,t2 = st.tabs(["Resultado","Registrar Venda"])
+        with t1:
+            mg = calcular_margem_lote(lote_id)
+            if mg:
+                if not mg["venda_registrada"]: st.info("Registre uma venda na aba ao lado para ver a margem real.")
+                m1,m2,m3 = st.columns(3)
+                m1.metric("Custo de compra",  f"R$ {mg['custo_compra']:,.2f}")
+                m2.metric("Receita real",      f"R$ {mg['receita_real']:,.2f}")
+                m3.metric("Custo sanitario",   f"R$ {mg['custo_sanitario']:,.2f}")
+                st.metric("Margem liquida", f"R$ {mg['margem']:,.2f}", delta=f"{mg['margem_pct']:.1f}%",
+                          delta_color="normal" if mg["margem"]>=0 else "inverse")
+                if mg["venda_registrada"]:
+                    st.success(f"Frigorifico: {mg['frigorific']} | Venda: {mg['data_venda']}")
+                vendas = listar_vendas_lote(lote_id)
+                if vendas:
+                    df_v = pd.DataFrame(vendas, columns=["ID","Lote","Data","R$/kg","Peso kg","Frigorifico","Obs"])
+                    st.dataframe(df_v, use_container_width=True)
+        with t2:
+            st.subheader("Registrar Venda")
+            st.info(
+                "O registro de venda foi centralizado em **Rebanho → Vender Lote**, "
+                "onde você pode gerenciar todo o ciclo do lote: "
+                "ATIVO → Em Negociação → VENDIDO, com DRE automático e histórico completo."
+            )
+            st.markdown("""
+<div style="background:#E8F5EE;border-radius:10px;padding:16px 20px;margin-top:8px">
+  <div style="font-size:13px;font-weight:600;color:#1B4332;margin-bottom:6px">
+    O que você pode fazer em Vender Lote:
+  </div>
+  <ul style="font-size:12px;color:#374151;margin:0;padding-left:18px;line-height:1.8">
+    <li>Registrar data de venda, preço/@, peso total e frigorífico</li>
+    <li>Marcar o lote como "Em Negociação" antes de fechar o negócio</li>
+    <li>Gerar DRE automático com receita, custos e margem real</li>
+    <li>Consultar histórico completo de lotes vendidos</li>
+    <li>O lote sai automaticamente do Workspace após a venda</li>
+  </ul>
+</div>
+""", unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("💰 Ir para Vender Lote",
+                         type="primary", use_container_width=True,
+                         key="btn_goto_vender_lote"):
+                st.session_state.menu = "Vender Lote"
+                st.rerun()
+
+
+    # COTACAO CEPEA
+    # ============================================================
+
+
+def page_cotacao_cepea(u):
+    hdr("Cotacao Cepea", "Cotacao Boi Gordo", "Preco do boi gordo ESALQ/Cepea")
+    if is_vet():
+        sel_fazenda_vet(key="vet_faz_cotacao")
+
+    c1,c2 = st.columns([2,1])
+    with c1:
+        if st.button("Buscar cotacao atual"):
+            if _CEPEA:
+                from cepea import buscar_cotacao_cepea
+                with st.spinner("Buscando..."):
+                    res = buscar_cotacao_cepea()
+                if res["sucesso"]:
+                    salvar_cotacao(res["data"], res["preco"], res["fonte"])
+                    st.success(f"R$ {res['preco']:.2f}/@ - {res['data']}")
+                else:
+                    st.warning(f"Indisponivel: {res['msg']}")
+            else: st.warning("cepea.py nao encontrado.")
+    with c2:
+        with st.form("form_cot_m"):
+            dt_c = st.date_input("Data")
+            pr_c = st.number_input("Preco (R$/@)", 0.0, 1000.0, 195.0)
+            if st.form_submit_button("Salvar manual"):
+                salvar_cotacao(str(dt_c), pr_c, "manual")
+                toast_ok("Salvo!"); st.rerun()
+    cots = listar_cotacoes(0)
+    if cots:
+        ult = cots[-1]
+        st.metric("Ultima cotacao", f"R$ {ult[2]:.2f}/@", delta=f"{ult[1]} ({ult[3]})")
+        hist = historico_grafico(cots[-60:])
+        if hist["datas"]:
+            df_cot = pd.DataFrame({"Data":hist["datas"],"Preco R$/@":hist["precos"]}).set_index("Data")
+            safe_line_chart(df_cot)
     else:
-        dt_ini = f"{_ano}-01-01"
-        dt_fim = f"{_ano}-12-31"
+        st.info("Nenhuma cotacao. Insira manualmente ou clique em buscar.")
 
-    p = _ph()
-
-    # Receitas de venda no período
-    receitas_venda = 0.0
-    n_vendas = 0
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"SELECT COALESCE(SUM(v.preco_venda_kg * v.peso_total_kg),0),"
-                f"COUNT(*) "
-                f"FROM vendas_lote v "
-                f"JOIN lotes l ON l.id=v.lote_id "
-                f"WHERE l.owner_id={p} "
-                f"AND v.data_venda BETWEEN {p} AND {p}",
-                (owner_id, dt_ini, dt_fim)
-            )
-            row = cur.fetchone()
-            receitas_venda = float(row[0] or 0)
-            n_vendas       = int(row[1] or 0)
-    except Exception as _ew:
-        _log_war.debug("excecao ignorada: %s", _ew)
-    custo_compra = 0.0
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"SELECT COALESCE(SUM("
-                f"COALESCE(preco_por_animal,0) * "
-                f"COALESCE(qtd_recebida,qtd_comprada,0)"
-                f"),0) "
-                f"FROM lotes "
-                f"WHERE owner_id={p} "
-                f"AND data_entrada BETWEEN {p} AND {p}",
-                (owner_id, dt_ini, dt_fim)
-            )
-            custo_compra = float(cur.fetchone()[0] or 0)
-    except Exception as _ew:
-        _log_war.debug("excecao ignorada: %s", _ew)
-    custos_var  = 0.0
-    custos_cats = {}
-    try:
-        with _conexao() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                f"SELECT cl.categoria, COALESCE(SUM(cl.valor),0) "
-                f"FROM custos_lote cl "
-                f"JOIN lotes l ON l.id=cl.lote_id "
-                f"WHERE l.owner_id={p} "
-                f"AND cl.data_lancamento BETWEEN {p} AND {p} "
-                f"GROUP BY cl.categoria",
-                (owner_id, dt_ini, dt_fim)
-            )
-            for row in cur.fetchall():
-                custos_cats[row[0]] = float(row[1])
-            custos_var = sum(custos_cats.values())
-    except Exception as _ew:
-        _log_war.debug("excecao ignorada: %s", _ew)
-
-    custo_total  = custo_compra + custos_var
-    margem_bruta = receitas_venda - custo_total
-    margem_pct   = round(100 * margem_bruta / max(receitas_venda, 1), 1)
-
-    return {
-        "periodo":       f"{_mes:02d}/{_ano}" if _mes else str(_ano),
-        "dt_ini":        dt_ini,
-        "dt_fim":        dt_fim,
-        "receita_venda": receitas_venda,
-        "n_vendas":      n_vendas,
-        "custo_compra":  custo_compra,
-        "custos_var":    custos_var,
-        "custos_cats":   custos_cats,
-        "custo_total":   custo_total,
-        "margem_bruta":  margem_bruta,
-        "margem_pct":    margem_pct,
-    }
+    # ============================================================
+    # RASTREABILIDADE GTA
+    # ============================================================
 
 
-def curva_resultado_mensal(owner_id, ano=None):
-    """Retorna resultado mensal para gráficos.
-    Lista de 12 dicts com receita, custo e margem por mês."""
-    from datetime import date
-    _ano = ano or date.today().year
-    meses = []
-    acum  = 0.0
 
-    for m in range(1, 13):
-        dre = dre_por_periodo(owner_id, ano=_ano, mes=m)
-        acum += dre["margem_bruta"]
-        meses.append({
-            "mes":         f"{m:02d}/{_ano}",
-            "mes_num":     m,
-            "receita":     dre["receita_venda"],
-            "custo":       dre["custo_total"],
-            "margem":      dre["margem_bruta"],
-            "margem_acum": acum,
-        })
-    return meses
+def page_rastreabilidade_gta(u):
+    hdr("Rastreabilidade GTA", "GTA e SISBOV", "Guia de Transito Animal e certificacao")
+    if is_vet():
+        st.error("Acesso restrito. Rastreabilidade GTA disponivel apenas para fazendeiros e admin.")
+        st.stop()
+    t1,t2,t3 = st.tabs(["GTAs","Emitir GTA","SISBOV"])
+    with t1:
+        gtas = listar_gta()
+        if gtas:
+            df_g = pd.DataFrame(gtas, columns=["ID","Lote ID","Lote","Num GTA","Emissao","Origem","Destino","Qtd","Finalidade","Obs"])
+            st.dataframe(df_g, use_container_width=True)
+        else: st.info("Nenhuma GTA.")
+    with t2:
+        lotes = listar_lotes_usuario()
+        if not lotes: st.warning("Cadastre um lote.")
+        else:
+            dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+            with st.form("form_gta"):
+                g1,g2 = st.columns(2)
+                with g1:
+                    lote_g  = st.selectbox("Lote", list(dict_l.keys()))
+                    num_g   = st.text_input("Numero GTA *")
+                    data_g  = st.date_input("Data emissao")
+                    qtd_g   = st.number_input("Quantidade animais", 1, step=1)
+                with g2:
+                    orig_g  = st.text_input("Origem *")
+                    dest_g  = st.text_input("Destino *")
+                    fin_g   = st.selectbox("Finalidade", ["Abate","Venda","Recria","Engorda","Reproducao"])
+                    obs_g   = st.text_area("Observacao")
+                if st.form_submit_button("Registrar GTA", type="primary"):
+                    if num_g and orig_g and dest_g:
+                        registrar_gta(dict_l[lote_g], num_g, str(data_g), orig_g, dest_g, int(qtd_g), fin_g, obs_g)
+                        registrar_auditoria(u["id"], "gta", "gta", dict_l[lote_g], num_g)
+                        st.success("GTA registrada!"); st.rerun()
+                    else: st.error("Preencha numero, origem e destino.")
+    with t3:
+        lotes = listar_lotes_usuario()
+        if lotes:
+            dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
+            s1,s2 = st.columns(2)
+            with s1: lote_s = st.selectbox("Lote", list(dict_l.keys()), key="sib_lote")
+            anim_s = listar_animais_por_lote(dict_l[lote_s])
+            if anim_s:
+                dict_as = {f"{a[1]} (ID {a[0]})": a[0] for a in anim_s}
+                with s2: anim_ss = st.selectbox("Animal", list(dict_as.keys()), key="sib_anim")
+                aid_s = dict_as[anim_ss]
+                sb = obter_sisbov(aid_s)
+                if sb: st.success(f"SISBOV: **{sb[2]}** - {sb[3]}")
+                else:  st.info("Sem SISBOV.")
+                with st.form("form_sib"):
+                    num_sb = st.text_input("Numero SISBOV (15 digitos)")
+                    dt_sb  = st.date_input("Data certificacao")
+                    if st.form_submit_button("Cadastrar", type="primary"):
+                        if len(num_sb) == 15:
+                            registrar_sisbov(aid_s, num_sb, str(dt_sb))
+                            toast_ok("SISBOV cadastrado!"); st.rerun()
+                        else: st.error("SISBOV deve ter 15 digitos.")
+
+    # ============================================================
+    # EXPORTAR RELATORIOS
+    # ============================================================
