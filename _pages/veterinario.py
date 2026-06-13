@@ -1350,6 +1350,7 @@ def page_monitoramento(u):
 # ════════════════════════════════════════════════════════════════════════════
 def page_gestao_financeira_vet(u):
     _requer_vet()
+    import pandas as pd
     hdr("Gestao Financeira", "Honorarios e Faturamento",
         "Controle de cobranças, recebimentos e extrato por fazenda")
 
