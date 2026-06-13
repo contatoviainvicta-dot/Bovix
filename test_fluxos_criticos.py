@@ -159,6 +159,20 @@ class TestLoginCadastro:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestLote:
+    def test_listar_lotes_admin_e_usuario_mesma_estrutura(self, db):
+        """Regressão: listar_lotes(owner_id=None) deve retornar 13 campos
+        (igual ao caso com owner_id). Bug: SELECT do admin tinha 12 colunas."""
+        lid = db.adicionar_lote("L1", "", "2026-01-01", 5, 5, "", owner_id=1)
+        # Caso usuário
+        r_user = db.listar_lotes(owner_id=1)
+        # Caso admin (owner_id=None)
+        r_admin = db.listar_lotes(owner_id=None)
+        assert len(r_user) >= 1
+        assert len(r_admin) >= 1
+        # Ambos devem ter 13 campos (incluindo status no índice 12)
+        assert len(r_user[0]) == 13
+        assert len(r_admin[0]) == 13
+
 
     def test_criar_lote_retorna_id(self, db):
         lote_id = db.adicionar_lote(
