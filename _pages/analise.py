@@ -109,16 +109,14 @@ def page_dashboard_sanitario(u):
     else:
         animais = listar_animais_por_lote(dict_l[escolha])
 
-    # Query agregada em vez de N+1
+    # Batch: buscar ocorrências de todos os lotes de uma vez
     if escolha == "Todos os lotes":
-        import database as _dbl
         todas_oc = []
-        for l in listar_lotes_usuario():
+        for l in lotes:
             todas_oc.extend(listar_ocorrencias_todos_animais(l[0]))
     else:
         lote_id_san = dict_l.get(escolha)
         todas_oc = list(listar_ocorrencias_todos_animais(lote_id_san)) if lote_id_san else []
-        # Ajustar indices para compatibilidade (sem coluna extra "identificacao")
         todas_oc = [r[:10] for r in todas_oc]
 
     df_oc = pd.DataFrame(todas_oc, columns=["id","animal_id","data","tipo","descricao","gravidade","custo","dias_rec","status","identificacao"]) if todas_oc else pd.DataFrame(columns=["id","animal_id","data","tipo","descricao","gravidade","custo","dias_rec","status"])
@@ -147,9 +145,11 @@ def page_dashboard_sanitario(u):
                 st.subheader("Por gravidade")
                 safe_bar_chart(df_oc["gravidade"].value_counts())
         with t2:
+            # Pré-carregar animais de todos os lotes (evita N+1)
+            anim_por_lote = {l[0]: listar_animais_por_lote(l[0]) for l in lotes}
             dados_l = []
             for lote in lotes:
-                anim_l = listar_animais_por_lote(lote[0])
+                anim_l = anim_por_lote.get(lote[0], [])
                 tot_l  = len(anim_l)
                 ids_l  = [a[0] for a in anim_l]
                 oc_l   = df_oc[df_oc["animal_id"].isin(ids_l)] if len(df_oc)>0 else pd.DataFrame()
