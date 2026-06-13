@@ -497,8 +497,8 @@ def page_dashboard_executivo(u):
                              use_container_width=True):
                     st.session_state.menu = "Historico Lotes"
                     st.rerun()
-        except Exception:
-            pass
+        except Exception as _e:
+            st.caption(f"⚠️ Histórico indisponível.")
 
     # ── ABA 7: DRE POR PERÍODO ───────────────────────────────────────────
 
