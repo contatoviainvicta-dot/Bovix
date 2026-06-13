@@ -579,7 +579,9 @@ def calcular_risco_sanitario(lote_id):
 
     animais = listar_animais_por_lote(lote_id)
     if not animais:
-        return dict(score=0, nivel='Sem dados', fatores=[], recomendacoes=[])
+        return dict(score=0, nivel='Sem dados', fatores=[],
+                    recomendacoes=['Adicione animais ao lote para análise'],
+                    mortalidade=0.0, ocorrencias_graves=0, gmds=[])
 
     total = len(animais)
 
