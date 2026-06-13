@@ -263,7 +263,7 @@ def detectar_anomalias_peso(lote_id):
 
 
 def resumo_ia_fazenda(owner_id=None):
-    from database import calcular_risco_sanitario, listar_animais_por_lote, listar_lotes  # lazy import
+    from database import calcular_risco_sanitario, listar_animais_por_lote, listar_lotes, resumo_lote  # lazy import
     """
     Resumo de IA para todos os lotes da fazenda.
     Retorna lista de lotes com score de risco e previsao de abate.
