@@ -391,6 +391,23 @@ class TestVenda:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestDRE:
+    def test_margem_bruta_peso_medio_correto(self, db):
+        """Otimização N+1: margem_bruta_lote deve calcular o peso médio
+        a partir da ÚLTIMA pesagem de cada animal (query única)."""
+        lid = db.adicionar_lote("L", "", "2026-01-01", 3, 3, "", owner_id=1)
+        db.atualizar_lote(lid, "L", "", "2026-01-01", 3, 3, "",
+                          preco_por_animal=1500.0)
+        for j in range(3):
+            aid = db.adicionar_animal(f"A{j}", 24, lid, peso_entrada=300)
+            db.adicionar_pesagem(aid, 320, "2026-02-01")
+            db.adicionar_pesagem(aid, 400 + j, "2026-03-01")  # última conta
+        m = db.margem_bruta_lote(lid)
+        # Última pesagem: 400,401,402 → média 401
+        assert abs(m["peso_medio_atual"] - 401.0) < 0.1
+        assert m["n_animais"] == 3
+        assert m["custo_compra"] == 4500.0  # 3 * 1500
+
+
 
     def test_resumo_venda_calcula_margem(self, db):
         lid = db.adicionar_lote("L", "", "2026-01-01", 2, 2, "", owner_id=1)
