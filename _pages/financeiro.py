@@ -72,17 +72,33 @@ def page_painel_de_decisao(u):
     dados = []
     for l in lotes:
         anim = listar_animais_por_lote(l[0])
+        if not anim:
+            dados.append((l[1], 0, 0, 0, 0))
+            continue
+        ids = [a[0] for a in anim]
+        # Batch: 1 query para todas as pesagens do lote
+        todas_ps = listar_pesagens_todos_animais(l[0])
+        ps_por_animal = {}
+        for p in todas_ps:
+            ps_por_animal.setdefault(p[1], []).append(p)
+        # Batch: 1 query para todas as ocorrências do lote
+        todas_oc = listar_ocorrencias_todos_animais(l[0])
+        oc_por_animal = {}
+        for oc in todas_oc:
+            oc_por_animal.setdefault(oc[1], []).append(oc)
+
         ganho = custo_s = dias_t = 0
         for a in anim:
-            ps = listar_pesagens(a[0])
+            ps = ps_por_animal.get(a[0], [])
             if len(ps) > 1:
+                import pandas as pd
                 df = pd.DataFrame(ps, columns=["id","aid","peso","data"])
                 df["data"] = pd.to_datetime(df["data"])
                 df = df.sort_values("data")
                 g = df["peso"].iloc[-1]-df["peso"].iloc[0]
                 d = (df["data"].iloc[-1]-df["data"].iloc[0]).days
                 if g > 0 and d > 0: ganho += g; dias_t += d
-            for oc in listar_ocorrencias(a[0]):
+            for oc in oc_por_animal.get(a[0], []):
                 if oc[6]: custo_s += oc[6]
         custo_op = cd * len(anim) * dias_t
         receita  = ganho * pk
