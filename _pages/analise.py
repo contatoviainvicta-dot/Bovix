@@ -563,18 +563,18 @@ def page_risco_sanitario_ia(u):
             )
         with c2:
             st.metric("Mortalidade", f"{risco.get('mortalidade', 0)}%",
-                     delta="critico" if risco['mortalidade'] >= 3 else None,
+                     delta="critico" if risco.get('mortalidade', 0) >= 3 else None,
                      delta_color="inverse")
-            st.metric("Ocorr. Graves", risco['ocorrencias_graves'],
-                     delta="atencao" if risco['ocorrencias_graves'] > 0 else None,
+            st.metric("Ocorr. Graves", risco.get('ocorrencias_graves', 0),
+                     delta="atencao" if risco.get('ocorrencias_graves', 0) > 0 else None,
                      delta_color="inverse")
         with c3:
             st.subheader("Fatores de risco")
-            for fator in risco['fatores']:
+            for fator in risco.get('fatores', []):
                 st.warning(f"⚠ {fator}")
 
             st.subheader("Recomendacoes")
-            for rec in risco['recomendacoes']:
+            for rec in risco.get('recomendacoes', []):
                 st.info(f"→ {rec}")
 
         st.divider()
