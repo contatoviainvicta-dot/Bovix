@@ -52,8 +52,13 @@ def listar_lotes(owner_id=None):
                 "qtd_recebida,transporte,"
                 "COALESCE(tipo_alimentacao,''),COALESCE(tipo_dieta,''),"
                 "COALESCE(preco_por_animal,0),COALESCE(data_venda,''),"
-                "COALESCE(owner_id,0) "
-                "FROM lotes ORDER BY data_entrada DESC,id DESC"
+                "COALESCE(owner_id,0),"
+                "COALESCE(status,'ATIVO') "
+                "FROM lotes "
+                "WHERE COALESCE(ativo,1)=1 "
+                "AND UPPER(COALESCE(status,'ATIVO')) "
+                "NOT IN ('VENDIDO','ARQUIVADO','ENCERRADO') "
+                "ORDER BY data_entrada DESC,id DESC"
             )
         # Usar fetchall() com indices posicionais para evitar KeyError
         rows = cur.fetchall()
