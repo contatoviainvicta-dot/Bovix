@@ -11,6 +11,27 @@ from db.core import (
 from db.schema import _log_db, _log_err, _log_war, _garantir_tabelas_vet
 
 
+def _colunas_tabela(cur, tabela):
+    """Retorna o conjunto de nomes de colunas de uma tabela.
+    Funciona em PostgreSQL (information_schema) e SQLite (PRAGMA).
+    Usado para tornar queries resilientes a diferencas de schema
+    entre ambientes (producao pode ter colunas com nomes legados)."""
+    try:
+        if _usar_postgres():
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name=%s",
+                (tabela,)
+            )
+            return {r[0] for r in cur.fetchall()}
+        else:
+            cur.execute(f"PRAGMA table_info({tabela})")
+            return {r[1] for r in cur.fetchall()}
+    except Exception as _ew:
+        _log_war.debug("nao foi possivel ler colunas de %s: %s", tabela, _ew)
+        return set()
+
+
 def adicionar_exame(animal_id, vet_id, tipo_exame, data_coleta,
                    laboratorio="", resultado="", interpretacao="",
                    status="aguardando", alerta=0):
@@ -535,20 +556,7 @@ def adicionar_protocolo(vet_id, nome, descricao="", categoria="geral"):
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
-        # Detectar colunas disponiveis
-        cols = set()
-        try:
-            if _usar_postgres():
-                cur.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name='protocolos_sanitarios'"
-                )
-                cols = {r[0] for r in cur.fetchall()}
-            else:
-                cur.execute("PRAGMA table_info(protocolos_sanitarios)")
-                cols = {r[1] for r in cur.fetchall()}
-        except Exception as _ew:
-            _log_war.debug("nao foi possivel ler colunas: %s", _ew)
+        cols = _colunas_tabela(cur, "protocolos_sanitarios")
 
         # Montar colunas/valores dinamicamente
         campos = ["vet_id", "nome", "categoria"]
@@ -588,20 +596,7 @@ def listar_protocolos(vet_id):
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
-        # Descobrir quais colunas a tabela realmente tem
-        cols = set()
-        try:
-            if _usar_postgres():
-                cur.execute(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name='protocolos_sanitarios'"
-                )
-                cols = {r[0] for r in cur.fetchall()}
-            else:
-                cur.execute("PRAGMA table_info(protocolos_sanitarios)")
-                cols = {r[1] for r in cur.fetchall()}
-        except Exception as _ew:
-            _log_war.debug("nao foi possivel ler colunas: %s", _ew)
+        cols = _colunas_tabela(cur, "protocolos_sanitarios")
 
         # Montar SELECT so com colunas que existem (fallback para literais)
         col_desc = "descricao" if "descricao" in cols else "''"
@@ -623,18 +618,40 @@ def listar_protocolos(vet_id):
 
 def adicionar_item_protocolo(protocolo_id, ordem, tipo, nome, dia_offset, observacao=""):
     """Adiciona item (vacina/medicacao) ao protocolo.
-    Mapeia para o schema real: nome->descricao, dia_offset->dia_aplicacao,
-    observacao->observacoes. O parametro 'ordem' e mantido na assinatura por
-    compatibilidade com as telas, mas a tabela usa dia_aplicacao para ordenar."""
+    Resiliente: detecta os nomes reais das colunas (producao pode usar
+    nomes legados como dia_offset/nome/observacao em vez do schema oficial)."""
     _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
+        cols = _colunas_tabela(cur, "protocolo_itens")
+
+        campos = ["protocolo_id", "tipo"]
+        valores = [protocolo_id, tipo]
+        # Nome do item: descricao (schema) ou nome (legado)
+        if "descricao" in cols:
+            campos.append("descricao"); valores.append(nome)
+        elif "nome" in cols:
+            campos.append("nome"); valores.append(nome)
+        # Dia: dia_aplicacao (schema) ou dia_offset (legado)
+        if "dia_aplicacao" in cols:
+            campos.append("dia_aplicacao"); valores.append(int(dia_offset))
+        elif "dia_offset" in cols:
+            campos.append("dia_offset"); valores.append(int(dia_offset))
+        # Observacao
+        if "observacoes" in cols:
+            campos.append("observacoes"); valores.append(observacao or "")
+        elif "observacao" in cols:
+            campos.append("observacao"); valores.append(observacao or "")
+        # Ordem (se existir no schema legado)
+        if "ordem" in cols:
+            campos.append("ordem"); valores.append(int(ordem))
+
+        cols_sql = ",".join(campos)
+        ph_sql = ",".join([p] * len(valores))
         cur.execute(
-            f"INSERT INTO protocolo_itens "
-            f"(protocolo_id,tipo,descricao,dia_aplicacao,observacoes) "
-            f"VALUES({p},{p},{p},{p},{p})",
-            (protocolo_id, tipo, nome, int(dia_offset), observacao or "")
+            f"INSERT INTO protocolo_itens ({cols_sql}) VALUES({ph_sql})",
+            tuple(valores)
         )
         conn.commit()
         return True
@@ -642,17 +659,27 @@ def adicionar_item_protocolo(protocolo_id, ordem, tipo, nome, dia_offset, observ
 
 def listar_itens_protocolo(protocolo_id):
     """Lista itens de um protocolo na ordem correta.
-    Retorna 7 campos (id, protocolo_id, ordem, tipo, nome, dia, obs) mapeando
-    do schema real (descricao->nome, dia_aplicacao->dia, observacoes->obs).
-    Como nao ha coluna 'ordem', usa dia_aplicacao para ordenar."""
+    Resiliente a variacoes de schema entre ambientes (producao pode usar
+    nomes de coluna diferentes do schema oficial). Sempre retorna 7 campos:
+    (id, protocolo_id, ordem, tipo, nome, dia, obs)."""
     _garantir_tabelas_vet()
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
+        cols = _colunas_tabela(cur, "protocolo_itens")
+        # Mapear nome real -> alias de saida (com fallbacks)
+        col_nome = "descricao" if "descricao" in cols else (
+                   "nome" if "nome" in cols else "''")
+        col_dia  = "dia_aplicacao" if "dia_aplicacao" in cols else (
+                   "dia_offset" if "dia_offset" in cols else "0")
+        col_obs  = "observacoes" if "observacoes" in cols else (
+                   "observacao" if "observacao" in cols else "''")
+        col_ordem = "ordem" if "ordem" in cols else col_dia
+
         cur.execute(
-            f"SELECT id, protocolo_id, dia_aplicacao, tipo, descricao, "
-            f"dia_aplicacao, observacoes "
-            f"FROM protocolo_itens WHERE protocolo_id={p} ORDER BY dia_aplicacao",
+            f"SELECT id, protocolo_id, {col_ordem}, tipo, {col_nome}, "
+            f"{col_dia}, {col_obs} "
+            f"FROM protocolo_itens WHERE protocolo_id={p} ORDER BY {col_dia}",
             (protocolo_id,)
         )
         return cur.fetchall()
