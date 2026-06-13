@@ -2126,7 +2126,7 @@ def page_campanhas_vacinacao(u):
                     meta_c_an  = st.number_input(
                         "Meta de animais a vacinar",
                         min_value=1,
-                        value=contar_animais_no_lote(dict_lc[lote_c_sel])
+                        value=max(1, contar_animais_no_lote(dict_lc[lote_c_sel]))
                     )
                     if st.form_submit_button("Adicionar Lote"):
                         adicionar_lote_campanha(
