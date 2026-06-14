@@ -116,7 +116,7 @@ def prever_abate(lote_id, peso_alvo_kg=450.0, preco_kg=10.0, custo_diario=12.0):
     Retorna lista de dicts por animal com previsao.
     """
     import pandas as pd
-    from datetime import date as _d, timedelta as _td
+    from datetime import date as _d, timedelta as timedelta
 
     animais = listar_animais_por_lote(lote_id)
     if not animais:
@@ -168,7 +168,7 @@ def prever_abate(lote_id, peso_alvo_kg=450.0, preco_kg=10.0, custo_diario=12.0):
 
         kg_faltando = max(0, peso_alvo_kg - peso_atual)
         dias_rest = int(kg_faltando / gmd) if gmd > 0 else 9999
-        data_prev = hoje + _td(days=dias_rest)
+        data_prev = hoje + timedelta(days=dias_rest)
         receita = peso_alvo_kg * preco_kg
         custo = custo_diario * dias_rest
         margem = receita - custo
@@ -349,7 +349,7 @@ def kpis_executivos(owner_id=None, lote_ids=None):
     lote_ids: lista de IDs especifica (para vet com fazendas aprovadas)
     """
     import pandas as pd
-    from datetime import date as _d, timedelta as _td
+    from datetime import date as _d, timedelta as timedelta
 
     if lote_ids is not None:
         # Buscar lotes pelo ID diretamente
@@ -412,7 +412,7 @@ def kpis_executivos(owner_id=None, lote_ids=None):
     evolucao = []
     hoje = _d.today()
     for m in range(5, -1, -1):
-        mes_ref = hoje.replace(day=1) - _td(days=m*30)
+        mes_ref = hoje.replace(day=1) - timedelta(days=m*30)
         mes_str = mes_ref.strftime('%b/%y')
         with _conexao() as conn:
             cur = conn.cursor()
