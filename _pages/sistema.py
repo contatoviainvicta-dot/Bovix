@@ -1082,7 +1082,7 @@ def page_gestao_usuarios(u):
                                     conn.commit()
                                 registrar_auditoria(u["id"], "suspender_fazendeiro",
                                                     "usuarios", fid, fnome)
-                                st.warning(f"Acesso de {fnome} suspenso.")
+                                toast_ok(f"Acesso de {fnome} suspenso.")
                                 st.rerun()
                         elif status_faz in ("suspenso", "pendente"):
                             if st.button("Reativar acesso", key=f"reativ_{fid}"):
