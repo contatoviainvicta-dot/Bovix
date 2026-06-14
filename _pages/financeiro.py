@@ -92,7 +92,7 @@ def page_painel_de_decisao(u):
             ps = ps_por_animal.get(a[0], [])
             if len(ps) > 1:
                 import pandas as pd
-                df = pd.DataFrame(ps, columns=["id","aid","peso","data"])
+                df = pd.DataFrame(ps, columns=["id","aid","peso","data","identificacao"])
                 df["data"] = pd.to_datetime(df["data"])
                 df = df.sort_values("data")
                 g = df["peso"].iloc[-1]-df["peso"].iloc[0]
