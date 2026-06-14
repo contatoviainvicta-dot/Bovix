@@ -14,6 +14,7 @@ try:
 except ImportError:
     bcrypt = None
 
+import streamlit as st
 from db.core import (
     _conexao, _ph, _fetch, _fetchone, _usar_postgres, _cached,
     invalidar_cache,
@@ -201,7 +202,8 @@ def criar_usuario(nome, email, senha, perfil="fazendeiro", fazenda_id=None, owne
             uid = cur.lastrowid
         # Se nao tem owner_id definido (primeiro admin), ele e dono de si mesmo
         if owner_id is None and perfil == 'admin':
-            cur.execute(f"UPDATE usuarios SET owner_id={p} WHERE id={p}", (uid, uid))
+            cur.execute(f"UPDATE usuarios SET owner_id={p} WHERE id={p}", (uid, uid
+))
         return uid
 
 
