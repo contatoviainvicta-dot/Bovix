@@ -284,7 +284,7 @@ def calendario_abate(owner_id):
         pesos_atuais = []
 
         for a in animais:
-            peso_alvo = float(a[7] or 450) if len(a) > 7 else 450
+            peso_alvo = float(a[4] or 450) if len(a) > 4 else 450
             pes = listar_pesagens(a[0])
             if not pes:
                 continue
