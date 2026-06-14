@@ -239,7 +239,7 @@ def margem_bruta_lote(lote_id):
         pesos_atuais = list(ult_peso.values())
         pesos_alvo   = []
         for a in animais:
-            peso_alvo_a = float(a[7] or 0) if len(a) > 7 else 0
+            peso_alvo_a = float(a[4] or 0) if len(a) > 4 else 0
             if peso_alvo_a:
                 pesos_alvo.append(peso_alvo_a)
 
