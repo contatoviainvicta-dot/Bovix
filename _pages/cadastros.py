@@ -235,7 +235,7 @@ def page_registrar_pesagem(u):
                 else:
                     adicionar_pesagem(animal_id, peso, str(data_p))
                     registrar_auditoria(u["id"], "pesagem", "pesagens", animal_id, f"{peso}kg em {data_p}")
-                    st.success(f"Pesagem de **{peso:.1f} kg** registrada!")
+                    toast_ok(f"Pesagem de **{peso:.1f} kg** registrada!")
                     st.rerun()
 
     # ============================================================
@@ -277,7 +277,7 @@ def page_registrar_ocorrencia(u):
             if salvar:
                 oid = adicionar_ocorrencia(animal_id, str(data_oc), tipo_oc, desc_oc, grav_oc, custo_oc, dias_oc, stat_oc)
                 registrar_auditoria(u["id"], "ocorrencia", "ocorrencias", oid, f"{tipo_oc}/{grav_oc}")
-                st.success("Ocorrencia registrada!")
+                toast_ok("Ocorrência registrada!")
                 st.rerun()
 
     # ============================================================
@@ -431,7 +431,7 @@ def page_editar_lote(u):
             resultados = sincronizar_todos_lotes()
             for lid_s, nome_s, n_s in resultados:
                 st.markdown(f"Lote **{nome_s}**: {n_s} animais ativos")
-            st.success("Contagens atualizadas com sucesso!")
+            toast_ok("Contagens atualizadas!")
             st.rerun()
 
     if is_vet():
@@ -483,7 +483,7 @@ def page_editar_lote(u):
                     atualizar_lote(lote_id, nome_e, desc_e, str(data_e), qtd_comp_e, ativos_reais, transp_e, preco_e)
                     registrar_auditoria(u["id"], "editar_lote", "lotes", lote_id, nome_e)
                     limpar_cache()
-                    toast_ok("Lote **{nome_e}** atualizado! Animais ativos: {ativos_reais}")
+                    toast_ok(f"Lote **{nome_e}** atualizado! Animais ativos: {ativos_reais}")
                     st.rerun()
 
         with tab_del:
@@ -573,13 +573,25 @@ def page_editar_animal(u):
 
             st.divider()
             st.caption("Zona de perigo")
-            if st.button("Excluir este animal", type="secondary",
-                         key="excluir_1_anim"):
-                excluir_animal(anim_id)
-                registrar_auditoria(u["id"], "excluir_animal",
-                                   "animais", anim_id, "excluido")
-                toast_ok(f"Animal {_d_ident} excluído.")
-                limpar_cache(); st.rerun()
+            _key_conf = f"confirm_excluir_{anim_id}"
+            if not st.session_state.get(_key_conf):
+                if st.button("🗑️ Excluir este animal", type="secondary",
+                             key="excluir_1_anim"):
+                    st.session_state[_key_conf] = True
+                    st.rerun()
+            else:
+                st.warning(f"⚠️ Confirma exclusão de **{_d_ident}**? Esta ação não pode ser desfeita.")
+                c_sim, c_nao = st.columns(2)
+                if c_sim.button("✅ Sim, excluir", type="primary", key="excluir_confirm_sim"):
+                    excluir_animal(anim_id)
+                    registrar_auditoria(u["id"], "excluir_animal",
+                                       "animais", anim_id, "excluido")
+                    st.session_state.pop(_key_conf, None)
+                    toast_ok(f"Animal {_d_ident} excluído.")
+                    limpar_cache(); st.rerun()
+                if c_nao.button("❌ Cancelar", key="excluir_confirm_nao"):
+                    st.session_state.pop(_key_conf, None)
+                    st.rerun()
 
     # ── ABA 2: Excluir em massa com data_editor ──────────────────────────────
     with tab_excluir:
@@ -741,7 +753,7 @@ def page_editar_pesagens(u):
                                 atualizar_pesagem(pes_id, peso_novo, str(data_nova))
                                 registrar_auditoria(u["id"], "editar_pesagem", "pesagens", pes_id,
                                                     f"{peso_novo}kg em {data_nova}")
-                                st.success("Pesagem corrigida!")
+                                toast_ok("Pesagem corrigida!")
                                 st.rerun()
 
                 with tab_del_p:
@@ -752,7 +764,7 @@ def page_editar_pesagens(u):
                         if st.button("Excluir pesagem", type="primary"):
                             excluir_pesagem(pes_id)
                             registrar_auditoria(u["id"], "excluir_pesagem", "pesagens", pes_id, "excluido")
-                            st.success("Pesagem excluida.")
+                            toast_ok("Pesagem excluída.")
                             st.rerun()
 
     # ============================================================
@@ -901,7 +913,7 @@ def page_gerenciar_ocorrencias(u):
                 if stat_oe == "Resolvido" and stat_cur == "Em tratamento":
                     toast_ok("Tratamento encerrado! Ocorrencia marcada como Resolvida.")
                 else:
-                    st.success("Ocorrencia atualizada!")
+                    toast_ok("Ocorrência atualizada!")
                 st.rerun()
 
         with tab_del_o:
@@ -915,7 +927,7 @@ def page_gerenciar_ocorrencias(u):
                     if st.button("Excluir ocorrencia definitivamente", type="primary"):
                         excluir_ocorrencia(oc_id)
                         registrar_auditoria(u["id"], "excluir_ocorrencia", "ocorrencias", oc_id, "excluido")
-                        st.success("Ocorrencia excluida.")
+                        toast_ok("Ocorrência excluída.")
                         st.rerun()
 
 
@@ -1000,7 +1012,7 @@ def page_transferir_animal(u):
                         ok_count += 1
                 registrar_auditoria(u["id"], "transferir_massa", "animais", lote_orig_id,
                                     f"{ok_count} animais -> {lote_dest_s}")
-                st.success(f"{ok_count} animal(is) transferido(s) com sucesso!")
+                toast_ok(f"{ok_count} animal(is) transferido(s)!")
                 if ok_count > 0:
                     pass  # transferencia ok
                 st.rerun()
@@ -1067,7 +1079,7 @@ def page_status_do_lote(u):
                     if st.button("Salvar", key=f"sl_btn_{lid_s}", type="primary"):
                         atualizar_status_lote(lid_s, novo_status)
                         registrar_auditoria(u["id"], "status_lote", "lotes", lid_s, novo_status)
-                        toast_ok("Status atualizado para {novo_status}")
+                        toast_ok(f"Status atualizado para {novo_status}")
                         st.rerun()
 
     with tab_animais:
@@ -1108,7 +1120,7 @@ def page_status_do_lote(u):
                         if st.button("Salvar", key=f"sa_btn_{aid_s}", type="primary"):
                             atualizar_status_animal(aid_s, novo_sa)
                             registrar_auditoria(u["id"], "status_animal", "animais", aid_s, novo_sa)
-                            st.success(f"Status: {novo_sa}")
+                            toast_ok(f"Status: {novo_sa}")
                             st.rerun()
 
     # ============================================================
