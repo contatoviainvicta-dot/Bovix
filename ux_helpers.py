@@ -581,3 +581,35 @@ hr {
 def aplicar_css_global():
     """Aplica o CSS global do Auroque. Chamar uma vez no início de cada página."""
     st.markdown(_CSS_AUROQUE, unsafe_allow_html=True)
+
+
+# ── PROTEÇÃO GLOBAL DE TELAS ─────────────────────────────────────────────────
+
+def pagina_protegida(fn):
+    """Decorator que envolve funções de página com tratamento de erro global.
+    Captura qualquer exceção não tratada e exibe mensagem amigável em vez
+    de stack trace para o usuário final.
+
+    Uso: @pagina_protegida
+         def page_minha_tela(u): ...
+    """
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as _e:
+            import logging
+            logging.getLogger("auroque").error(
+                "Erro em %s: %s", fn.__name__, _e, exc_info=True
+            )
+            st.error(
+                f"⚠️ Ocorreu um erro ao carregar esta tela. "
+                f"Tente recarregar a página. "
+                f"Se o problema persistir, entre em contato com o suporte.",
+                icon="🚨"
+            )
+            with st.expander("Detalhes técnicos (para suporte)", expanded=False):
+                st.code(f"{type(_e).__name__}: {_e}")
+    return wrapper
