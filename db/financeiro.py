@@ -55,7 +55,7 @@ def calcular_previsao_abate(animal_id):
     if peso_atual >= peso_alvo:
         return dict(gmd=round(gmd,3), peso_atual=peso_atual, peso_alvo=peso_alvo, dias_restantes=0, data_prevista=str(dt.today()), confianca="pronto")
     dias_rest = int((peso_alvo - peso_atual) / gmd)
-    data_prev = dt.today() + _td(days=dias_rest)
+    data_prev = dt.today() + timedelta(days=dias_rest)
     confianca = "alta" if len(pesagens)>=5 else "media" if len(pesagens)>=3 else "baixa"
     return dict(gmd=round(gmd,3), peso_atual=round(peso_atual,1), peso_alvo=round(peso_alvo,1),
                 dias_restantes=dias_rest, data_prevista=str(data_prev), confianca=confianca)
