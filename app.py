@@ -1402,6 +1402,7 @@ if page_fn:
     except Exception:
         pass
 
-    page_fn(u)
+    from ux_helpers import pagina_protegida
+    pagina_protegida(page_fn)(u)
 else:
     st.error(f"Tela '{menu}' nao encontrada.")
