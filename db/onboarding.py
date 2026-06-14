@@ -281,7 +281,7 @@ def criar_dados_exemplo(uid):
     """Cria uma fazenda demo com 1 lote e 5 animais ficticios.
     Bloqueia se ultrapassar o limite do plano."""
     import random
-    from datetime import date as _d, timedelta as _td
+    from datetime import date as _d, timedelta as timedelta
 
     # Verificar se ja tem dados exemplo
     lotes_user = listar_lotes(owner_id=uid)
@@ -305,7 +305,7 @@ def criar_dados_exemplo(uid):
         _log_war.debug("excecao ignorada: %s", _ew)
 
     hoje = _d.today()
-    inicio = hoje - _td(days=90)
+    inicio = hoje - timedelta(days=90)
 
     # Criar lote demo
     lote_id = adicionar_lote(
@@ -329,7 +329,7 @@ def criar_dados_exemplo(uid):
         adicionar_pesagem(aid, pesos_iniciais[i], str(inicio))
         # Pesagem ha 30 dias
         peso_30 = pesos_iniciais[i] + ganhos[i] * 60
-        adicionar_pesagem(aid, round(peso_30, 1), str(inicio + _td(days=60)))
+        adicionar_pesagem(aid, round(peso_30, 1), str(inicio + timedelta(days=60)))
         # Pesagem atual
         peso_hoje = pesos_iniciais[i] + ganhos[i] * 90
         adicionar_pesagem(aid, round(peso_hoje, 1), str(hoje))
@@ -338,7 +338,7 @@ def criar_dados_exemplo(uid):
     primeiro_animal = listar_animais_por_lote(lote_id)[0]
     adicionar_ocorrencia(
         primeiro_animal[0],
-        str(inicio + _td(days=30)),
+        str(inicio + timedelta(days=30)),
         "Vacina",
         "Vacinacao contra Aftosa (exemplo)",
         "Baixa",
