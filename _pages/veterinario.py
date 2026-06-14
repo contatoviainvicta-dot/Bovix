@@ -266,7 +266,7 @@ def page_receituario(u):
                 try:
                     n = sincronizar_ocorrencias_receitas()
                     if n:
-                        st.success(f"{n} ocorrencia(s) criada(s) nos prontuarios!")
+                        toast_ok(f"{n} ocorrência(s) criada(s) nos prontuários!")
                     else:
                         st.info("Prontuarios ja estao atualizados.")
                 except Exception as e:
@@ -432,7 +432,7 @@ def page_protocolos(u):
                     dict_p[proto_sel], dict_la[lote_ap],
                     str(data_ini), u["id"]
                 )
-                st.success(f"{n} agendamento(s) criado(s)! "
+                toast_ok(f"{n} agendamento(s) criado(s)! "
                           f"Veja em Calendario Sanitario.")
 
 
@@ -1276,7 +1276,7 @@ def page_monitoramento(u):
                                         m["id"], nova_ev,
                                         str(date.today()), "vet"
                                     )
-                                    st.success("Evolucao registrada!")
+                                    toast_ok("Evolução registrada!")
                                     st.rerun()
                         with c2m:
                             if st.form_submit_button(
@@ -1823,7 +1823,7 @@ def page_mapa_epidemiologico(u):
                 salvar_coords_fazenda(
                     faz_options[faz_sel], lat, lon, cidade, estado
                 )
-                st.success("Coordenadas salvas!")
+                toast_ok("Coordenadas salvas!")
                 st.rerun()
 
     # ── ABA 3: Alertas cruzados ───────────────────────────────────────────
@@ -1913,7 +1913,7 @@ def page_inbox(u):
                                     assunto=f"Re: {assunto or ''}",
                                     tipo="resposta"
                                 )
-                                st.success("Resposta enviada!")
+                                toast_ok("Resposta enviada!")
                                 st.rerun()
 
         st.divider()
