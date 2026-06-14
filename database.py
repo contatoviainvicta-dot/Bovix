@@ -46,7 +46,7 @@ from db.vendas import (
 
 # ── Animais (movidos para db/animais.py) ─────────────────────────────────────
 from db.animais import (
-    STATUS_ANIMAL,
+    STATUS_ANIMAL, STATUS_LOTE,
     listar_animais, listar_animais_por_lote, adicionar_animal, obter_animal,
     atualizar_animal, excluir_animal, atualizar_status_animal,
     listar_animais_por_status, contagem_status_animais, importar_animais_csv,
