@@ -172,11 +172,13 @@ def page_cadastrar_animal(u):
                     if not _lim["ok"]:
                         st.error(f"Limite do plano atingido: {_lim.get('msg','')}. Faca upgrade para continuar.")
                     else:
-                        aid = adicionar_animal(ident, idade, lote_id)
-                        if p_alvo > 0: atualizar_animal_detalhes(aid, peso_alvo=p_alvo)
+                        aid = adicionar_animal(
+                            ident, idade, lote_id,
+                            sexo=sexo, peso_entrada=p_ent, peso_alvo=p_alvo
+                        )
                         registrar_auditoria(u["id"], "cadastro_animal", "animais", aid, ident)
                         limpar_cache()
-                        toast_ok("**{ident}** cadastrado no lote **{lote[1]}**!")
+                        toast_ok(f"**{ident}** cadastrado no lote **{lote[1]}**!")
                         st.rerun()
 
     # ============================================================
