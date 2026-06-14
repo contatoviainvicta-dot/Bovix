@@ -605,8 +605,8 @@ def calcular_risco_sanitario(lote_id):
 
     # ── Fator 2: Ocorrencias dos ultimos 60 dias ─────────────────────────────
     ocs = listar_ocorrencias_todos_animais(lote_id)
-    from datetime import date as _dt, timedelta as _td2
-    limite_60 = str(_dt.today() - _td2(days=60))
+    from datetime import date as datetime, timedelta as _td2
+    limite_60 = str(datetime.today() - _td2(days=60))
     # o[2] = data_ocorrencia
     ocs_recentes = [o for o in ocs if o[2] and str(o[2]) >= limite_60]
     graves_at  = [o for o in ocs_recentes if o[5] == 'Alta' and o[8] == 'Em tratamento']
