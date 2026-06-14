@@ -620,7 +620,7 @@ def page_buscar_animal(u):
     termo = st.text_input("Identificacao / brinco", placeholder="Ex: BOI-001")
     if termo:
         # Buscar apenas nos lotes do usuario logado
-        _lotes_busca = listar_lotes_usuario()
+        _lotes_busca = lotes
         _lids_busca  = {l[0] for l in _lotes_busca}
         encontrados  = [
             a
