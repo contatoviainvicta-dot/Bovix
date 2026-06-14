@@ -96,7 +96,7 @@ def listar_tratamentos_vencidos(owner_id=None):
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
-        hoje = str(_date.today())
+        hoje = str(date.today())
         filtro_owner = f" AND l.owner_id={p}" if owner_id is not None else ""
         params = (owner_id,) if owner_id is not None else ()
         cur.execute(
@@ -106,13 +106,12 @@ def listar_tratamentos_vencidos(owner_id=None):
             params,
         )
         rows = _fetch(cur)
-        import datetime
         vencidos = []
         for r in rows:
             try:
-                dt_oc = datetime.datetime.strptime(str(r["data"])[:10], "%Y-%m-%d").date()
-                dt_alta = dt_oc + datetime.timedelta(days=int(r["dias_recuperacao"] or 0))
-                if dt_alta < _date.today():
+                dt_oc = datetime.strptime(str(r["data"])[:10], "%Y-%m-%d").date()
+                dt_alta = dt_oc + timedelta(days=int(r["dias_recuperacao"] or 0))
+                if dt_alta < date.today():
                     vencidos.append(tuple(r.values()))
             except Exception as _ew:
                 _log_war.debug("excecao ignorada: %s", _ew)
