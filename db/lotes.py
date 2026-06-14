@@ -2,6 +2,7 @@
 # Depende de db.core e db.schema.
 # listar_animais_por_lote: lazy import para evitar circular.
 
+import streamlit as st
 from db.core import (_conexao, _ph, _fetch, _fetchone, _usar_postgres,
                      _cached, invalidar_cache)
 from db.schema import _log_db, _log_err, _log_war, _garantir_tabelas_vet
