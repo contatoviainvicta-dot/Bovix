@@ -576,7 +576,7 @@ def page_editar_animal(u):
                 excluir_animal(anim_id)
                 registrar_auditoria(u["id"], "excluir_animal",
                                    "animais", anim_id, "excluido")
-                st.warning(f"Animal {_d_ident} excluido.")
+                toast_ok(f"Animal {_d_ident} excluído.")
                 limpar_cache(); st.rerun()
 
     # ── ABA 2: Excluir em massa com data_editor ──────────────────────────────
