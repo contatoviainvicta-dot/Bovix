@@ -674,12 +674,14 @@ def page_agenda_visitas(u):
                             if st.button("Marcar realizada",
                                         key=f"vis_real_{vid}"):
                                 atualizar_status_visita(vid, "realizada")
+                                toast_ok("Visita marcada como realizada.")
                                 st.session_state[f"_lan_hon_{vid}"] = True
                                 st.rerun()
                         with c2:
                             if st.button("Cancelar",
                                         key=f"vis_canc_{vid}"):
                                 atualizar_status_visita(vid, "cancelada")
+                                toast_ok("Visita cancelada.")
                                 st.rerun()
                         with c3:
                             if st.button("Lancar honorario",
@@ -1501,7 +1503,7 @@ def page_gestao_financeira_vet(u):
                                         key=f"fin_canc_{hid}"):
                                 cancelar_honorario(hid)
                                 limpar_cache()
-                                st.warning("Lançamento cancelado.")
+                                toast_ok("Lançamento cancelado.")
                                 st.rerun()
 
     # ── ABA 2: Lançar Avulso ──────────────────────────────────────────────
