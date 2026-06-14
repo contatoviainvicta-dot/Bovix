@@ -634,6 +634,7 @@ def obter_crmv_usuario(user_id):
 
 def atualizar_crmv(user_id, crmv):
     """Atualiza o CRMV do veterinario. Garante coluna antes de atualizar."""
+    from db.core import invalidar_cache  # lazy import
     _garantir_coluna_crmv()
     p = _ph()
     with _conexao() as conn:
