@@ -29,10 +29,16 @@ def listar_animais_por_lote(lote_id, incluir_inativos=False):
     with _conexao() as conn:
         cur = conn.cursor()
         if incluir_inativos:
-            cur.execute(f"SELECT id,identificacao,idade,lote_id FROM animais WHERE lote_id={p} ORDER BY id", (lote_id,))
+            cur.execute(
+                f"SELECT id,identificacao,idade,lote_id,"
+                f"COALESCE(peso_alvo,0) as peso_alvo FROM animais "
+                f"WHERE lote_id={p} ORDER BY id",
+                (lote_id,)
+            )
         else:
             cur.execute(
-                f"SELECT id,identificacao,idade,lote_id FROM animais "
+                f"SELECT id,identificacao,idade,lote_id,"
+                f"COALESCE(peso_alvo,0) as peso_alvo FROM animais "
                 f"WHERE lote_id={p} "
                 f"AND COALESCE(ativo,1)=1 "
                 f"AND UPPER(COALESCE(status,'ATIVO')) != 'VENDIDO' "
@@ -40,7 +46,8 @@ def listar_animais_por_lote(lote_id, incluir_inativos=False):
                 (lote_id,)
             )
         rows = _fetch(cur)
-        return [(r["id"],r["identificacao"],r["idade"],r["lote_id"]) for r in rows]
+        return [(r["id"],r["identificacao"],r["idade"],r["lote_id"],
+                 r["peso_alvo"]) for r in rows]
 
 
 def adicionar_animal(identificacao, idade, lote_id, sexo="indefinido",
