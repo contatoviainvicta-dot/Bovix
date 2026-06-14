@@ -414,7 +414,7 @@ def page_rastreabilidade_gta(u):
                         st.success("GTA registrada!"); st.rerun()
                     else: st.error("Preencha numero, origem e destino.")
     with t3:
-        lotes = listar_lotes_usuario()
+        lotes = lotes
         if lotes:
             dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
             s1,s2 = st.columns(2)
