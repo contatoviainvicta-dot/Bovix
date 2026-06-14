@@ -411,7 +411,7 @@ def page_rastreabilidade_gta(u):
                     if num_g and orig_g and dest_g:
                         registrar_gta(dict_l[lote_g], num_g, str(data_g), orig_g, dest_g, int(qtd_g), fin_g, obs_g)
                         registrar_auditoria(u["id"], "gta", "gta", dict_l[lote_g], num_g)
-                        st.success("GTA registrada!"); st.rerun()
+                        toast_ok("GTA registrada!"); st.rerun()
                     else: st.error("Preencha numero, origem e destino.")
     with t3:
         lotes = lotes
