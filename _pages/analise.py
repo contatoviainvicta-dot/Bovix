@@ -105,7 +105,7 @@ def page_dashboard_sanitario(u):
     dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
     escolha = st.selectbox("Filtrar por lote", opcoes)
     if escolha == "Todos os lotes":
-        animais = [a for l in listar_lotes_usuario() for a in listar_animais_por_lote(l[0])]
+        animais = [a for l in lotes for a in listar_animais_por_lote(l[0])]
     else:
         animais = listar_animais_por_lote(dict_l[escolha])
 
@@ -484,7 +484,7 @@ def page_pesquisar_ocorrencias(u):
     with f3: grav_f    = st.selectbox("Gravidade", ["Todas","Baixa","Media","Alta"])
     if escolha_l == "Todos":
         todas_oc_raw = []
-        for l in listar_lotes_usuario():
+        for l in lotes:
             todas_oc_raw.extend(listar_ocorrencias_todos_animais(l[0]))
     else:
         todas_oc_raw = listar_ocorrencias_todos_animais(dict_l[escolha_l])
