@@ -180,12 +180,12 @@ def safe_bar_chart(df, titulo=None, empty_msg="Dados insuficientes para o gráfi
 # ── TOAST HELPERS ─────────────────────────────────────────────
 def toast_ok(msg):
     """Toast de sucesso — desaparece sozinho."""
-    st.toast(f"✅ {msg}", icon="✅")
+    st.toast(msg, icon="✅")
 
 
 def toast_erro(msg):
     """Toast de erro."""
-    st.toast(f"❌ {msg}", icon="❌")
+    st.toast(msg, icon="❌")
 
 
 def toast_info(msg):
