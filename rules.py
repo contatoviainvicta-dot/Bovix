@@ -19,6 +19,18 @@ def limpar_cache():
     """Invalida caches apos cadastros/edicoes."""
     _listar_lotes_cache.clear()
     _listar_animais_cache.clear()
+    # Caches das funções de análise pesada
+    from db.veterinario import calcular_risco_sanitario
+    from db.financeiro import calcular_scores_lote, dashboard_financeiro_fazendeiro
+    from db.insights import (resumo_ia_fazenda, kpis_executivos,
+                              gerar_insights_lote, painel_saude_rebanho)
+    for fn in [calcular_risco_sanitario, calcular_scores_lote,
+               dashboard_financeiro_fazendeiro, resumo_ia_fazenda,
+               kpis_executivos, gerar_insights_lote, painel_saude_rebanho]:
+        try:
+            fn.clear()
+        except Exception:
+            pass
 
 # ── Perfil do usuario logado ──────────────────────────────────────────────────
 
