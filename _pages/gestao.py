@@ -563,7 +563,7 @@ def page_controle_reprodutivo(u):
                     adicionar_reproducao(dict_ar[anim_rs], tipo_r, data_cio=str(data_r), observacao=obs_r)
                     toast_ok("Cobertura registrada!"); st.rerun()
     with t3:
-        lotes = listar_lotes_usuario()
+        lotes = lotes
         if lotes:
             dict_l = {f"{l[1]} (ID {l[0]})": l[0] for l in lotes}
             d1,d2 = st.columns(2)
@@ -713,12 +713,10 @@ def page_workspace_do_lote(u):
             st.warning("Nenhum lote cadastrado.")
         st.stop()
 
-    # Selector do lote no topo
-    _lotes_ws_raw = listar_lotes_usuario()
-    # Filtrar apenas lotes ativos — VENDIDO/ARQUIVADO saem do workspace
+    # Selector do lote no topo — reutiliza _todos_lotes_check (sem nova query)
     todos_lotes_ws = [
         (l[0],l[1],l[2],l[3],l[4],l[5],l[6],l[7] if len(l)>7 else "ATIVO")
-        for l in _lotes_ws_raw
+        for l in _todos_lotes_check
         if (l[12] if len(l) > 12 else "ATIVO") in ("ATIVO", "EM_VENDA")
     ]
     # Badge de status para lotes em negociação
@@ -1362,12 +1360,13 @@ button[kind="secondary"][data-testid*="voz_rerun"]{
 
 
 def page_prontuario_animal(u):
-    parto = listar_partos_previstos(owner_id=owner_id())
     hdr("Prontuario Animal", "Prontuario Completo", "Historico de peso, saude e reproducao")
 
     if is_vet():
         sel_fazenda_vet(key="vet_faz_pron")
         st.divider()
+
+    parto = listar_partos_previstos(owner_id=owner_id())
 
 
     @st.cache_data(ttl=900, show_spinner="Carregando prontuario...")
