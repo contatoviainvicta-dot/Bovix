@@ -4,6 +4,7 @@
 import csv
 import io
 
+import streamlit as st
 from db.core import _conexao, _ph, _fetch, _fetchone, _usar_postgres, _cached
 from db.schema import _log_db, _log_err, _log_war
 
