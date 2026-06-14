@@ -6,6 +6,7 @@ import csv
 import io
 from datetime import date, datetime, timedelta
 
+import streamlit as st
 from db.core import _conexao, _ph, _fetch, _cached, _usar_postgres
 from db.schema import _log_db, _log_err, _log_war
 
