@@ -318,7 +318,7 @@ def page_registrar_morte(u):
                     toast_ok("Morte registrada. Animal removido do lote.")
                     st.rerun()
     with tab2:
-        lotes = listar_lotes_usuario()
+        lotes = lotes
         if lotes:
             dict_l2 = {"Todos": None, **{f"{l[1]} (ID {l[0]})": l[0] for l in lotes}}
             filtro_m = st.selectbox("Filtrar por lote", list(dict_l2.keys()), key="mort_hist")
@@ -362,7 +362,7 @@ def page_importar_csv(u):
                     toast_ok("Lote '{nome_nl}' criado!")
                     st.rerun()
                 else: st.error("Informe o nome.")
-        lotes = listar_lotes_usuario()
+        lotes = lotes
         if lotes: lote_id = lotes[0][0]; st.info(f"Lote: {lotes[0][1]}")
     else:
         if not lotes: st.warning("Crie um lote primeiro."); st.stop()
@@ -1044,7 +1044,7 @@ def page_status_do_lote(u):
             "VENDIDO":    ("blue",   "Lote comercializado"),
         }
 
-        _lotes_raw = listar_lotes_usuario()
+        _lotes_raw = lotes
         todos_lotes = [(l[0],l[1],l[2],l[3],l[4],l[5],l[6],l[7] if len(l)>7 else "ATIVO") for l in _lotes_raw]
         for lote_row in todos_lotes:
             lid_s, nome_s = lote_row[0], lote_row[1]
