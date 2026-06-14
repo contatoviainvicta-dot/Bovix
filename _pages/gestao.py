@@ -300,10 +300,10 @@ u):
 
                     cf1, cf2 = st.columns(2)
                     with cf1:
-                        from datetime import date as _date
+                        from datetime import date as date
                         data_real = st.date_input(
                             "Data de aplicacao",
-                            value=_date.today(),
+                            value=date.today(),
                             key=f"cf_data_{vid}"
                         )
                     with cf2:
@@ -647,7 +647,7 @@ def page_mapa_piquetes(u):
                     dt_a  = st.date_input("Entrada",                      key="al_dt")
                     if st.form_submit_button("Alocar", type="primary"):
                         alocar_lote_piquete(dict_pq[pq_a], dict_l[lt_a], str(dt_a))
-                        st.success("Alocado!"); st.rerun()
+                        toast_ok("Alocado!"); st.rerun()
             with al2:
                 st.subheader("Liberar")
                 with st.form("form_lib"):
@@ -655,7 +655,7 @@ def page_mapa_piquetes(u):
                     dt_l = st.date_input("Saida",                        key="lib_dt")
                     if st.form_submit_button("Liberar", type="primary"):
                         liberar_piquete(dict_pq[pq_l], str(dt_l))
-                        st.success("Piquete liberado!"); st.rerun()
+                        toast_ok("Piquete liberado!"); st.rerun()
 
     # ============================================================
     # PREVISAO ABATE
@@ -1111,9 +1111,9 @@ button[kind="secondary"][data-testid*="voz_rerun"]{
     {_p['peso'] or '?'}</div>
 </div>""", unsafe_allow_html=True)
             with _c3:
-                from datetime import date as _date
+                from datetime import date as date
                 _data_v = st.date_input(
-                    "Data", value=_date.today(),
+                    "Data", value=date.today(),
                     key="_voz_dt", label_visibility="collapsed"
                 )
 
@@ -1670,7 +1670,7 @@ def page_prontuario_animal(u):
                         if st.form_submit_button("Salvar evolucao", type="primary"):
                             if ev_txt:
                                 registrar_evolucao(m["id"], ev_txt, str(date.today()), "fazendeiro")
-                                st.success("Evolucao registrada!")
+                                toast_ok("Evolução registrada!")
                                 st.rerun()
 
     # ============================================================
