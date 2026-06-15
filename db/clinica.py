@@ -717,28 +717,39 @@ def aplicar_protocolo_no_lote(protocolo_id, lote_id, data_inicio, vet_id):
 
 def adicionar_visita(vet_id, fazenda_owner_id, data_visita, objetivo,
                     duracao_min=60, observacoes=""):
-    """Agenda nova visita tecnica."""
+    """Agenda nova visita tecnica.
+    Resiliente: insere criado_em apenas se a coluna existir no schema."""
     _garantir_tabelas_vet()
     from datetime import date
     p = _ph()
     with _conexao() as conn:
         cur = conn.cursor()
+        cols = _colunas_tabela(cur, "visitas_tecnicas")
+
+        campos = ["vet_id", "fazenda_owner_id", "data_visita",
+                  "objetivo", "duracao_min", "status", "observacoes"]
+        valores = [vet_id, fazenda_owner_id, str(data_visita), objetivo,
+                   int(duracao_min or 60), "agendada", observacoes or ""]
+
+        # criado_em existe em produção com NOT NULL — inserir se presente
+        if "criado_em" in cols:
+            campos.append("criado_em")
+            valores.append(str(date.today()))
+
+        cols_sql = ",".join(campos)
+        ph_sql   = ",".join([p] * len(valores))
+
         if _usar_postgres():
             cur.execute(
-                f"INSERT INTO visitas_tecnicas (vet_id,fazenda_owner_id,data_visita,"
-                f"objetivo,duracao_min,status,observacoes) "
-                f"VALUES({p},{p},{p},{p},{p},'agendada',{p}) RETURNING id",
-                (vet_id, fazenda_owner_id, str(data_visita), objetivo,
-                 int(duracao_min or 60), observacoes or "")
+                f"INSERT INTO visitas_tecnicas ({cols_sql}) "
+                f"VALUES({ph_sql}) RETURNING id",
+                tuple(valores)
             )
             return cur.fetchone()[0]
         else:
             cur.execute(
-                f"INSERT INTO visitas_tecnicas (vet_id,fazenda_owner_id,data_visita,"
-                f"objetivo,duracao_min,status,observacoes) "
-                f"VALUES({p},{p},{p},{p},{p},'agendada',{p})",
-                (vet_id, fazenda_owner_id, str(data_visita), objetivo,
-                 int(duracao_min or 60), observacoes or "")
+                f"INSERT INTO visitas_tecnicas ({cols_sql}) VALUES({ph_sql})",
+                tuple(valores)
             )
             return cur.lastrowid
 
