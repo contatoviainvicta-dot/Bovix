@@ -362,7 +362,8 @@ def page_score_de_saude(u):
             st.warning("Nenhum animal.")
         else:
             # Calcular todos os scores em batch (sem N+1 queries)
-            scores_batch = calcular_scores_lote(lote_id)
+            with st.spinner("Calculando scores de saúde..."):
+                scores_batch = calcular_scores_lote(lote_id)
             scores = []
             for a in animais:
                 sc  = scores_batch.get(a[0], dict(score=65, classificacao="Regular", gmd=0.0, n_ocorrencias=0))
