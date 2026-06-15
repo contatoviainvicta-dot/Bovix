@@ -141,7 +141,7 @@ def page_meu_crmv(u):
     crmv_atual = obter_crmv_usuario(u["id"])
 
     if crmv_atual:
-        toast_ok("CRMV cadastrado: **{crmv_atual}**")
+        toast_ok(f"CRMV cadastrado: **{crmv_atual}**")
     else:
         st.info("Nenhum CRMV cadastrado ainda.")
 
@@ -158,7 +158,7 @@ def page_meu_crmv(u):
                 else:
                     try:
                         atualizar_crmv(u["id"], novo_crmv.strip())
-                        toast_ok("CRMV **{novo_crmv.strip()}** salvo!")
+                        toast_ok(f"CRMV **{novo_crmv.strip()}** salvo!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Erro: {e}")
@@ -909,7 +909,8 @@ def page_painel_saude(u):
         st.warning("Selecione uma fazenda.")
         return
 
-    dados = painel_saude_rebanho(foid)
+    with st.spinner("Carregando painel de saúde..."):
+        dados = painel_saude_rebanho(foid)
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Animais ativos", dados["n_ativos"])
