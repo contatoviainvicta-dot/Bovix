@@ -427,6 +427,11 @@ div[data-testid="stFormSubmitButton"] button{padding:8px!important;font-size:14p
             st.rerun()
 
     with _col_dir:
+        # Se acabou de cadastrar, mostrar aba Entrar diretamente com mensagem
+        if st.session_state.get("_cadastro_ok"):
+            st.session_state.pop("_cadastro_ok")
+            st.toast("✅ Conta criada! Faça login abaixo.", icon="🎉")
+
         _tab_login, _tab_reg = st.tabs(["🔑 Entrar", "🚀 Criar conta"])
 
         # ── ABA LOGIN ─────────────────────────────────────────────────
@@ -547,12 +552,12 @@ div[data-testid="stFormSubmitButton"] button{padding:8px!important;font-size:14p
                                 perfil=_perfil_reg
                             )
                             if _ok:
-                                st.success(f"✅ {_msg}")
-                                st.info("Agora clique na aba **Entrar**.")
+                                st.session_state["_cadastro_ok"] = True
                                 try:
                                     email_boas_vindas(_r_email, _r_nome)
                                 except Exception:
                                     pass
+                                st.rerun()
                             else:
                                 st.error(f"❌ {_msg}")
                         except Exception as _er:
@@ -957,6 +962,7 @@ with st.sidebar:
     else:
         if is_vet():
             # ── MENU VETERINÁRIO ─────────────────────────────────
+            GRUPOS.clear()  # remover "Inicio" genérico
             GRUPOS["Inicio"] = [
                 ("Meu Dashboard",       "Produtividade e configuracao"),
                 ("Inicio",              "Painel das fazendas atendidas"),
@@ -1004,6 +1010,11 @@ with st.sidebar:
 
         else:
             # ── MENU FAZENDEIRO ──────────────────────────────────
+            GRUPOS.clear()  # remover "Inicio" genérico
+            GRUPOS["Inicio"] = [
+                ("Inicio",               "Painel geral"),
+                ("Workspace do Lote",    "Visao completa do lote"),
+            ]
             GRUPOS["Rebanho"] = [
                 ("Cadastrar Lote",       "Novo lote"),
                 ("Cadastrar Animal",     "Novo animal"),
