@@ -841,13 +841,13 @@ with st.sidebar:
             unsafe_allow_html=True
         )
         _atalhos = [
-            ("⚖️ Pesagem por voz",   "Workspace do Lote"),
             ("📋 Prontuário",         "Prontuario Animal"),
             ("💊 Receituário",        "Receituario"),
-            ("💰 Financeiro",         "Dashboard Financeiro"),
-            ("📥 Exportar dados",     "Exportar Relatorios"),
+            ("📅 Agenda",             "Agenda Visitas"),
+            ("⏱️ Carências",          "Controle Carencia"),
+            ("💰 Financeiro",         "Financeiro Vet"),
         ] if is_vet() else [
-            ("⚖️ Pesagem por voz",   "Workspace do Lote"),
+            ("⚖️ Pesagem",            "Workspace do Lote"),
             ("🐄 Cadastrar animal",   "Cadastrar Animal"),
             ("💰 Financeiro",         "Dashboard Financeiro"),
             ("📋 Prontuário",         "Prontuario Animal"),
@@ -955,75 +955,15 @@ with st.sidebar:
             ("Mensagens",            "Inbox vet-fazendeiro"),
         ]
     else:
-        GRUPOS["Rebanho"] = [
-            ("Cadastrar Lote",       "Novo lote"),
-            ("Cadastrar Animal",     "Novo animal"),
-            ("Registrar Pesagem",    "Nova pesagem"),
-            ("Registrar Ocorrencia", "Nova ocorrencia"),
-            ("Buscar Animal",        "Busca por brinco"),
-            ("Status do Lote",       "Alterar status"),
-            ("Transferir Animal",    "Mover entre lotes"),
-            ("Registrar Morte",      "Baixa de animal"),
-            ("Editar Lote",          "Alterar lote"),
-            ("Editar Animal",        "Alterar animal"),
-            ("Editar Pesagens",      "Corrigir pesagens"),
-            ("Vender Lote",          "Registrar venda do lote"),
-            ("Historico Lotes",      "Lotes vendidos e DRE"),
-        ]
-        GRUPOS["Gestao Sanitaria"] = [
-            ("Prontuario Animal",    "Historico completo"),
-            ("Gerenciar Ocorrencias","Tratamentos e ocorrencias"),
-            ("Calendario Sanitario", "Vacinas e alertas"),
-            ("Estoque Medicamentos", "Controle de estoque"),
-            ("Controle Reprodutivo", "IATF e prenhez"),
-        ]
-        GRUPOS["Analises"] = [
-            ("Dashboard Executivo",  "KPIs consolidados"),
-            ("Dashboard Sanitario",  "Incidencias e alertas"),
-            ("Analisar por Lote",    "GMD e desempenho"),
-            ("Analisar Animal",      "Analise individual"),
-            ("Comparativo Lotes",    "Side by side"),
-            ("Score de Saude",       "Ranking 0-100"),
-            ("GMD Temporal",         "Evolucao no tempo"),
-            ("Pesquisar Ocorrencias","Busca avancada"),
-        ]
-        GRUPOS["Inteligencia IA"] = [
-            ("Risco Sanitario IA",   "Score de risco do lote"),
-            ("Previsao de Abate IA", "Predicao por animal"),
-            ("Anomalias de Peso",    "Alertas inteligentes"),
-        ] + ([] if is_vet() else [
-            ("Painel de Decisao",    "Lucro por lote"),
-        ])
-        GRUPOS["Financeiro"] = [
-            ("Dashboard Financeiro", "KPIs, DRE e projecao de abate"),
-            ("Previsao Abate",       "Data estimada de abate"),
-            ("Cotacao Cepea",        "Preco boi gordo"),
-            ("Mapa Piquetes",        "Pastagens"),
-        ] + ([] if is_vet() else [
-            ("Margem Real",          "Compra x Venda"),
-            ("Rastreabilidade GTA",  "GTA e SISBOV"),
-        ])
-        GRUPOS["Sistema"] = [
-            ("Importar CSV",         "Importar animais e pesagens"),
-            ("Exportar Relatorios",  "PDF e Excel"),
-            ("Planos",               "Meu plano e limites"),
-            ("WhatsApp",             "Configurar alertas WhatsApp"),
-            ("Mensagens",            "Inbox vet-fazendeiro"),
-            ("Email Alertas",        "Notificacoes por email"),
-            ("Ferramentas",          "Calculadoras e calendarios publicos"),
-        ] + ([] if is_vet() else [
-            ("Dados de Exemplo",     "Criar ou remover fazenda demo"),
-            ("Onboarding",           "Configuracao inicial guiada"),
-        ])
-
         if is_vet():
+            # ── MENU VETERINÁRIO ─────────────────────────────────
             GRUPOS["Inicio"] = [
                 ("Meu Dashboard",       "Produtividade e configuracao"),
-                ("Inicio",              "Painel geral"),
-                ("Workspace do Lote",   "Visao completa do lote"),
+                ("Inicio",              "Painel das fazendas atendidas"),
                 ("Meu CRMV",            "Registro profissional"),
             ]
             GRUPOS["Clinico"] = [
+                ("Prontuario Animal",   "Historico completo do animal"),
                 ("Receituario",         "Emissao de receitas"),
                 ("Diagnostico IA",      "Analise clinica com IA"),
                 ("Historico PDF",       "Historico clinico do animal"),
@@ -1032,17 +972,94 @@ with st.sidebar:
             GRUPOS["Preventivo"] = [
                 ("Protocolos",          "Protocolos sanitarios"),
                 ("Campanhas",           "Vacinacao por safra"),
-                ("Controle Carencia",   "Periodo de abate"),
+                ("Controle Carencia",   "Periodo de carencia ao abate"),
+                ("Calendario Sanitario","Vacinas e alertas"),
                 ("Mapa Epidemio",       "Epidemiologia cruzada"),
             ]
             GRUPOS["Laboratorio"] = [
                 ("Exames Lab",          "Exames laboratoriais"),
                 ("Painel Saude",        "Estatisticas do rebanho"),
+                ("Dashboard Sanitario", "Incidencias e alertas"),
+                ("Pesquisar Ocorrencias","Busca avancada"),
             ]
             GRUPOS["Visitas Vet"] = [
                 ("Agenda Visitas",      "Visitas tecnicas"),
                 ("Relatorio Visita",    "Laudos de visita"),
                 ("Financeiro Vet",      "Honorarios e faturamento"),
+            ]
+            GRUPOS["Analises"] = [
+                ("Analisar por Lote",   "GMD e desempenho"),
+                ("Analisar Animal",     "Analise individual"),
+                ("Score de Saude",      "Ranking 0-100"),
+                ("Risco Sanitario IA",  "Score de risco do lote"),
+                ("Workspace do Lote",   "Visao completa do lote"),
+            ]
+            GRUPOS["Sistema"] = [
+                ("Mensagens",           "Inbox vet-fazendeiro"),
+                ("Exportar Relatorios", "PDF e Excel"),
+                ("Planos",              "Meu plano e limites"),
+                ("Dados de Exemplo",    "Criar ou remover fazenda demo"),
+                ("Onboarding",          "Configuracao inicial guiada"),
+            ]
+
+        else:
+            # ── MENU FAZENDEIRO ──────────────────────────────────
+            GRUPOS["Rebanho"] = [
+                ("Cadastrar Lote",       "Novo lote"),
+                ("Cadastrar Animal",     "Novo animal"),
+                ("Registrar Pesagem",    "Nova pesagem"),
+                ("Registrar Ocorrencia", "Nova ocorrencia"),
+                ("Buscar Animal",        "Busca por brinco"),
+                ("Status do Lote",       "Alterar status"),
+                ("Transferir Animal",    "Mover entre lotes"),
+                ("Registrar Morte",      "Baixa de animal"),
+                ("Editar Lote",          "Alterar lote"),
+                ("Editar Animal",        "Alterar animal"),
+                ("Editar Pesagens",      "Corrigir pesagens"),
+                ("Vender Lote",          "Registrar venda do lote"),
+                ("Historico Lotes",      "Lotes vendidos e DRE"),
+            ]
+            GRUPOS["Gestao Sanitaria"] = [
+                ("Prontuario Animal",    "Historico completo"),
+                ("Gerenciar Ocorrencias","Tratamentos e ocorrencias"),
+                ("Calendario Sanitario", "Vacinas e alertas"),
+                ("Estoque Medicamentos", "Controle de estoque"),
+                ("Controle Reprodutivo", "IATF e prenhez"),
+            ]
+            GRUPOS["Analises"] = [
+                ("Dashboard Executivo",  "KPIs consolidados"),
+                ("Dashboard Sanitario",  "Incidencias e alertas"),
+                ("Analisar por Lote",    "GMD e desempenho"),
+                ("Analisar Animal",      "Analise individual"),
+                ("Comparativo Lotes",    "Side by side"),
+                ("Score de Saude",       "Ranking 0-100"),
+                ("GMD Temporal",         "Evolucao no tempo"),
+                ("Pesquisar Ocorrencias","Busca avancada"),
+            ]
+            GRUPOS["Inteligencia IA"] = [
+                ("Risco Sanitario IA",   "Score de risco do lote"),
+                ("Previsao de Abate IA", "Predicao por animal"),
+                ("Anomalias de Peso",    "Alertas inteligentes"),
+                ("Painel de Decisao",    "Lucro por lote"),
+            ]
+            GRUPOS["Financeiro"] = [
+                ("Dashboard Financeiro", "KPIs, DRE e projecao de abate"),
+                ("Previsao Abate",       "Data estimada de abate"),
+                ("Margem Real",          "Compra x Venda"),
+                ("Rastreabilidade GTA",  "GTA e SISBOV"),
+                ("Cotacao Cepea",        "Preco boi gordo"),
+                ("Mapa Piquetes",        "Pastagens"),
+            ]
+            GRUPOS["Sistema"] = [
+                ("Importar CSV",         "Importar animais e pesagens"),
+                ("Exportar Relatorios",  "PDF e Excel"),
+                ("Planos",               "Meu plano e limites"),
+                ("WhatsApp",             "Configurar alertas WhatsApp"),
+                ("Mensagens",            "Inbox vet-fazendeiro"),
+                ("Email Alertas",        "Notificacoes por email"),
+                ("Ferramentas",          "Calculadoras e calendarios publicos"),
+                ("Dados de Exemplo",     "Criar ou remover fazenda demo"),
+                ("Onboarding",           "Configuracao inicial guiada"),
             ]
 
     if "menu" not in st.session_state:
@@ -1050,20 +1067,20 @@ with st.sidebar:
 
     # Ícones por grupo
     _ICONES = {
-        "Inicio":          "🏠",
-        "Rebanho":         "🐄",
-        "Gestao Sanitaria":"🩺",
-        "Analises":        "📊",
-        "Inteligencia IA": "🤖",
-        "Inteligencia":    "🤖",
-        "Financeiro":      "💰",
-        "Sistema":         "⚙️",
-        "Clinico":         "💊",
-        "Preventivo":      "🛡️",
-        "Laboratorio":     "🔬",
-        "Visitas Vet":     "📅",
-        "Analise":         "📊",
-        "Administracao":   "👥",
+        "Inicio":           "🏠",
+        "Rebanho":          "🐄",
+        "Gestao Sanitaria": "🩺",
+        "Analises":         "📊",
+        "Inteligencia IA":  "🤖",
+        "Inteligencia":     "🤖",
+        "Financeiro":       "💰",
+        "Sistema":          "⚙️",
+        "Clinico":          "💊",
+        "Preventivo":       "🛡️",
+        "Laboratorio":      "🔬",
+        "Visitas Vet":      "📅",
+        "Analise":          "📊",
+        "Administracao":    "👥",
     }
 
     for grupo, itens in GRUPOS.items():
@@ -1302,13 +1319,75 @@ page_fn = _ROTAS.get(menu)
 if page_fn:
     # ── Modal de boas-vindas — primeiro login ────────────────────────
     if st.session_state.get("_primeiro_login") and not is_admin():
-        st.markdown("""
+        if is_vet():
+            st.markdown("""
 <style>
-.ob-modal{
-  background:white;border-radius:16px;padding:32px 36px;
-  box-shadow:0 8px 40px rgba(0,0,0,.18);max-width:680px;
-  margin:0 auto 24px;
-}
+.ob-modal{background:white;border-radius:16px;padding:32px 36px;
+  box-shadow:0 8px 40px rgba(0,0,0,.18);max-width:680px;margin:0 auto 24px}
+.ob-titulo{font-family:Georgia,serif;font-size:26px;font-weight:700;
+  color:#1B4332;margin:0 0 6px}
+.ob-sub{font-size:14px;color:#6B7280;margin:0 0 24px}
+.ob-steps{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+.ob-step{flex:1;min-width:160px;background:#F5F9F7;border-radius:10px;
+  padding:14px 16px;border:2px solid #D1FAE5}
+.ob-step-num{font-size:22px;margin-bottom:6px}
+.ob-step-titulo{font-size:13px;font-weight:700;color:#1B4332;margin-bottom:3px}
+.ob-step-desc{font-size:11px;color:#6B7280;line-height:1.4}
+</style>
+<div class="ob-modal">
+  <div class="ob-titulo">👋 Bem-vindo ao Auroque Vet!</div>
+  <div class="ob-sub">
+    Sua conta veterinária está pronta. Siga os passos abaixo para começar.
+  </div>
+  <div class="ob-steps">
+    <div class="ob-step">
+      <div class="ob-step-num">1️⃣</div>
+      <div class="ob-step-titulo">Cadastre seu CRMV</div>
+      <div class="ob-step-desc">
+        Vá em Meu CRMV para registrar seu número profissional — necessário para emitir receituários
+      </div>
+    </div>
+    <div class="ob-step">
+      <div class="ob-step-num">2️⃣</div>
+      <div class="ob-step-titulo">Crie dados de exemplo</div>
+      <div class="ob-step-desc">
+        Vá em Sistema → Dados de Exemplo para criar uma fazenda demo e explorar o prontuário e carências
+      </div>
+    </div>
+    <div class="ob-step">
+      <div class="ob-step-num">3️⃣</div>
+      <div class="ob-step-titulo">Solicite acesso a uma fazenda</div>
+      <div class="ob-step-desc">
+        Peça ao fazendeiro para aprovar seu acesso em Gestão de Usuários — ou explore a demo primeiro
+      </div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+            _ob1, _ob2, _ob3 = st.columns([1, 1, 1])
+            with _ob1:
+                if st.button("🪪 Cadastrar meu CRMV",
+                             type="primary", use_container_width=True,
+                             key="ob_crmv"):
+                    st.session_state["_primeiro_login"] = False
+                    st.session_state.menu = "Meu CRMV"
+                    st.rerun()
+            with _ob2:
+                if st.button("🌱 Criar dados de exemplo",
+                             use_container_width=True, key="ob_demo_vet"):
+                    st.session_state["_primeiro_login"] = False
+                    st.session_state.menu = "Dados de Exemplo"
+                    st.rerun()
+            with _ob3:
+                if st.button("Explorar sozinho →",
+                             use_container_width=True, key="ob_pular_vet"):
+                    st.session_state["_primeiro_login"] = False
+                    st.rerun()
+        else:
+            st.markdown("""
+<style>
+.ob-modal{background:white;border-radius:16px;padding:32px 36px;
+  box-shadow:0 8px 40px rgba(0,0,0,.18);max-width:680px;margin:0 auto 24px}
 .ob-titulo{font-family:Georgia,serif;font-size:26px;font-weight:700;
   color:#1B4332;margin:0 0 6px}
 .ob-sub{font-size:14px;color:#6B7280;margin:0 0 24px}
@@ -1350,26 +1429,25 @@ if page_fn:
   </div>
 </div>
 """, unsafe_allow_html=True)
-
-        _ob1, _ob2, _ob3 = st.columns([1, 1, 1])
-        with _ob1:
-            if st.button("🐄 Ver Workspace do Lote",
-                         type="primary", use_container_width=True,
-                         key="ob_workspace"):
-                st.session_state["_primeiro_login"] = False
-                st.session_state.menu = "Workspace do Lote"
-                st.rerun()
-        with _ob2:
-            if st.button("📋 Cadastrar meu lote real",
-                         use_container_width=True, key="ob_lote"):
-                st.session_state["_primeiro_login"] = False
-                st.session_state.menu = "Cadastrar Lote"
-                st.rerun()
-        with _ob3:
-            if st.button("Pular → Explorar sozinho",
-                         use_container_width=True, key="ob_pular"):
-                st.session_state["_primeiro_login"] = False
-                st.rerun()
+            _ob1, _ob2, _ob3 = st.columns([1, 1, 1])
+            with _ob1:
+                if st.button("🐄 Ver Workspace do Lote",
+                             type="primary", use_container_width=True,
+                             key="ob_workspace"):
+                    st.session_state["_primeiro_login"] = False
+                    st.session_state.menu = "Workspace do Lote"
+                    st.rerun()
+            with _ob2:
+                if st.button("📋 Cadastrar meu lote real",
+                             use_container_width=True, key="ob_lote"):
+                    st.session_state["_primeiro_login"] = False
+                    st.session_state.menu = "Cadastrar Lote"
+                    st.rerun()
+            with _ob3:
+                if st.button("Pular → Explorar sozinho",
+                             use_container_width=True, key="ob_pular"):
+                    st.session_state["_primeiro_login"] = False
+                    st.rerun()
 
         st.stop()
 
