@@ -182,7 +182,7 @@ def page_importar_csv(u):
                                 lote_id, linhas
                             )
                         if n_ok:
-                            toast_ok("{n_ok} animal(is) importado(s) com sucesso!")
+                            toast_ok(f"{n_ok} animal(is) importado(s) com sucesso!")
                             marcar_passo_onboarding(oid, "animais")
                         if n_err:
                             st.warning(f"{n_err} linha(s) com erro:")
@@ -337,53 +337,69 @@ def page_dados_exemplo(u):
     st.caption("Explore o Auroque com uma fazenda fictícia completa")
 
     _oid = u.get("owner_id") or u["id"]
+    _vid = u["id"] if is_vet() else None
 
     st.markdown("""
 Crie uma **fazenda demo** com dados realistas para explorar todas as funcionalidades
 antes de cadastrar seus dados reais:
-- **8 animais** Nelore e Angus com histórico completo
-- **4 pesagens** por animal ao longo de 90 dias
-- **Custos variáveis** de ração, medicamentos e mão de obra
-- **KPIs e gráficos** já preenchidos para você explorar
+- 🐄 **8 animais** Nelore e Angus com peso alvo definido
+- 📊 **4 pesagens** por animal ao longo de 90 dias — GMD já calculado
+- 🏥 **6 ocorrências** variadas (Alta/Média/Baixa gravidade)
+- ⏱️ **3 carências ativas** de medicamentos para abate
+- 💰 **Custos lançados** — DRE e margem bruta preenchidos
 """)
+
+    if is_vet():
+        st.info("Como veterinário, a demo também vincula sua conta à fazenda "
+                "e cria uma visita agendada — assim você já vê os dados nas "
+                "telas de Prontuário, Controle Carência e Receituário.", icon="🩺")
 
     c1, c2 = st.columns(2)
     with c1:
         if st.button("🌱 Criar dados de exemplo", type="primary",
                      key="btn_criar_demo", use_container_width=True):
             with st.spinner("Criando fazenda demo..."):
-                ok = criar_dados_demo(_oid)
+                ok = criar_dados_demo(_oid, vet_uid=_vid)
             if ok:
                 toast_ok("Dados demo criados! Explore o Dashboard.")
                 st.balloons()
+                st.rerun()
             else:
                 toast_erro("Erro ao criar dados demo.")
 
     with c2:
         if st.button("🗑️ Remover dados de exemplo",
                      key="btn_remover_demo", use_container_width=True):
-            from ux_helpers import confirmar_acao
-            if confirmar_acao(
-                "Isso removerá todos os lotes e animais com 'Demo' no nome.",
-                "rm_demo", "Sim, remover"
-            ):
-                ok = remover_dados_demo(_oid)
-                if ok:
-                    toast_ok("Dados demo removidos.")
-                else:
-                    toast_erro("Erro ao remover.")
+            _key_conf = "confirm_rm_demo"
+            if not st.session_state.get(_key_conf):
+                st.session_state[_key_conf] = True
+                st.rerun()
+            else:
+                st.warning("Confirma? Isso remove todos os dados com 'Demo' no nome.")
+                cs, cn = st.columns(2)
+                if cs.button("✅ Sim, remover", key="rm_demo_sim"):
+                    ok = remover_dados_demo(_oid)
+                    st.session_state.pop(_key_conf, None)
+                    if ok:
+                        toast_ok("Dados demo removidos.")
+                    else:
+                        toast_erro("Erro ao remover.")
+                    st.rerun()
+                if cn.button("❌ Cancelar", key="rm_demo_nao"):
+                    st.session_state.pop(_key_conf, None)
+                    st.rerun()
 
     st.divider()
     st.markdown("### 🗺️ Tour do sistema")
     st.caption("Clique nos botões abaixo para explorar cada módulo")
 
     tour_itens = [
-        ("🏠", "1. Dashboard",      "Inicio",            "Veja os KPIs da sua fazenda"),
-        ("🐄", "2. Workspace",      "Workspace do Lote", "Visão completa do lote"),
-        ("💰", "3. Financeiro",     "Dashboard Financeiro","DRE e projeção de abate"),
-        ("📊", "4. Análise IA",     "Risco Sanitario IA","Score de risco dos animais"),
-        ("📋", "5. Prontuário",     "Prontuario Animal", "Histórico clínico"),
-        ("⚙️", "6. Planos",         "Planos",            "Conheça os planos"),
+        ("🏠", "1. Dashboard",     "Inicio",              "Veja os KPIs da sua fazenda"),
+        ("🐄", "2. Workspace",     "Workspace do Lote",   "Visão completa do lote"),
+        ("💰", "3. Financeiro",    "Dashboard Financeiro", "DRE e projeção de abate"),
+        ("📊", "4. Análise IA",    "Risco Sanitario IA",  "Score de risco dos animais"),
+        ("📋", "5. Prontuário",    "Prontuario Animal",   "Histórico clínico"),
+        ("⚙️", "6. Planos",        "Planos",              "Conheça os planos"),
     ]
 
     cols = st.columns(3)
@@ -397,7 +413,7 @@ antes de cadastrar seus dados reais:
   <div style="font-size:11px;color:#6B7280;margin-top:2px">{desc}</div>
 </div>
 """, unsafe_allow_html=True)
-            if st.button(f"Ir →", key=f"tour_{i}",
+            if st.button("Ir →", key=f"tour_{i}",
                          use_container_width=True):
                 st.session_state.menu = destino
                 st.rerun()
@@ -894,7 +910,7 @@ def page_notificacoes_email(u):
                     obter_plano(oid).get("plano_key","free")
                 )
             if ok:
-                toast_ok("Email enviado para {email}!")
+                toast_ok(f"Email enviado para {email}!")
             else:
                 st.error(f"Falha: {msg}")
 
