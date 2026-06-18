@@ -97,27 +97,36 @@ def onboarding_completo(user_id):
         return True  # Em caso de erro, nao bloquear
 
 
-def criar_dados_demo(owner_id):
+def criar_dados_demo(owner_id, vet_uid=None):
     """Cria fazenda demo com dados fictícios para novo usuário.
-    Chamada automaticamente no primeiro login.
+    Cobre 3 fluxos da demo:
+    1. Produtor: Workspace → Pesagem → Dashboard Sanitário
+    2. Veterinário: Prontuário → Controle Carência → Receituário
+    3. Financeiro: DRE com custos e KPIs preenchidos
     """
-    from datetime import date, timedelta
-    import random
+    from datetime import date, timedelta, datetime
     p = _ph()
     _log_db.info("Criando dados demo para owner_id=%s", owner_id)
     try:
         with _conexao() as conn:
             cur = conn.cursor()
-            # Verificar se já tem lote (não criar duplicado)
             cur.execute(
                 f"SELECT COUNT(*) FROM lotes WHERE owner_id={p}", (owner_id,)
             )
             r = cur.fetchone()
-            if r and r[0] > 0:
-                return True  # já tem dados
+            cnt = r[0] if isinstance(r, (tuple, list)) else (r['count'] if 'count' in r.keys() else list(r)[0])
+            if cnt and int(cnt) > 0:
+                return True
+
+            hoje = date.today()
+            d90 = str(hoje - timedelta(days=90))
+            d60 = str(hoje - timedelta(days=60))
+            d45 = str(hoje - timedelta(days=45))
+            d30 = str(hoje - timedelta(days=30))
+            d15 = str(hoje - timedelta(days=15))
+            d7f = str(hoje + timedelta(days=7))
 
             # Lote demo
-            dt_entrada = str(date.today() - timedelta(days=90))
             if _usar_postgres():
                 cur.execute(
                     f"INSERT INTO lotes (nome,descricao,data_entrada,"
@@ -125,7 +134,7 @@ def criar_dados_demo(owner_id):
                     f" VALUES ({p},{p},{p},{p},{p},{p},{p},{p}) RETURNING id",
                     ("Lote Demo — Nelore 2025",
                      "Lote criado automaticamente para demonstração",
-                     dt_entrada, 8, 8, 2800.00, owner_id, "ATIVO")
+                     d90, 8, 8, 2800.00, owner_id, "ATIVO")
                 )
                 lote_id = cur.fetchone()[0]
             else:
@@ -135,73 +144,158 @@ def criar_dados_demo(owner_id):
                     f" VALUES ({p},{p},{p},{p},{p},{p},{p},{p})",
                     ("Lote Demo — Nelore 2025",
                      "Lote criado automaticamente para demonstração",
-                     dt_entrada, 8, 8, 2800.00, owner_id, "ATIVO")
+                     d90, 8, 8, 2800.00, owner_id, "ATIVO")
                 )
                 lote_id = cur.lastrowid
             conn.commit()
 
-            # 8 animais demo
+            # 8 animais com peso_alvo (barra de progresso ao abate)
             animais = [
-                ("DEMO-01","Nelore","M",24,320),("DEMO-02","Nelore","M",22,305),
-                ("DEMO-03","Nelore","M",24,332),("DEMO-04","Angus","M",20,348),
-                ("DEMO-05","Angus","M",21,338),("DEMO-06","Nelore","F",18,280),
-                ("DEMO-07","Nelore","F",20,295),("DEMO-08","Angus","M",23,355),
+                ("DEMO-01","Nelore","M",24,320,450),
+                ("DEMO-02","Nelore","M",22,305,440),
+                ("DEMO-03","Nelore","M",24,332,460),
+                ("DEMO-04","Angus", "M",20,348,480),
+                ("DEMO-05","Angus", "M",21,338,470),
+                ("DEMO-06","Nelore","F",18,280,420),
+                ("DEMO-07","Nelore","F",20,295,430),
+                ("DEMO-08","Angus", "M",23,355,490),
             ]
             animal_ids = []
-            for ident, raca, sexo, idade, peso in animais:
+            for ident, raca, sexo, idade, peso_ini, peso_alvo in animais:
                 if _usar_postgres():
                     cur.execute(
                         f"INSERT INTO animais (identificacao,raca,sexo,"
-                        f"idade_meses,peso_entrada,lote_id,ativo,status)"
-                        f" VALUES ({p},{p},{p},{p},{p},{p},1,'ATIVO') RETURNING id",
-                        (ident, raca, sexo, idade, peso, lote_id)
+                        f"idade,peso_entrada,peso_alvo,lote_id,ativo,status)"
+                        f" VALUES ({p},{p},{p},{p},{p},{p},{p},1,'ATIVO') RETURNING id",
+                        (ident, raca, sexo, idade, peso_ini, peso_alvo, lote_id)
                     )
                     animal_ids.append(cur.fetchone()[0])
                 else:
                     cur.execute(
                         f"INSERT INTO animais (identificacao,raca,sexo,"
-                        f"idade_meses,peso_entrada,lote_id,ativo,status)"
-                        f" VALUES ({p},{p},{p},{p},{p},{p},1,'ATIVO')",
-                        (ident, raca, sexo, idade, peso, lote_id)
+                        f"idade,peso_entrada,peso_alvo,lote_id,ativo,status)"
+                        f" VALUES ({p},{p},{p},{p},{p},{p},{p},1,'ATIVO')",
+                        (ident, raca, sexo, idade, peso_ini, peso_alvo, lote_id)
                     )
                     animal_ids.append(cur.lastrowid)
             conn.commit()
 
-            # Pesagens ao longo de 90 dias
-            pesos_base = [320,305,332,348,338,280,295,355]
+            # 4 pesagens por animal — curva de crescimento real
+            gmds = [0.90, 0.80, 0.95, 1.00, 0.85, 0.70, 0.75, 1.05]
+            pesos_base = [320, 305, 332, 348, 338, 280, 295, 355]
             for i, aid in enumerate(animal_ids):
-                peso = pesos_base[i]
-                for dias_atras in [90, 60, 30, 0]:
-                    peso += random.randint(18, 32)
-                    dt = str(date.today() - timedelta(days=dias_atras))
+                g = gmds[i]
+                pb = pesos_base[i]
+                for dias in [90, 60, 30, 0]:
+                    dt = str(hoje - timedelta(days=dias))
                     cur.execute(
                         f"INSERT INTO pesagens (animal_id,peso,data)"
                         f" VALUES ({p},{p},{p})",
-                        (aid, round(peso, 1), dt)
+                        (aid, round(pb + g * (90 - dias), 1), dt)
                     )
             conn.commit()
 
-            # Custos demo
-            for cat, desc, val, dias in [
-                ("racao","Ração concentrada — 3 meses",4200.00,80),
-                ("medicamento","Vermifugação e vacinas",480.00,75),
-                ("mao_de_obra","Mão de obra — 3 meses",1800.00,70),
-                ("veterinario","Visita técnica",350.00,45),
-            ]:
-                dt = str(date.today() - timedelta(days=dias))
-                cur.execute(
-                    f"INSERT INTO custos_lote"
-                    f" (lote_id,categoria,descricao,valor,data_lancamento,owner_id)"
-                    f" VALUES ({p},{p},{p},{p},{p},{p})",
-                    (lote_id, cat, desc, val, dt, owner_id)
-                )
+            # Ocorrências variadas — Dashboard Sanitário impactante
+            ocorrencias = [
+                (animal_ids[0], d60, "Doenca",
+                 "Tristeza parasitária — tratado com imidocarb",
+                 "Alta", 180.0, 5, "Resolvido"),
+                (animal_ids[1], d45, "Medicamento",
+                 "Ivermectina 1% — controle de carrapato",
+                 "Baixa", 35.0, 0, "Resolvido"),
+                (animal_ids[2], d30, "Lesao",
+                 "Lesão no casco — curativo e restrição de piquete",
+                 "Media", 60.0, 7, "Em tratamento"),
+                (animal_ids[3], d15, "Doenca",
+                 "Pneumonia leve — antibioticoterapia iniciada",
+                 "Alta", 220.0, 10, "Em tratamento"),
+                (animal_ids[4], d30, "Vacina",
+                 "Vacinação aftosa — dose reforço",
+                 "Baixa", 18.0, 0, "Resolvido"),
+                (animal_ids[5], d15, "Medicamento",
+                 "Closantel 10% — fasciolose",
+                 "Media", 45.0, 0, "Resolvido"),
+            ]
+            for oc in ocorrencias:
+                try:
+                    cur.execute(
+                        f"INSERT INTO ocorrencias "
+                        f"(animal_id,data,tipo,descricao,gravidade,custo,"
+                        f"dias_recuperacao,status)"
+                        f" VALUES ({p},{p},{p},{p},{p},{p},{p},{p})", oc
+                    )
+                except Exception as _ew:
+                    _log_war.debug("ocorrencia demo: %s", _ew)
             conn.commit()
 
-        # Marcar demo como criado
+            # Carências ativas — Controle Carência vet
+            carencias = [
+                (animal_ids[3], "Enrofloxacina 5%",  d15, 28),
+                (animal_ids[4], "Ivermectina 1%",    d30, 35),
+                (animal_ids[5], "Closantel 10%",     d15, 42),
+            ]
+            for cid, med, dt_ap, dias_car in carencias:
+                try:
+                    dt_lib = str(
+                        datetime.strptime(dt_ap, "%Y-%m-%d").date()
+                        + timedelta(days=dias_car)
+                    )
+                    cur.execute(
+                        f"INSERT INTO carencias_ativas "
+                        f"(animal_id,medicamento,data_aplicacao,"
+                        f"carencia_dias,data_liberacao,ativo)"
+                        f" VALUES ({p},{p},{p},{p},{p},1)",
+                        (cid, med, dt_ap, dias_car, dt_lib)
+                    )
+                except Exception as _ew:
+                    _log_war.debug("carencia demo: %s", _ew)
+            conn.commit()
+
+            # Custos — DRE preenchido
+            for cat, desc, val, dias in [
+                ("racao",       "Ração concentrada — 3 meses",  4200.00, 80),
+                ("medicamento", "Vermifugação e vacinas",         480.00, 75),
+                ("mao_de_obra", "Mão de obra — 3 meses",        1800.00, 70),
+                ("veterinario", "Visita técnica",                 350.00, 45),
+            ]:
+                try:
+                    cur.execute(
+                        f"INSERT INTO custos_lote"
+                        f" (lote_id,categoria,descricao,valor,data_lancamento)"
+                        f" VALUES ({p},{p},{p},{p},{p})",
+                        (lote_id, cat, desc, val,
+                         str(hoje - timedelta(days=dias)))
+                    )
+                except Exception as _ew:
+                    _log_war.debug("custo demo: %s", _ew)
+            conn.commit()
+
+        # Vinculação vet↔fazenda (fora do with para não travar)
+        if vet_uid:
+            try:
+                from db.veterinario import (
+                    solicitar_acesso_vet, aprovar_acesso_vet
+                )
+                solicitar_acesso_vet(vet_uid, owner_id)
+                aprovar_acesso_vet(vet_uid, owner_id, owner_id, aprovar=True)
+                _log_db.info("Vet %s vinculado à fazenda demo", vet_uid)
+            except Exception as _ew:
+                _log_war.debug("vinculo vet demo: %s", _ew)
+            try:
+                from db.clinica import adicionar_visita
+                adicionar_visita(
+                    vet_uid, owner_id, d7f,
+                    "Revisão sanitária e vacinação aftosa",
+                    90, "Visita de demonstração"
+                )
+            except Exception as _ew:
+                _log_war.debug("visita demo: %s", _ew)
+
         marcar_onboarding_completo(owner_id)
         _log_db.info("Dados demo criados: lote_id=%s, %d animais",
                      lote_id, len(animal_ids))
         return True
+
     except Exception as _e:
         _log_err.error("criar_dados_demo: %s", _e)
         return False
@@ -276,80 +370,145 @@ def onboarding_concluido(uid):
             return False
 
 
-def criar_dados_exemplo(uid):
-    from database import adicionar_animal, adicionar_lote, adicionar_ocorrencia, adicionar_pesagem, listar_animais_por_lote, listar_lotes, verificar_limite_animais  # lazy import
-    """Cria uma fazenda demo com 1 lote e 5 animais ficticios.
-    Bloqueia se ultrapassar o limite do plano."""
+def criar_dados_exemplo(uid, vet_uid=None):
+    """Cria fazenda demo completa cobrindo 3 fluxos:
+    1. Produtor: Workspace → Pesagem → Dashboard Sanitário
+    2. Veterinário: Prontuário → Controle Carência → Receituário
+    Se vet_uid fornecido, vincula o veterinário à fazenda demo.
+    """
+    from database import (  # lazy import
+        adicionar_animal, adicionar_lote, adicionar_ocorrencia,
+        adicionar_pesagem, listar_animais_por_lote, listar_lotes,
+        verificar_limite_animais,
+    )
+    from datetime import date, timedelta
     import random
-    from datetime import date as _d, timedelta as timedelta
 
-    # Verificar se ja tem dados exemplo
+    # ── Verificar se já existe ────────────────────────────────────
     lotes_user = listar_lotes(owner_id=uid)
     if any('[DEMO]' in (l[1] or '') for l in lotes_user):
         return dict(ja_existe=True, bloqueado=False,
-                    msg="Voce ja tem dados de exemplo cadastrados.")
+                    msg="Você já tem dados de exemplo cadastrados.")
 
-    # Verificar limite do plano (5 animais sao criados)
+    # ── Verificar limite do plano ─────────────────────────────────
     try:
-        lim = verificar_limite_animais(uid, 5)
+        lim = verificar_limite_animais(uid, 8)
         if not lim["pode"]:
             return dict(
-                ja_existe=False,
-                bloqueado=True,
-                msg=(f"Limite do plano atingido. Voce tem {lim['atual']} de "
-                     f"{lim['limite']} animais e os dados de exemplo criariam "
-                     f"mais 5. Disponiveis: {lim['disponiveis']}. "
-                     f"Faca upgrade ou remova animais antes de criar dados de exemplo.")
+                ja_existe=False, bloqueado=True,
+                msg=(f"Limite do plano atingido ({lim['atual']}/{lim['limite']} "
+                     f"animais). Faça upgrade ou remova animais antes.")
             )
     except Exception as _ew:
         _log_war.debug("excecao ignorada: %s", _ew)
 
-    hoje = _d.today()
-    inicio = hoje - timedelta(days=90)
+    hoje = date.today()
+    d90  = hoje - timedelta(days=90)  # entrada no lote
+    d60  = hoje - timedelta(days=60)
+    d45  = hoje - timedelta(days=45)
+    d30  = hoje - timedelta(days=30)
+    d15  = hoje - timedelta(days=15)
 
-    # Criar lote demo
+    # ── FLUXO 1: Lote + animais + pesagens + ocorrências ─────────
     lote_id = adicionar_lote(
-        nome="[DEMO] Pasto Vitrine",
-        descricao="Lote de exemplo - pode excluir quando quiser",
-        data_entrada=str(inicio),
-        qtd_comprada=5,
-        qtd_recebida=5,
+        nome="[DEMO] Confinamento Vitrine",
+        descricao="Lote de exemplo — pode excluir quando quiser",
+        data_entrada=str(d90),
+        qtd_comprada=8, qtd_recebida=8,
         transporte="Demo",
         owner_id=uid
     )
 
-    # Criar 5 animais com pesagens
-    nomes = ["DEMO-001", "DEMO-002", "DEMO-003", "DEMO-004", "DEMO-005"]
-    pesos_iniciais = [280, 295, 310, 270, 305]
-    ganhos = [0.85, 0.75, 0.90, 0.65, 0.80]  # kg/dia
+    # 8 animais com peso_alvo definido (mostra barra de progresso)
+    nomes_pesos = [
+        ("DEMO-001", 280, 450, 0.90),
+        ("DEMO-002", 295, 460, 0.80),
+        ("DEMO-003", 310, 470, 0.95),
+        ("DEMO-004", 270, 440, 0.70),
+        ("DEMO-005", 305, 455, 0.85),
+        ("DEMO-006", 290, 450, 0.75),
+        ("DEMO-007", 315, 480, 1.00),
+        ("DEMO-008", 285, 445, 0.65),
+    ]
 
-    for i, nome in enumerate(nomes):
-        aid = adicionar_animal(nome, 24, lote_id)
-        # Pesagem inicial
-        adicionar_pesagem(aid, pesos_iniciais[i], str(inicio))
-        # Pesagem ha 30 dias
-        peso_30 = pesos_iniciais[i] + ganhos[i] * 60
-        adicionar_pesagem(aid, round(peso_30, 1), str(inicio + timedelta(days=60)))
-        # Pesagem atual
-        peso_hoje = pesos_iniciais[i] + ganhos[i] * 90
-        adicionar_pesagem(aid, round(peso_hoje, 1), str(hoje))
+    ids = []
+    for nome, peso_ini, peso_alvo, gmd in nomes_pesos:
+        aid = adicionar_animal(
+            nome, 24, lote_id,
+            sexo="macho",
+            peso_entrada=float(peso_ini),
+            peso_alvo=float(peso_alvo)
+        )
+        ids.append(aid)
+        # 4 pesagens = curva de crescimento convincente
+        adicionar_pesagem(aid, float(peso_ini),            str(d90))
+        adicionar_pesagem(aid, round(peso_ini+gmd*30, 1),  str(d60))
+        adicionar_pesagem(aid, round(peso_ini+gmd*60, 1),  str(d30))
+        adicionar_pesagem(aid, round(peso_ini+gmd*90, 1),  str(hoje))
 
-    # Adicionar uma ocorrencia exemplo
-    primeiro_animal = listar_animais_por_lote(lote_id)[0]
-    adicionar_ocorrencia(
-        primeiro_animal[0],
-        str(inicio + timedelta(days=30)),
-        "Vacina",
-        "Vacinacao contra Aftosa (exemplo)",
-        "Baixa",
-        15.0,
-        0,
-        "Resolvido"
+    # Ocorrências variadas — Dashboard Sanitário fica rico
+    ocorrencias_demo = [
+        (ids[0], d60, "Doenca",      "Tristeza parasitária — tratado com imidocarb",   "Alta",   180.0, 5,  "Resolvido"),
+        (ids[1], d45, "Medicamento", "Ivermectina 1% aplicada — controle de carrapato", "Baixa",  35.0,  0,  "Resolvido"),
+        (ids[2], d30, "Lesao",       "Lesão no casco — curativo e restrição de piquete","Media",  60.0,  7,  "Em tratamento"),
+        (ids[3], d15, "Doenca",      "Pneumonia leve — antibioticoterapia iniciada",    "Alta",   220.0, 10, "Em tratamento"),
+        (ids[4], d30, "Vacina",      "Vacinação aftosa dose reforço",                   "Baixa",  18.0,  0,  "Resolvido"),
+        (ids[5], d15, "Medicamento", "Closantel aplicado — fasciolose",                 "Media",  45.0,  0,  "Resolvido"),
+    ]
+    for oc in ocorrencias_demo:
+        try:
+            adicionar_ocorrencia(
+                oc[0], str(oc[1]), oc[2], oc[3], oc[4],
+                oc[5], oc[6], oc[7]
+            )
+        except Exception as _ew:
+            _log_war.debug("ocorrencia demo ignorada: %s", _ew)
+
+    # ── FLUXO 2: Carências ativas (Controle Carência vet) ────────
+    # Animal DEMO-004 com pneumonia — antibiótico tem carência de 28 dias
+    # Animal DEMO-005 — ivermectina tem carência de 35 dias
+    carencias_demo = [
+        (ids[3], "Enrofloxacina 5%",  str(d15), 28),   # libera em d15+28
+        (ids[4], "Ivermectina 1%",    str(d30), 35),   # libera em d30+35 = futuro
+        (ids[5], "Closantel 10%",     str(d15), 42),   # libera em d15+42 = futuro
+    ]
+    for cid, med, dt_aplic, dias in carencias_demo:
+        try:
+            from db.veterinario import adicionar_carencia  # lazy
+            adicionar_carencia(cid, med, dt_aplic, dias)
+        except Exception as _ew:
+            _log_war.debug("carencia demo ignorada: %s", _ew)
+
+    # ── FLUXO 3: Vinculação vet↔fazenda (se vet_uid fornecido) ───
+    if vet_uid:
+        try:
+            from db.veterinario import solicitar_acesso_vet, aprovar_acesso_vet  # lazy
+            solicitar_acesso_vet(vet_uid, uid)
+            aprovar_acesso_vet(vet_uid, uid, uid, aprovar=True)
+            _log_db.info("Vet %s vinculado à fazenda demo %s", vet_uid, uid)
+        except Exception as _ew:
+            _log_war.debug("vinculo vet demo ignorado: %s", _ew)
+
+        # Visita técnica agendada (aparece na Agenda Visitas)
+        try:
+            from db.clinica import adicionar_visita  # lazy
+            adicionar_visita(
+                vet_uid, uid,
+                str(hoje + timedelta(days=7)),
+                "Revisão sanitária e vacinação aftosa",
+                90, "Visita de exemplo"
+            )
+        except Exception as _ew:
+            _log_war.debug("visita demo ignorada: %s", _ew)
+
+    return dict(
+        ja_existe=False, bloqueado=False,
+        msg="Fazenda demo criada! Explore o sistema com os dados de exemplo.",
+        lote_id=lote_id,
+        n_animais=len(ids),
+        n_ocorrencias=len(ocorrencias_demo),
+        n_carencias=len(carencias_demo),
     )
-
-    return dict(ja_existe=False, bloqueado=False,
-                msg="Fazenda exemplo criada! Explore o sistema.",
-                lote_id=lote_id)
 
 
 def remover_dados_exemplo(uid):
